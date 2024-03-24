@@ -1,0 +1,9 @@
+[package]
+name = "end-to-end-fun"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.81"
+hex = "0.4.3"
+ring = "0.17.8"
