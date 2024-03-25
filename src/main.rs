@@ -1,12 +1,17 @@
 use anyhow::{anyhow, Context, Result};
+use blake2::Blake2b512;
 use ring::aead::Aad;
 use ring::aead::LessSafeKey;
 use ring::aead::Nonce;
 use ring::aead::UnboundKey;
 use ring::aead::CHACHA20_POLY1305;
 use ring::aead::NONCE_LEN;
+use ring::agreement::EphemeralPrivateKey;
+use ring::agreement::PublicKey;
+use ring::agreement::X25519;
 use ring::rand::SecureRandom;
 use ring::rand::SystemRandom;
+use ring::signature::Ed25519KeyPair;
 use ring::test::from_hex;
 use std::sync::mpsc;
 use std::thread;
@@ -53,7 +58,7 @@ fn decrypt_data(ciphertext: String, key: &mut LessSafeKey) -> Result<Vec<u8>> {
         .to_owned())
 }
 
-fn do_stuff() -> Result<()> {
+fn threads_test() -> Result<()> {
     let mut children = Vec::new();
     let rand = SystemRandom::new();
     let mut key = vec![0; CHACHA20_POLY1305.key_len()];
@@ -96,10 +101,25 @@ fn do_stuff() -> Result<()> {
             String::from_utf8(decrypted_data.to_vec()).unwrap()
         );
     }
-
     Ok(())
 }
 
+fn prehash_public_keys_for_signing(public_keys: &[PublicKey]) -> {
+    let mut hasher = Blake2b512::new();
+}
+
+fn sign_bundle(
+
+fn x3dh_pre_key(signing_key: &Ed25519KeyPair, num_keys: u32, rng: &SystemRandom) {
+    let keys = (0..num_keys)
+        .map(|_| EphemeralPrivateKey::generate(&X25519, rng))
+        .collect();
+
+}
+
 fn main() {
-    do_stuff().unwrap();
+    threads_test().unwrap();
+    let rand = SystemRandom::new();
+    let private_key = EphemeralPrivateKey::generate(&X25519, &rand).unwrap();
+    let public_key = private_key.compute_public_key();
 }
