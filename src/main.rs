@@ -59,14 +59,13 @@ fn do_stuff() -> Result<()> {
     let mut key = vec![0; CHACHA20_POLY1305.key_len()];
     rand.fill(&mut key)
         .map_err(|e| anyhow!("Failed to fill key: {e}"))?;
+    let mut opening_key = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key).unwrap());
 
     let (tx, rx) = mpsc::channel();
     for id in 0..NTHREADS {
         let thread_tx = tx.clone();
-        let key = key.clone();
+        let mut sealing_key = opening_key.clone();
         let child = thread::spawn(move || {
-            let mut sealing_key =
-                LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key).unwrap());
             let msg: String = encrypt_data(
                 format!("Hello I am thread: {id}").as_bytes(),
                 &mut sealing_key,
@@ -90,10 +89,6 @@ fn do_stuff() -> Result<()> {
     }
 
     for ciphertext in ciphertexts {
-        let mut opening_key = LessSafeKey::new(
-            UnboundKey::new(&CHACHA20_POLY1305, &key)
-                .map_err(|e| anyhow!("Failed to create opening key: {e}"))?,
-        );
         let decrypted_data =
             decrypt_data(ciphertext, &mut opening_key).context("decryption failed.")?;
         println!(
