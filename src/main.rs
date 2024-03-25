@@ -41,20 +41,24 @@ fn decrypt_data(ciphertext: String, key: &mut LessSafeKey) -> Result<Vec<u8>> {
         return Err(anyhow!("Invalid version."));
     }
 
-    let nonce_bytes =
-        from_hex(&ciphertext[0..(NONCE_LEN * 2)]).context("Failed to decode nonce.")?;
-    let encrypted =
-        from_hex(&ciphertext[(NONCE_LEN * 8)..]).context("Failed to decode ciphertext.")?;
-    let nonce = Nonce::try_assume_unique_for_key(&nonce_bytes).context("Failed to nonce.")?;
-    key.open_in_place(nonce, Aad::empty(), &mut encrypted)
-        .context("open da key")
+    let nonce_bytes = from_hex(&ciphertext[2..(NONCE_LEN * 2 + 2)])
+        .map_err(|e| anyhow!("Failed to decode nonce: {e}."))?;
+    let mut encrypted = from_hex(&ciphertext[(2 + NONCE_LEN * 2)..])
+        .map_err(|e| anyhow!("Failed to decode ciphertext: {e}."))?;
+    let nonce = Nonce::try_assume_unique_for_key(&nonce_bytes)
+        .map_err(|e| anyhow!("Failed to nonce: {e}"))?;
+    Ok(key
+        .open_in_place(nonce, Aad::empty(), &mut encrypted)
+        .map_err(|e| anyhow!("Failed to open_in_Place: {e}"))?
+        .to_owned())
 }
 
-fn do_stuff() -> Result<(), ring::error::Unspecified> {
+fn do_stuff() -> Result<()> {
     let mut children = Vec::new();
     let rand = SystemRandom::new();
     let mut key = vec![0; CHACHA20_POLY1305.key_len()];
-    rand.fill(&mut key)?;
+    rand.fill(&mut key)
+        .map_err(|e| anyhow!("Failed to fill key: {e}"))?;
 
     let (tx, rx) = mpsc::channel();
     for id in 0..NTHREADS {
@@ -63,9 +67,13 @@ fn do_stuff() -> Result<(), ring::error::Unspecified> {
         let child = thread::spawn(move || {
             let mut sealing_key =
                 LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key).unwrap());
-            let data = format!("Hello I am thread: {id}").as_bytes();
-            let msg: String = encrypt_data(data, &mut sealing_key, id).unwrap();
-            thread_tx.send(data).unwrap();
+            let msg: String = encrypt_data(
+                format!("Hello I am thread: {id}").as_bytes(),
+                &mut sealing_key,
+                id,
+            )
+            .unwrap();
+            thread_tx.send(msg).unwrap();
             println!("thread {} finished", id);
         });
 
@@ -81,8 +89,11 @@ fn do_stuff() -> Result<(), ring::error::Unspecified> {
         child.join().expect("oops! the child thread panicked");
     }
 
-    for mut ciphertext in ciphertexts {
-        let mut opening_key = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key)?);
+    for ciphertext in ciphertexts {
+        let mut opening_key = LessSafeKey::new(
+            UnboundKey::new(&CHACHA20_POLY1305, &key)
+                .map_err(|e| anyhow!("Failed to create opening key: {e}"))?,
+        );
         let decrypted_data =
             decrypt_data(ciphertext, &mut opening_key).context("decryption failed.")?;
         println!(
