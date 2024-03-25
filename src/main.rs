@@ -1,84 +1,57 @@
 use anyhow::{anyhow, Context, Result};
-use blake2::Blake2b512;
-use ring::aead::Aad;
-use ring::aead::LessSafeKey;
-use ring::aead::Nonce;
-use ring::aead::UnboundKey;
-use ring::aead::CHACHA20_POLY1305;
-use ring::aead::NONCE_LEN;
-use ring::agreement::EphemeralPrivateKey;
-use ring::agreement::PublicKey;
-use ring::agreement::X25519;
-use ring::rand::SecureRandom;
-use ring::rand::SystemRandom;
-use ring::signature::Ed25519KeyPair;
-use ring::test::from_hex;
-use std::sync::mpsc;
+use chacha20poly1305::{
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+    ChaCha20Poly1305, Nonce,
+};
+
+use std::sync::{mpsc, Arc};
 use std::thread;
 
 const NTHREADS: i32 = 16;
+const NONCE_LEN: usize = 12;
 
-fn encrypt_data(
-    message: &[u8],
-    sealing_key: &mut LessSafeKey,
-    id: i32,
-) -> Result<String, ring::error::Unspecified> {
-    let mut encrypted = message.to_vec();
-    let mut nonce_bytes = vec![0; NONCE_LEN];
-    let bytes = id.to_be_bytes();
-    nonce_bytes[8..].copy_from_slice(&bytes);
-    let nonce = Nonce::try_assume_unique_for_key(&nonce_bytes)?;
-    sealing_key
-        .seal_in_place_append_tag(nonce, Aad::empty(), &mut encrypted)
-        .unwrap();
+fn encrypt_data(message: &[u8], cipher: &ChaCha20Poly1305) -> Result<String> {
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+        .encrypt(&nonce, &*message)
+        .map_err(|e| anyhow!("encrypt failed: {e}"))?;
 
     Ok(format!(
         "{}{}{}",
         "v1",
-        hex::encode(&nonce_bytes),
-        hex::encode(&encrypted)
+        hex::encode(&nonce),
+        hex::encode(&ciphertext)
     ))
 }
 
-fn decrypt_data(ciphertext: String, key: &mut LessSafeKey) -> Result<Vec<u8>> {
+fn decrypt_data(ciphertext: String, cipher: &ChaCha20Poly1305) -> Result<Vec<u8>> {
     let version = &ciphertext[0..2];
     if version != "v1" {
         return Err(anyhow!("Invalid version."));
     }
 
-    let nonce_bytes = from_hex(&ciphertext[2..(NONCE_LEN * 2 + 2)])
+    let nonce_bytes = hex::decode(&ciphertext[2..(NONCE_LEN * 2 + 2)])
         .map_err(|e| anyhow!("Failed to decode nonce: {e}."))?;
-    let mut encrypted = from_hex(&ciphertext[(2 + NONCE_LEN * 2)..])
+    let encrypted = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..])
         .map_err(|e| anyhow!("Failed to decode ciphertext: {e}."))?;
-    let nonce = Nonce::try_assume_unique_for_key(&nonce_bytes)
-        .map_err(|e| anyhow!("Failed to nonce: {e}"))?;
-    Ok(key
-        .open_in_place(nonce, Aad::empty(), &mut encrypted)
-        .map_err(|e| anyhow!("Failed to open_in_Place: {e}"))?
-        .to_owned())
+    cipher
+        .decrypt(&Nonce::from_slice(&nonce_bytes), &*encrypted)
+        .map_err(|e| anyhow!("decrypt failed: {e}"))
 }
 
 fn threads_test() -> Result<()> {
     let mut children = Vec::new();
-    let rand = SystemRandom::new();
-    let mut key = vec![0; CHACHA20_POLY1305.key_len()];
-    rand.fill(&mut key)
-        .map_err(|e| anyhow!("Failed to fill key: {e}"))?;
-    let mut opening_key = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key).unwrap());
+    let key = ChaCha20Poly1305::generate_key(&mut OsRng);
+    let cipher = Arc::new(ChaCha20Poly1305::new(&key));
 
     let (tx, rx) = mpsc::channel();
     for id in 0..NTHREADS {
         let thread_tx = tx.clone();
-        let mut sealing_key = opening_key.clone();
+        let cipher = cipher.clone();
         let child = thread::spawn(move || {
-            let msg: String = encrypt_data(
-                format!("Hello I am thread: {id}").as_bytes(),
-                &mut sealing_key,
-                id,
-            )
-            .unwrap();
-            thread_tx.send(msg).unwrap();
-            println!("thread {} finished", id);
+            let ciphertext: String =
+                encrypt_data(format!("Hello I am thread: {id}").as_bytes(), &cipher).unwrap();
+            thread_tx.send(ciphertext).unwrap();
         });
 
         children.push(child);
@@ -93,9 +66,9 @@ fn threads_test() -> Result<()> {
         child.join().expect("oops! the child thread panicked");
     }
 
+    let cipher = ChaCha20Poly1305::new(&key);
     for ciphertext in ciphertexts {
-        let decrypted_data =
-            decrypt_data(ciphertext, &mut opening_key).context("decryption failed.")?;
+        let decrypted_data = decrypt_data(ciphertext, &cipher).context("decryption failed.")?;
         println!(
             "Received: {}",
             String::from_utf8(decrypted_data.to_vec()).unwrap()
@@ -104,22 +77,6 @@ fn threads_test() -> Result<()> {
     Ok(())
 }
 
-fn prehash_public_keys_for_signing(public_keys: &[PublicKey]) -> {
-    let mut hasher = Blake2b512::new();
-}
-
-fn sign_bundle(
-
-fn x3dh_pre_key(signing_key: &Ed25519KeyPair, num_keys: u32, rng: &SystemRandom) {
-    let keys = (0..num_keys)
-        .map(|_| EphemeralPrivateKey::generate(&X25519, rng))
-        .collect();
-
-}
-
 fn main() {
     threads_test().unwrap();
-    let rand = SystemRandom::new();
-    let private_key = EphemeralPrivateKey::generate(&X25519, &rand).unwrap();
-    let public_key = private_key.compute_public_key();
 }
