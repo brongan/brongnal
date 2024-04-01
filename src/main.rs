@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context, Result};
-use blake2::{Blake2b512, Digest};
+use sha2::Sha256;
+use blake2::{Blake2b, Blake2b512, Digest};
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     ChaCha20Poly1305, Nonce,
@@ -7,7 +8,9 @@ use chacha20poly1305::{
 use ed25519_dalek::{SecretKey, Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use std::sync::{mpsc, Arc};
 use std::thread;
-use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};
+use x25519_dalek::{EphemeralSecret, PublicKey, ReusableSecret, StaticSecret};
+use hkdf::Hkdf;
+use hex_literal::hex;
 
 const NTHREADS: i32 = 16;
 const NONCE_LEN: usize = 12;
@@ -139,29 +142,35 @@ fn x3dh_initiate_send_get_sk(
     x3dh_initial_response: &X3DHInitialResponse,
     sender_key: &SecretKey,
 ) -> Result<()> {
-    verify_bundle(
+    let _ = verify_bundle(
         &x3dh_initial_response.identity_key,
         &[x3dh_initial_response.signed_pre_key.pre_key],
         &x3dh_initial_response.signed_pre_key.signature,
     )
     .map_err(|e| anyhow!("Failed to verify bundle: {e}"));
 
-    let ephemeral = EphemeralSecret::random();
-    let sender_key = PublicKey::from(sender_key.into());
+    let reusable_secret = ReusableSecret::random();
+    let sender_key = StaticSecret::from(*sender_key);
     // const DH1 = await sodium.crypto_scalarmult(senderX, signedPreKey);
     // const DH2 = await sodium.crypto_scalarmult(ephSecret, recipientX);
     // const DH3 = await sodium.crypto_scalarmult(ephSecret, signedPreKey);
     let dh1 = sender_key.diffie_hellman(&x3dh_initial_response.signed_pre_key.pre_key);
-    let dh2 = ephemeral.diffie_hellman(&PublicKey::from(x3dh_initial_response.identity_key.to_montgomery().to_bytes()));
-    let dh3 = ephemeral.diffie_hellman(&x3dh_initial_response.signed_pre_key.pre_key);
+    let dh2 = reusable_secret.diffie_hellman(&PublicKey::from(x3dh_initial_response.identity_key.to_montgomery().to_bytes()));
+    let dh3 = reusable_secret.diffie_hellman(&x3dh_initial_response.signed_pre_key.pre_key);
 
-    let sk = if let Some(one_time_key) = x3dh_initial_response.one_time_key {
-        let dh4 = ephemeral.diffie_hellman(&one_time_key)
-        kdf(dh1, dh2, dh3, dh4)
-    } else {
-        kdf(dh1, dh2, dh3)
-    };
+    // let sk = if let Some(one_time_key) = x3dh_initial_response.one_time_key {
+    //     let dh4 = ephemeral.diffie_hellman(&one_time_key);
+    //     kdf(dh1, dh2, dh3, dh4)
+    // } else {
+    let prk: Vec<u8> = [dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat();
+    let hk = Hkdf::<Sha256>::from_prk(&prk).expect("PRK should be large enough");
+    let mut okm = [0u8; 42];
+    let info = hex!("sender key");
+    hk.expand(&info, &mut okm).expect("42 is a valid length for Sha256 to output");
+    //};
 
+
+    Ok(())
 }
 
 fn main() {
