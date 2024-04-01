@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use blake2::{Blake2b512, Digest};
 use chacha20poly1305::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
-    ChaCha20Poly1305, Nonce,
+    aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
+    ChaCha20Poly1305, ChaChaPoly1305, Nonce,
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use hkdf::Hkdf;
@@ -17,10 +17,10 @@ use x25519_dalek::{
 const NTHREADS: i32 = 16;
 const NONCE_LEN: usize = 12;
 
-fn encrypt_data(message: &[u8], cipher: &ChaCha20Poly1305) -> Result<String> {
+fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<String> {
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
     let ciphertext = cipher
-        .encrypt(&nonce, &*message)
+        .encrypt(&nonce, payload)
         .map_err(|e| anyhow!("encrypt failed: {e}"))?;
 
     Ok(format!(
@@ -56,8 +56,13 @@ fn threads_test() -> Result<()> {
         let thread_tx = tx.clone();
         let cipher = cipher.clone();
         let child = thread::spawn(move || {
-            let ciphertext: String =
-                encrypt_data(format!("Hello I am thread: {id}").as_bytes(), &cipher).unwrap();
+            let ciphertext: String = encrypt_data(
+                Payload {
+                    msg: format!("Hello I am thread: {id}").as_bytes(),
+                },
+                &cipher,
+            )
+            .unwrap();
             thread_tx.send(ciphertext).unwrap();
         });
 
@@ -114,6 +119,7 @@ struct X3DHPreKey {
     bundle: Vec<(X25519StaticSecret, X25519PublicKey)>,
 }
 
+// Request
 fn x3dh_pre_key(signing_key: &SigningKey, num_keys: u32) -> X3DHPreKey {
     let bundle: Vec<_> = (0..num_keys)
         .map(|_| {
@@ -153,6 +159,7 @@ fn kdf(prk: &[u8]) -> Result<[u8; 32]> {
     Ok(okm)
 }
 
+// Initiate Conversation Server Response
 fn x3dh_initiate_send_get_sk(
     identity_key: VerifyingKey,
     signed_pre_key: SignedPreKey,
@@ -169,9 +176,7 @@ fn x3dh_initiate_send_get_sk(
     let reusable_secret = X25519ReusableSecret::random();
     let dh1 = X25519StaticSecret::from(sender_key.to_scalar_bytes())
         .diffie_hellman(&signed_pre_key.pre_key);
-    let dh2 = reusable_secret.diffie_hellman(&X25519PublicKey::from(
-        identity_key.to_montgomery().to_bytes(),
-    ));
+    let dh2 = reusable_secret.diffie_hellman(&X25519PublicKey::from(identity_key.to_montgomery()));
     let dh3 = reusable_secret.diffie_hellman(&signed_pre_key.pre_key);
 
     let secret_key = if let Some(one_time_key) = one_time_key {
@@ -193,6 +198,60 @@ fn x3dh_initiate_send_get_sk(
         secret_key,
         one_time_key,
     })
+}
+
+struct X3DHInitiateResponse {
+    identity_key: VerifyingKey,
+    signed_pre_key: SignedPreKey,
+    one_time_key: Option<X25519PublicKey>,
+}
+
+fn get_server_response(_recipient_identity: &str) -> Result<X3DHInitiateResponse> {
+    todo!("implement backend.");
+}
+
+fn set_session_key(_recipient_identity: &str, _secret_key: &[u8; 32]) {
+    todo!("implement whatever this is.");
+}
+
+fn get_encryption_key(_recipient_identity: &str) -> Result<ChaCha20Poly1305> {
+    todo!("??");
+}
+
+fn x3dh_initiate_send(
+    recipient_identity: &str,
+    sender_key: SigningKey,
+    message: &str,
+) -> Result<()> {
+    let response = get_server_response(recipient_identity)?;
+    let X3DHInitiateResult {
+        identity_key,
+        ephemeral_key,
+        secret_key,
+        one_time_key,
+    } = x3dh_initiate_send_get_sk(
+        response.identity_key,
+        response.signed_pre_key,
+        response.one_time_key,
+        sender_key,
+    )?;
+    let associated_data = [
+        sender_key.verifying_key().to_bytes(),
+        identity_key.to_bytes(),
+    ]
+    .concat();
+
+    set_session_key(recipient_identity, &secret_key);
+
+    let encrypted = encrypt_data(
+        Payload {
+            msg: message.as_bytes(),
+            aad: &associated_data,
+        },
+        &get_encryption_key(recipient_identity)?,
+    );
+
+    Ok(())
 }
 
 fn main() {
