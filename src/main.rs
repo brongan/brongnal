@@ -4,13 +4,14 @@ use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
     ChaCha20Poly1305, Nonce,
 };
-use ed25519_dalek::{
-    ed25519::signature::Keypair, Signature, Signer, SigningKey, Verifier, VerifyingKey,
-};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use hkdf::Hkdf;
 use sha2::Sha256;
-use std::sync::{mpsc, Arc};
 use std::thread;
+use std::{
+    collections::HashMap,
+    sync::{mpsc, Arc},
+};
 use x25519_dalek::{
     PublicKey as X25519PublicKey, ReusableSecret as X25519ReusableSecret,
     StaticSecret as X25519StaticSecret,
@@ -218,12 +219,30 @@ fn get_server_response(_recipient_identity: &Identity) -> Result<X3DHInitiateRes
     todo!("implement backend.");
 }
 
-fn set_session_key(_recipient_identity: &Identity, _secret_key: &[u8; 32]) -> Result<()> {
-    todo!("implement whatever this is.");
-}
+struct SessionKeyManager(HashMap<Identity, [u8; 32]>);
 
-fn get_encryption_key(_recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
-    todo!("??");
+impl SessionKeyManager {
+    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]) {
+        self.0.insert(recipient_identity, *secret_key);
+    }
+
+    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
+        if let Some(key) = self.0.get_mut(recipient_identity) {
+            let mut hasher = Blake2b512::new();
+            hasher.update(&key);
+            let blake2b_mac = hasher.finalize();
+            key.clone_from_slice(&blake2b_mac[0..32]);
+            ChaCha20Poly1305::new_from_slice(&blake2b_mac[32..]).map_err(|e| anyhow!("oop: {e}"))
+        } else {
+            Err(anyhow!(
+                "SessionKeyManager does not contain {recipient_identity}"
+            ))
+        }
+    }
+
+    fn destroy_session_key(&mut self, sender: &Identity) {
+        self.0.remove(sender);
+    }
 }
 
 struct X3DHInitiateSendResult {
@@ -234,6 +253,7 @@ struct X3DHInitiateSendResult {
 }
 
 fn x3dh_initiate_send(
+    session_key_manger: &mut SessionKeyManager,
     recipient_identity: &Identity,
     sender_key: SigningKey,
     message: &str,
@@ -256,14 +276,14 @@ fn x3dh_initiate_send(
     ]
     .concat();
 
-    set_session_key(recipient_identity, &secret_key);
+    session_key_manger.set_session_key(recipient_identity.clone(), &secret_key);
 
     let ciphertext = encrypt_data(
         Payload {
             msg: message.as_bytes(),
             aad: &associated_data,
         },
-        &get_encryption_key(recipient_identity)?,
+        &session_key_manger.get_encryption_key(recipient_identity)?,
     )?;
 
     Ok(X3DHInitiateSendResult {
@@ -314,11 +334,8 @@ fn get_pre_key() -> Result<X25519StaticSecret> {
     todo!();
 }
 
-fn destroy_session_key(sender: &Identity) -> Result<()> {
-    todo!();
-}
-
 fn x3dh_initiate_recv(
+    session_key_manager: &mut SessionKeyManager,
     sender: &Identity,
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
@@ -335,13 +352,12 @@ fn x3dh_initiate_recv(
     )?;
 
     let associated_data = [sender_identity_key.to_bytes(), identity_key.to_bytes()].concat();
-    match set_session_key(&sender, &secret_key) {
-        Ok(_) => {
-            let cipher = ChaCha20Poly1305::new_from_slice(&secret_key)?;
-            decrypt_data(ciphertext, &associated_data, &cipher)
-        }
+    session_key_manager.set_session_key(sender.clone(), &secret_key);
+    let cipher = ChaCha20Poly1305::new_from_slice(&secret_key)?;
+    match decrypt_data(ciphertext, &associated_data, &cipher) {
+        Ok(msg) => Ok(msg),
         Err(e) => {
-            destroy_session_key(&sender)?;
+            session_key_manager.destroy_session_key(&sender);
             Err(e)
         }
     }
@@ -349,4 +365,27 @@ fn x3dh_initiate_recv(
 
 fn main() {
     threads_test().unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    #[test]
+    fn x3dh_key_agreement() -> Result<()> {
+        let mut session_key_manager = SessionKeyManager(HashMap::new());
+        let sender_identity = "Sender".to_string();
+        let recipient_identity = "Recipient".to_string();
+        let sender_key = SigningKey::generate(&mut OsRng);
+        let recipient_key = SigningKey::generate(&mut OsRng);
+
+        let message = "Hello".to_string();
+
+        x3dh_initiate_send(
+            &mut session_key_manager,
+            &recipient_identity,
+            sender_key,
+            &message,
+        )?;
+    }
 }
