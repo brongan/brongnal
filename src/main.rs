@@ -2,9 +2,11 @@ use anyhow::{anyhow, Context, Result};
 use blake2::{Blake2b512, Digest};
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
-    ChaCha20Poly1305, ChaChaPoly1305, Nonce,
+    ChaCha20Poly1305, Nonce,
 };
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{
+    ed25519::signature::Keypair, Signature, Signer, SigningKey, Verifier, VerifyingKey,
+};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use std::sync::{mpsc, Arc};
@@ -16,6 +18,8 @@ use x25519_dalek::{
 
 const NTHREADS: i32 = 16;
 const NONCE_LEN: usize = 12;
+
+type Identity = String;
 
 fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<String> {
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
@@ -31,7 +35,7 @@ fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<String> {
     ))
 }
 
-fn decrypt_data(ciphertext: String, cipher: &ChaCha20Poly1305) -> Result<Vec<u8>> {
+fn decrypt_data(ciphertext: String, aad: &[u8], cipher: &ChaCha20Poly1305) -> Result<Vec<u8>> {
     let version = &ciphertext[0..2];
     if version != "v1" {
         return Err(anyhow!("Invalid version."));
@@ -39,10 +43,10 @@ fn decrypt_data(ciphertext: String, cipher: &ChaCha20Poly1305) -> Result<Vec<u8>
 
     let nonce_bytes = hex::decode(&ciphertext[2..(NONCE_LEN * 2 + 2)])
         .map_err(|e| anyhow!("Failed to decode nonce: {e}."))?;
-    let encrypted = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..])
+    let msg = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..])
         .map_err(|e| anyhow!("Failed to decode ciphertext: {e}."))?;
     cipher
-        .decrypt(&Nonce::from_slice(&nonce_bytes), &*encrypted)
+        .decrypt(&Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
         .map_err(|e| anyhow!("decrypt failed: {e}"))
 }
 
@@ -59,6 +63,7 @@ fn threads_test() -> Result<()> {
             let ciphertext: String = encrypt_data(
                 Payload {
                     msg: format!("Hello I am thread: {id}").as_bytes(),
+                    aad: &[],
                 },
                 &cipher,
             )
@@ -80,7 +85,8 @@ fn threads_test() -> Result<()> {
 
     let cipher = ChaCha20Poly1305::new(&key);
     for ciphertext in ciphertexts {
-        let decrypted_data = decrypt_data(ciphertext, &cipher).context("decryption failed.")?;
+        let decrypted_data =
+            decrypt_data(ciphertext, &[], &cipher).context("decryption failed.")?;
         println!(
             "Received: {}",
             String::from_utf8(decrypted_data.to_vec()).unwrap()
@@ -143,7 +149,7 @@ struct X3DHInitialResponse {
     one_time_key: Option<X25519PublicKey>,
 }
 
-struct X3DHInitiateResult {
+struct X3DHInitiateSendGetSkResult {
     identity_key: VerifyingKey,
     ephemeral_key: X25519PublicKey,
     secret_key: [u8; 32],
@@ -164,8 +170,8 @@ fn x3dh_initiate_send_get_sk(
     identity_key: VerifyingKey,
     signed_pre_key: SignedPreKey,
     one_time_key: Option<X25519PublicKey>,
-    sender_key: SigningKey,
-) -> Result<X3DHInitiateResult> {
+    sender_key: &SigningKey,
+) -> Result<X3DHInitiateSendGetSkResult> {
     let _ = verify_bundle(
         &identity_key,
         &[signed_pre_key.pre_key],
@@ -176,7 +182,9 @@ fn x3dh_initiate_send_get_sk(
     let reusable_secret = X25519ReusableSecret::random();
     let dh1 = X25519StaticSecret::from(sender_key.to_scalar_bytes())
         .diffie_hellman(&signed_pre_key.pre_key);
-    let dh2 = reusable_secret.diffie_hellman(&X25519PublicKey::from(identity_key.to_montgomery()));
+    let dh2 = reusable_secret.diffie_hellman(&X25519PublicKey::from(
+        identity_key.to_montgomery().to_bytes(),
+    ));
     let dh3 = reusable_secret.diffie_hellman(&signed_pre_key.pre_key);
 
     let secret_key = if let Some(one_time_key) = one_time_key {
@@ -192,7 +200,7 @@ fn x3dh_initiate_send_get_sk(
         kdf(&[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat())
     }?;
 
-    Ok(X3DHInitiateResult {
+    Ok(X3DHInitiateSendGetSkResult {
         identity_key,
         ephemeral_key: X25519PublicKey::from(&reusable_secret),
         secret_key,
@@ -206,25 +214,32 @@ struct X3DHInitiateResponse {
     one_time_key: Option<X25519PublicKey>,
 }
 
-fn get_server_response(_recipient_identity: &str) -> Result<X3DHInitiateResponse> {
+fn get_server_response(_recipient_identity: &Identity) -> Result<X3DHInitiateResponse> {
     todo!("implement backend.");
 }
 
-fn set_session_key(_recipient_identity: &str, _secret_key: &[u8; 32]) {
+fn set_session_key(_recipient_identity: &Identity, _secret_key: &[u8; 32]) -> Result<()> {
     todo!("implement whatever this is.");
 }
 
-fn get_encryption_key(_recipient_identity: &str) -> Result<ChaCha20Poly1305> {
+fn get_encryption_key(_recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
     todo!("??");
 }
 
+struct X3DHInitiateSendResult {
+    identity_key: VerifyingKey,
+    ephemeral_key: X25519PublicKey,
+    one_time_key: Option<X25519PublicKey>,
+    ciphertext: String,
+}
+
 fn x3dh_initiate_send(
-    recipient_identity: &str,
+    recipient_identity: &Identity,
     sender_key: SigningKey,
     message: &str,
-) -> Result<()> {
+) -> Result<X3DHInitiateSendResult> {
     let response = get_server_response(recipient_identity)?;
-    let X3DHInitiateResult {
+    let X3DHInitiateSendGetSkResult {
         identity_key,
         ephemeral_key,
         secret_key,
@@ -233,7 +248,7 @@ fn x3dh_initiate_send(
         response.identity_key,
         response.signed_pre_key,
         response.one_time_key,
-        sender_key,
+        &sender_key,
     )?;
     let associated_data = [
         sender_key.verifying_key().to_bytes(),
@@ -243,15 +258,93 @@ fn x3dh_initiate_send(
 
     set_session_key(recipient_identity, &secret_key);
 
-    let encrypted = encrypt_data(
+    let ciphertext = encrypt_data(
         Payload {
             msg: message.as_bytes(),
             aad: &associated_data,
         },
         &get_encryption_key(recipient_identity)?,
-    );
+    )?;
 
-    Ok(())
+    Ok(X3DHInitiateSendResult {
+        identity_key,
+        ephemeral_key,
+        one_time_key,
+        ciphertext,
+    })
+}
+
+fn fetch_wipe_one_time_secret_key(one_time_key: X25519PublicKey) -> Result<X25519StaticSecret> {
+    todo!("sqlite.");
+}
+
+fn x3dh_initiate_receive_sk(
+    sender_identity_key: &VerifyingKey,
+    ephemeral_key: X25519PublicKey,
+    one_time_key: Option<X25519PublicKey>,
+    identity_key: &SigningKey,
+    pre_key: X25519StaticSecret,
+) -> Result<[u8; 32]> {
+    let dh1 = pre_key.diffie_hellman(&X25519PublicKey::from(
+        sender_identity_key.to_montgomery().to_bytes(),
+    ));
+    let dh2 =
+        X25519StaticSecret::from(identity_key.to_scalar_bytes()).diffie_hellman(&ephemeral_key);
+    let dh3 = pre_key.diffie_hellman(&ephemeral_key);
+
+    if let Some(one_time_key) = one_time_key {
+        let dh4 = fetch_wipe_one_time_secret_key(one_time_key)?.diffie_hellman(&ephemeral_key);
+        kdf(&[
+            dh1.to_bytes(),
+            dh2.to_bytes(),
+            dh3.to_bytes(),
+            dh4.to_bytes(),
+        ]
+        .concat())
+    } else {
+        kdf(&[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat())
+    }
+}
+
+fn get_identity_key() -> Result<SigningKey> {
+    todo!("sqilte.");
+}
+
+fn get_pre_key() -> Result<X25519StaticSecret> {
+    todo!();
+}
+
+fn destroy_session_key(sender: &Identity) -> Result<()> {
+    todo!();
+}
+
+fn x3dh_initiate_recv(
+    sender: &Identity,
+    sender_identity_key: &VerifyingKey,
+    ephemeral_key: X25519PublicKey,
+    one_time_key: Option<X25519PublicKey>,
+    ciphertext: String,
+) -> Result<Vec<u8>> {
+    let identity_key = get_identity_key()?;
+    let secret_key = x3dh_initiate_receive_sk(
+        sender_identity_key,
+        ephemeral_key,
+        one_time_key,
+        &identity_key,
+        get_pre_key()?,
+    )?;
+
+    let associated_data = [sender_identity_key.to_bytes(), identity_key.to_bytes()].concat();
+    match set_session_key(&sender, &secret_key) {
+        Ok(_) => {
+            let cipher = ChaCha20Poly1305::new_from_slice(&secret_key)?;
+            decrypt_data(ciphertext, &associated_data, &cipher)
+        }
+        Err(e) => {
+            destroy_session_key(&sender)?;
+            Err(e)
+        }
+    }
 }
 
 fn main() {
