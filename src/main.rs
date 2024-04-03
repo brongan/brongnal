@@ -1,3 +1,4 @@
+#![feature(map_try_insert)]
 use anyhow::{anyhow, Context, Result};
 use blake2::{Blake2b512, Digest};
 use chacha20poly1305::{
@@ -139,6 +140,7 @@ fn x3dh_pre_key(signing_key: &SigningKey, num_keys: u32) -> X3DHPreKey {
     X3DHPreKey { signature, bundle }
 }
 
+#[derive(Clone)]
 struct SignedPreKey {
     pre_key: X25519PublicKey,
     signature: Signature,
@@ -228,7 +230,8 @@ struct Message {
 trait X3DHServer {
     fn publish_keys(
         &mut self,
-        identity_key: &VerifyingKey,
+        identity: Identity,
+        identity_key: VerifyingKey,
         signed_pre_key: SignedPreKey,
         one_time_pre_keys: Vec<X25519PublicKey>,
     ) -> Result<()>;
@@ -238,9 +241,71 @@ trait X3DHServer {
         recipient_identity: &Identity,
     ) -> Result<X3DHInitiateResponse>;
 
-    fn send_inititial_message(&mut self, identity: &Identity) -> Result<()>;
+    fn send_message(&mut self, recipient_identity: &Identity, message: Message) -> Result<()>;
 
     fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message>;
+}
+
+struct ClientData {
+    identity_key: VerifyingKey,
+    signed_pre_key: SignedPreKey,
+    one_time_pre_keys: Vec<X25519PublicKey>,
+}
+
+struct InMemoryServer {
+    client_data: HashMap<Identity, ClientData>,
+    messages: HashMap<Identity, Vec<Message>>,
+}
+
+impl X3DHServer for InMemoryServer {
+    fn publish_keys(
+        &mut self,
+        identity: Identity,
+        identity_key: VerifyingKey,
+        signed_pre_key: SignedPreKey,
+        one_time_pre_keys: Vec<X25519PublicKey>,
+    ) -> Result<()> {
+        self.client_data.insert(
+            identity,
+            ClientData {
+                identity_key,
+                signed_pre_key,
+                one_time_pre_keys,
+            },
+        );
+        Ok(())
+    }
+
+    fn initiate_fetch_bundle(
+        &mut self,
+        recipient_identity: &Identity,
+    ) -> Result<X3DHInitiateResponse> {
+        if let Some(data) = self.client_data.get_mut(recipient_identity) {
+            let one_time_key = data.one_time_pre_keys.pop();
+            Ok(X3DHInitiateResponse {
+                identity_key: data.identity_key,
+                signed_pre_key: data.signed_pre_key.clone(),
+                one_time_key,
+            })
+        } else {
+            Err(anyhow!("Missing client data for: {recipient_identity}"))
+        }
+    }
+
+    fn send_message(&mut self, recipient_identity: &Identity, message: Message) -> Result<()> {
+        let _ = self
+            .messages
+            .try_insert(recipient_identity.clone(), Vec::new());
+        self.messages
+            .get_mut(recipient_identity)
+            .unwrap()
+            .push(message);
+        Ok(())
+    }
+
+    fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message> {
+        self.messages.remove(identity).unwrap_or(Vec::new())
+    }
 }
 
 trait X3DHSessionKeyManager {
@@ -330,8 +395,8 @@ trait X3DHClient {
         &mut self,
         one_time_key: X25519PublicKey,
     ) -> Result<X25519StaticSecret>;
-    fn get_identity_key(&self) -> Result<SigningKey>;
-    fn get_pre_key(&self) -> Result<X25519StaticSecret>;
+    fn get_identity_key(&self) -> Result<&SigningKey>;
+    fn get_pre_key(&mut self) -> Result<X25519StaticSecret>;
 }
 
 struct InMemoryClient {
@@ -340,7 +405,23 @@ struct InMemoryClient {
     one_time_pre_keys: Vec<X25519StaticSecret>,
 }
 
-impl X3DHClient for InMemoryClient {}
+impl X3DHClient for InMemoryClient {
+    fn fetch_wipe_one_time_secret_key(
+        &mut self,
+        one_time_key: X25519PublicKey,
+    ) -> Result<X25519StaticSecret> {
+    }
+
+    fn get_identity_key(&self) -> Result<&SigningKey> {
+        Ok(&self.identity_key)
+    }
+
+    fn get_pre_key(&mut self) -> Result<X25519StaticSecret> {
+        self.one_time_pre_keys
+            .pop()
+            .ok_or_else(|| anyhow!("no more pre keys."))
+    }
+}
 
 fn x3dh_initiate_receive_sk(
     client: &mut dyn X3DHClient,
