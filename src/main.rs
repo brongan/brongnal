@@ -5,6 +5,7 @@ use chacha20poly1305::{
     ChaCha20Poly1305, Nonce,
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use hex_literal::hex;
 use hkdf::Hkdf;
 use sha2::Sha256;
 use std::thread;
@@ -126,7 +127,6 @@ struct X3DHPreKey {
     bundle: Vec<(X25519StaticSecret, X25519PublicKey)>,
 }
 
-// Request
 fn x3dh_pre_key(signing_key: &SigningKey, num_keys: u32) -> X3DHPreKey {
     let bundle: Vec<_> = (0..num_keys)
         .map(|_| {
@@ -158,11 +158,14 @@ struct X3DHInitiateSendGetSkResult {
 }
 
 fn kdf(prk: &[u8]) -> Result<[u8; 32]> {
-    // TODO double check output of DH is cryptographically strong psuedorandom.
-    let hk = Hkdf::<Sha256>::from_prk(&prk).map_err(|e| anyhow!("Failed to generate hkdf: {e}"))?;
+    let ikm = [
+        &hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"),
+        prk,
+    ]
+    .concat();
+    let hk = Hkdf::<Sha256>::new(None, &ikm);
     let mut okm = [0u8; 32];
-    hk.expand(b"sender key", &mut okm)
-        .map_err(|e| anyhow!("Failed to expand hkdf: {e}"))?;
+    hk.expand(b"Brongnal", &mut okm).unwrap();
     Ok(okm)
 }
 
@@ -215,13 +218,40 @@ struct X3DHInitiateResponse {
     one_time_key: Option<X25519PublicKey>,
 }
 
-fn get_server_response(_recipient_identity: &Identity) -> Result<X3DHInitiateResponse> {
-    todo!("implement backend.");
+struct Message {
+    sender_key: VerifyingKey,
+    ephemeral_key: X25519PublicKey,
+    pre_key: Option<X25519PublicKey>,
+    ciphertext: String,
+}
+
+trait X3DHServer {
+    fn publish_keys(
+        &mut self,
+        identity_key: &VerifyingKey,
+        signed_pre_key: SignedPreKey,
+        one_time_pre_keys: Vec<X25519PublicKey>,
+    ) -> Result<()>;
+
+    fn initiate_fetch_bundle(
+        &mut self,
+        recipient_identity: &Identity,
+    ) -> Result<X3DHInitiateResponse>;
+
+    fn send_inititial_message(&mut self, identity: &Identity) -> Result<()>;
+
+    fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message>;
+}
+
+trait X3DHSessionKeyManager {
+    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]);
+    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305>;
+    fn destroy_session_key(&mut self, sender: &Identity);
 }
 
 struct SessionKeyManager(HashMap<Identity, [u8; 32]>);
 
-impl SessionKeyManager {
+impl X3DHSessionKeyManager for SessionKeyManager {
     fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]) {
         self.0.insert(recipient_identity, *secret_key);
     }
@@ -253,12 +283,13 @@ struct X3DHInitiateSendResult {
 }
 
 fn x3dh_initiate_send(
+    server: &mut dyn X3DHServer,
     session_key_manger: &mut SessionKeyManager,
     recipient_identity: &Identity,
     sender_key: SigningKey,
     message: &str,
 ) -> Result<X3DHInitiateSendResult> {
-    let response = get_server_response(recipient_identity)?;
+    let response = server.initiate_fetch_bundle(recipient_identity)?;
     let X3DHInitiateSendGetSkResult {
         identity_key,
         ephemeral_key,
@@ -294,11 +325,25 @@ fn x3dh_initiate_send(
     })
 }
 
-fn fetch_wipe_one_time_secret_key(one_time_key: X25519PublicKey) -> Result<X25519StaticSecret> {
-    todo!("sqlite.");
+trait X3DHClient {
+    fn fetch_wipe_one_time_secret_key(
+        &mut self,
+        one_time_key: X25519PublicKey,
+    ) -> Result<X25519StaticSecret>;
+    fn get_identity_key(&self) -> Result<SigningKey>;
+    fn get_pre_key(&self) -> Result<X25519StaticSecret>;
 }
 
+struct InMemoryClient {
+    identity_key: SigningKey,
+    signed_pre_key: SignedPreKey,
+    one_time_pre_keys: Vec<X25519StaticSecret>,
+}
+
+impl X3DHClient for InMemoryClient {}
+
 fn x3dh_initiate_receive_sk(
+    client: &mut dyn X3DHClient,
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
     one_time_key: Option<X25519PublicKey>,
@@ -313,7 +358,9 @@ fn x3dh_initiate_receive_sk(
     let dh3 = pre_key.diffie_hellman(&ephemeral_key);
 
     if let Some(one_time_key) = one_time_key {
-        let dh4 = fetch_wipe_one_time_secret_key(one_time_key)?.diffie_hellman(&ephemeral_key);
+        let dh4 = client
+            .fetch_wipe_one_time_secret_key(one_time_key)?
+            .diffie_hellman(&ephemeral_key);
         kdf(&[
             dh1.to_bytes(),
             dh2.to_bytes(),
@@ -326,15 +373,8 @@ fn x3dh_initiate_receive_sk(
     }
 }
 
-fn get_identity_key() -> Result<SigningKey> {
-    todo!("sqilte.");
-}
-
-fn get_pre_key() -> Result<X25519StaticSecret> {
-    todo!();
-}
-
 fn x3dh_initiate_recv(
+    client: &mut dyn X3DHClient,
     session_key_manager: &mut SessionKeyManager,
     sender: &Identity,
     sender_identity_key: &VerifyingKey,
@@ -342,13 +382,15 @@ fn x3dh_initiate_recv(
     one_time_key: Option<X25519PublicKey>,
     ciphertext: String,
 ) -> Result<Vec<u8>> {
-    let identity_key = get_identity_key()?;
+    let identity_key = client.get_identity_key()?;
+    let pre_key = client.get_pre_key()?;
     let secret_key = x3dh_initiate_receive_sk(
+        client,
         sender_identity_key,
         ephemeral_key,
         one_time_key,
         &identity_key,
-        get_pre_key()?,
+        pre_key,
     )?;
 
     let associated_data = [sender_identity_key.to_bytes(), identity_key.to_bytes()].concat();
@@ -378,7 +420,6 @@ mod tests {
         let recipient_identity = "Recipient".to_string();
         let sender_key = SigningKey::generate(&mut OsRng);
         let recipient_key = SigningKey::generate(&mut OsRng);
-
         let message = "Hello".to_string();
 
         x3dh_initiate_send(
