@@ -123,12 +123,12 @@ fn verify_bundle(
     verifying_key.verify(&hasher.finalize(), signature)
 }
 
-struct X3DHPreKey {
-    signature: Signature,
+struct X3DHPreKeyBundle {
     bundle: Vec<(X25519StaticSecret, X25519PublicKey)>,
+    signature: Signature,
 }
 
-fn x3dh_pre_key(signing_key: &SigningKey, num_keys: u32) -> X3DHPreKey {
+fn create_prekey_bundle(signing_key: &SigningKey, num_keys: u32) -> X3DHPreKeyBundle {
     let bundle: Vec<_> = (0..num_keys)
         .map(|_| {
             let pkey = X25519StaticSecret::random();
@@ -137,7 +137,7 @@ fn x3dh_pre_key(signing_key: &SigningKey, num_keys: u32) -> X3DHPreKey {
         })
         .collect();
     let signature = sign_bundle(signing_key, &bundle);
-    X3DHPreKey { signature, bundle }
+    X3DHPreKeyBundle { signature, bundle }
 }
 
 #[derive(Clone)]
@@ -146,9 +146,15 @@ struct SignedPreKey {
     signature: Signature,
 }
 
+#[derive(Clone)]
+struct SignedPreKeys {
+    pre_keys: Vec<X25519PublicKey>,
+    signature: Signature,
+}
+
 struct X3DHInitialResponse {
     identity_key: VerifyingKey,
-    signed_pre_key: SignedPreKey,
+    signed_pre_key: SignedPreKeys,
     one_time_key: Option<X25519PublicKey>,
 }
 
@@ -216,8 +222,8 @@ fn x3dh_initiate_send_get_sk(
 
 struct X3DHInitiateResponse {
     identity_key: VerifyingKey,
-    signed_pre_key: SignedPreKey,
-    one_time_key: Option<X25519PublicKey>,
+    otk: Option<X25519PublicKey>,
+    spk: SignedPreKey,
 }
 
 struct Message {
@@ -228,15 +234,16 @@ struct Message {
 }
 
 trait X3DHServer {
-    fn publish_keys(
+    fn set_spk(&mut self, identity: Identity, ik: VerifyingKey, spk: SignedPreKey) -> Result<()>;
+
+    fn publish_otk_bundle(
         &mut self,
         identity: Identity,
-        identity_key: VerifyingKey,
-        signed_pre_key: SignedPreKey,
-        one_time_pre_keys: Vec<X25519PublicKey>,
+        ik: VerifyingKey,
+        otk_bundle: SignedPreKeys,
     ) -> Result<()>;
 
-    fn initiate_fetch_bundle(
+    fn fetch_prekey_bundle(
         &mut self,
         recipient_identity: &Identity,
     ) -> Result<X3DHInitiateResponse>;
@@ -246,50 +253,74 @@ trait X3DHServer {
     fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message>;
 }
 
-struct ClientData {
-    identity_key: VerifyingKey,
-    signed_pre_key: SignedPreKey,
-    one_time_pre_keys: Vec<X25519PublicKey>,
-}
-
 struct InMemoryServer {
-    client_data: HashMap<Identity, ClientData>,
+    identity_key: HashMap<Identity, VerifyingKey>,
+    current_pre_key: HashMap<Identity, SignedPreKey>,
+    one_time_pre_keys: HashMap<Identity, Vec<X25519PublicKey>>,
     messages: HashMap<Identity, Vec<Message>>,
 }
 
+impl InMemoryServer {
+    fn new() -> Self {
+        InMemoryServer {
+            identity_key: HashMap::new(),
+            current_pre_key: HashMap::new(),
+            one_time_pre_keys: HashMap::new(),
+            messages: HashMap::new(),
+        }
+    }
+}
+
 impl X3DHServer for InMemoryServer {
-    fn publish_keys(
-        &mut self,
-        identity: Identity,
-        identity_key: VerifyingKey,
-        signed_pre_key: SignedPreKey,
-        one_time_pre_keys: Vec<X25519PublicKey>,
-    ) -> Result<()> {
-        self.client_data.insert(
-            identity,
-            ClientData {
-                identity_key,
-                signed_pre_key,
-                one_time_pre_keys,
-            },
-        );
+    fn set_spk(&mut self, identity: Identity, ik: VerifyingKey, spk: SignedPreKey) -> Result<()> {
+        verify_bundle(&ik, &[spk.pre_key], &spk.signature)?;
+        self.identity_key.insert(identity.clone(), ik);
+        self.current_pre_key.insert(identity, spk);
         Ok(())
     }
 
-    fn initiate_fetch_bundle(
+    fn publish_otk_bundle(
+        &mut self,
+        identity: Identity,
+        ik: VerifyingKey,
+        otk_bundle: SignedPreKeys,
+    ) -> Result<()> {
+        verify_bundle(&ik, &otk_bundle.pre_keys, &otk_bundle.signature)?;
+        let _ = self
+            .one_time_pre_keys
+            .try_insert(identity.clone(), Vec::new());
+        self.one_time_pre_keys
+            .get_mut(&identity)
+            .unwrap()
+            .extend(otk_bundle.pre_keys);
+        Ok(())
+    }
+
+    fn fetch_prekey_bundle(
         &mut self,
         recipient_identity: &Identity,
     ) -> Result<X3DHInitiateResponse> {
-        if let Some(data) = self.client_data.get_mut(recipient_identity) {
-            let one_time_key = data.one_time_pre_keys.pop();
-            Ok(X3DHInitiateResponse {
-                identity_key: data.identity_key,
-                signed_pre_key: data.signed_pre_key.clone(),
-                one_time_key,
-            })
+        let identity_key = self
+            .identity_key
+            .get(recipient_identity)
+            .context("Server has IK.")?
+            .clone();
+        let spk = self
+            .current_pre_key
+            .get(recipient_identity)
+            .context("Server has spk.")?
+            .clone();
+        let otk = if let Some(otks) = self.one_time_pre_keys.get_mut(recipient_identity) {
+            otks.pop()
         } else {
-            Err(anyhow!("Missing client data for: {recipient_identity}"))
-        }
+            None
+        };
+
+        Ok(X3DHInitiateResponse {
+            identity_key,
+            otk,
+            spk,
+        })
     }
 
     fn send_message(&mut self, recipient_identity: &Identity, message: Message) -> Result<()> {
@@ -354,7 +385,7 @@ fn x3dh_initiate_send(
     sender_key: SigningKey,
     message: &str,
 ) -> Result<X3DHInitiateSendResult> {
-    let response = server.initiate_fetch_bundle(recipient_identity)?;
+    let response = server.fetch_prekey_bundle(recipient_identity)?;
     let X3DHInitiateSendGetSkResult {
         identity_key,
         ephemeral_key,
@@ -362,8 +393,8 @@ fn x3dh_initiate_send(
         one_time_key,
     } = x3dh_initiate_send_get_sk(
         response.identity_key,
-        response.signed_pre_key,
-        response.one_time_key,
+        response.spk,
+        response.otk,
         &sender_key,
     )?;
     let associated_data = [
@@ -395,13 +426,13 @@ trait X3DHClient {
         &mut self,
         one_time_key: X25519PublicKey,
     ) -> Result<X25519StaticSecret>;
-    fn get_identity_key(&self) -> Result<&SigningKey>;
+    fn get_identity_key(&self) -> Result<SigningKey>;
     fn get_pre_key(&mut self) -> Result<X25519StaticSecret>;
 }
 
 struct InMemoryClient {
     identity_key: SigningKey,
-    signed_pre_key: SignedPreKey,
+    signed_pre_key: SignedPreKeys,
     one_time_pre_keys: Vec<X25519StaticSecret>,
 }
 
@@ -412,14 +443,12 @@ impl X3DHClient for InMemoryClient {
     ) -> Result<X25519StaticSecret> {
     }
 
-    fn get_identity_key(&self) -> Result<&SigningKey> {
-        Ok(&self.identity_key)
+    fn get_identity_key(&self) -> Result<SigningKey> {
+        Ok(self.identity_key.clone())
     }
 
     fn get_pre_key(&mut self) -> Result<X25519StaticSecret> {
-        self.one_time_pre_keys
-            .pop()
-            .ok_or_else(|| anyhow!("no more pre keys."))
+        self.one_time_pre_keys.pop().context("no more pre keys.")
     }
 }
 
@@ -496,17 +525,24 @@ mod tests {
 
     #[test]
     fn x3dh_key_agreement() -> Result<()> {
+        let mut server = InMemoryServer::new();
         let mut session_key_manager = SessionKeyManager(HashMap::new());
-        let sender_identity = "Sender".to_string();
-        let recipient_identity = "Recipient".to_string();
-        let sender_key = SigningKey::generate(&mut OsRng);
-        let recipient_key = SigningKey::generate(&mut OsRng);
+        let alice = "Alice".to_string();
+        let bob = "Bob".to_string();
+        let alice_ik = SigningKey::generate(&mut OsRng);
+        let bob_ik = SigningKey::generate(&mut OsRng);
         let message = "Hello".to_string();
+        let bob_spk = create_prekey_bundle(&bob_ik, 1);
+        let bob_otks = create_prekey_bundle(&bob_ik, 100);
+
+        server.set_spk(bob, bob_ik, bob_spk);
+        server.publish_otk_bundle(bob, bob_ik, bob_otks);
 
         x3dh_initiate_send(
+            &mut server,
             &mut session_key_manager,
-            &recipient_identity,
-            sender_key,
+            &bob,
+            alice_ik,
             &message,
         )?;
     }
