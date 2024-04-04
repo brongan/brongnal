@@ -2,14 +2,14 @@
 #![feature(trait_upcasting)]
 #![allow(dead_code)]
 use crate::aead::{decrypt_data, encrypt_data};
+use crate::bundle::*;
 use anyhow::{anyhow, Context, Result};
 use blake2::{Blake2b512, Digest};
 use chacha20poly1305::{
     aead::{KeyInit, Payload},
     ChaCha20Poly1305,
 };
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use hex_literal::hex;
+use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use std::collections::HashMap;
@@ -19,50 +19,9 @@ use x25519_dalek::{
 };
 
 mod aead;
+mod bundle;
 
 type Identity = String;
-
-fn sign_bundle(
-    signing_key: &SigningKey,
-    key_pairs: &[(X25519StaticSecret, X25519PublicKey)],
-) -> Signature {
-    let mut hasher = Blake2b512::new();
-    hasher.update(key_pairs.len().to_be_bytes());
-    for key_pair in key_pairs {
-        hasher.update(key_pair.1.as_bytes());
-    }
-    signing_key.sign(&hasher.finalize())
-}
-
-fn verify_bundle(
-    verifying_key: &VerifyingKey,
-    public_keys: &[X25519PublicKey],
-    signature: &Signature,
-) -> Result<(), ed25519_dalek::ed25519::Error> {
-    let mut hasher = Blake2b512::new();
-    hasher.update(public_keys.len().to_be_bytes());
-    for public_key in public_keys {
-        hasher.update(public_key.as_bytes());
-    }
-    verifying_key.verify(&hasher.finalize(), signature)
-}
-
-struct X3DHPreKeyBundle {
-    bundle: Vec<(X25519StaticSecret, X25519PublicKey)>,
-    signature: Signature,
-}
-
-fn create_prekey_bundle(signing_key: &SigningKey, num_keys: u32) -> X3DHPreKeyBundle {
-    let bundle: Vec<_> = (0..num_keys)
-        .map(|_| {
-            let pkey = X25519StaticSecret::random();
-            let pubkey = X25519PublicKey::from(&pkey);
-            (pkey, pubkey)
-        })
-        .collect();
-    let signature = sign_bundle(signing_key, &bundle);
-    X3DHPreKeyBundle { signature, bundle }
-}
 
 #[derive(Clone)]
 struct SignedPreKey {
@@ -76,27 +35,23 @@ struct SignedPreKeys {
     signature: Signature,
 }
 
-struct X3DHInitialResponse {
-    identity_key: VerifyingKey,
-    signed_pre_key: SignedPreKeys,
-    one_time_key: Option<X25519PublicKey>,
+// KDF(KM) represents 32 bytes of output from the HKDF algorithm [3] with inputs:
+//    HKDF input key material = F || KM, where KM is an input byte sequence containing secret key material, and F is a byte sequence containing 32 0xFF bytes if curve is X25519, and 57 0xFF bytes if curve is X448. F is used for cryptographic domain separation with XEdDSA [2].
+//    HKDF salt = A zero-filled byte sequence with length equal to the hash output length.
+//    HKDF info = The info parameter from Section 2.1.
+fn kdf(ikm: &[u8]) -> [u8; 32] {
+    let salt = [0; 32];
+    let f = [0xFF, 32];
+    let ikm = [&f, ikm].concat();
+    let hk = Hkdf::<Sha256>::new(Some(&salt), &ikm);
+    let mut okm = [0u8; 32];
+    hk.expand(b"Brongnal", &mut okm).unwrap();
+    okm
 }
 
 struct X3DHInitiateSendSkResult {
     ephemeral_key: X25519PublicKey,
     secret_key: [u8; 32],
-}
-
-fn kdf(prk: &[u8]) -> Result<[u8; 32]> {
-    let ikm = [
-        &hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"),
-        prk,
-    ]
-    .concat();
-    let hk = Hkdf::<Sha256>::new(None, &ikm);
-    let mut okm = [0u8; 32];
-    hk.expand(b"Brongnal", &mut okm).unwrap();
-    Ok(okm)
 }
 
 // Initiate Conversation Server Response
@@ -132,7 +87,7 @@ fn x3dh_initiate_send_sk(
         .concat())
     } else {
         kdf(&[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat())
-    }?;
+    };
 
     Ok(X3DHInitiateSendSkResult {
         ephemeral_key: X25519PublicKey::from(&reusable_secret),
@@ -392,15 +347,17 @@ fn x3dh_initiate_recv_sk(
         let dh4 = client
             .fetch_wipe_one_time_secret_key(&one_time_key)?
             .diffie_hellman(&ephemeral_key);
-        kdf(&[
+        Ok(kdf(&[
             dh1.to_bytes(),
             dh2.to_bytes(),
             dh3.to_bytes(),
             dh4.to_bytes(),
         ]
-        .concat())
+        .concat()))
     } else {
-        kdf(&[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat())
+        Ok(kdf(
+            &[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat()
+        ))
     }
 }
 
