@@ -20,7 +20,7 @@ pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Strin
     ))
 }
 
-pub fn decrypt_data(ciphertext: String, aad: &[u8], cipher: &ChaCha20Poly1305) -> Result<Vec<u8>> {
+pub fn decrypt_data(ciphertext: &str, aad: &[u8], cipher: &ChaCha20Poly1305) -> Result<Vec<u8>> {
     let version = &ciphertext[0..2];
     if version != "v1" {
         return Err(anyhow!("Invalid version."));
@@ -55,7 +55,7 @@ mod tests {
         )
         .unwrap();
         let decrypted_data =
-            decrypt_data(ciphertext, &[], &cipher).context("decryption failed.")?;
+            decrypt_data(&ciphertext, &[], &cipher).context("decryption failed.")?;
         assert_eq!(text, String::from_utf8(decrypted_data)?);
         Ok(())
     }
