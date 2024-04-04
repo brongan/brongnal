@@ -1,102 +1,24 @@
 #![feature(map_try_insert)]
+use crate::aead::{decrypt_data, encrypt_data};
 use anyhow::{anyhow, Context, Result};
 use blake2::{Blake2b512, Digest};
 use chacha20poly1305::{
-    aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
-    ChaCha20Poly1305, Nonce,
+    aead::{KeyInit, Payload},
+    ChaCha20Poly1305,
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use hex_literal::hex;
 use hkdf::Hkdf;
 use sha2::Sha256;
-use std::thread;
-use std::{
-    collections::HashMap,
-    sync::{mpsc, Arc},
-};
+use std::collections::HashMap;
 use x25519_dalek::{
     PublicKey as X25519PublicKey, ReusableSecret as X25519ReusableSecret,
     StaticSecret as X25519StaticSecret,
 };
 
-const NTHREADS: i32 = 16;
-const NONCE_LEN: usize = 12;
+mod aead;
 
 type Identity = String;
-
-fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<String> {
-    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
-    let ciphertext = cipher
-        .encrypt(&nonce, payload)
-        .map_err(|e| anyhow!("encrypt failed: {e}"))?;
-
-    Ok(format!(
-        "{}{}{}",
-        "v1",
-        hex::encode(&nonce),
-        hex::encode(&ciphertext)
-    ))
-}
-
-fn decrypt_data(ciphertext: String, aad: &[u8], cipher: &ChaCha20Poly1305) -> Result<Vec<u8>> {
-    let version = &ciphertext[0..2];
-    if version != "v1" {
-        return Err(anyhow!("Invalid version."));
-    }
-
-    let nonce_bytes = hex::decode(&ciphertext[2..(NONCE_LEN * 2 + 2)])
-        .map_err(|e| anyhow!("Failed to decode nonce: {e}."))?;
-    let msg = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..])
-        .map_err(|e| anyhow!("Failed to decode ciphertext: {e}."))?;
-    cipher
-        .decrypt(&Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
-        .map_err(|e| anyhow!("decrypt failed: {e}"))
-}
-
-fn threads_test() -> Result<()> {
-    let mut children = Vec::new();
-    let key = ChaCha20Poly1305::generate_key(&mut OsRng);
-    let cipher = Arc::new(ChaCha20Poly1305::new(&key));
-
-    let (tx, rx) = mpsc::channel();
-    for id in 0..NTHREADS {
-        let thread_tx = tx.clone();
-        let cipher = cipher.clone();
-        let child = thread::spawn(move || {
-            let ciphertext: String = encrypt_data(
-                Payload {
-                    msg: format!("Hello I am thread: {id}").as_bytes(),
-                    aad: &[],
-                },
-                &cipher,
-            )
-            .unwrap();
-            thread_tx.send(ciphertext).unwrap();
-        });
-
-        children.push(child);
-    }
-
-    let mut ciphertexts: Vec<String> = Vec::with_capacity(NTHREADS as usize);
-    for _ in 0..NTHREADS {
-        ciphertexts.push(rx.recv().unwrap());
-    }
-
-    for child in children {
-        child.join().expect("oops! the child thread panicked");
-    }
-
-    let cipher = ChaCha20Poly1305::new(&key);
-    for ciphertext in ciphertexts {
-        let decrypted_data =
-            decrypt_data(ciphertext, &[], &cipher).context("decryption failed.")?;
-        println!(
-            "Received: {}",
-            String::from_utf8(decrypted_data.to_vec()).unwrap()
-        );
-    }
-    Ok(())
-}
 
 fn sign_bundle(
     signing_key: &SigningKey,
@@ -519,19 +441,17 @@ fn x3dh_initiate_recv(
     }
 }
 
-fn main() {
-    threads_test().unwrap();
-}
+fn main() {}
 
 #[cfg(test)]
 mod tests {
     use crate::*;
+    use chacha20poly1305::aead::OsRng;
 
     #[test]
     fn x3dh_key_agreement() -> Result<()> {
         let mut server = InMemoryServer::new();
         let mut session_key_manager = SessionKeyManager(HashMap::new());
-        let alice = "Alice".to_string();
         let bob_ik = SigningKey::generate(&mut OsRng);
         let message = "Hello".to_string();
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
