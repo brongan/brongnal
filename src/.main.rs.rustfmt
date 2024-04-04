@@ -163,7 +163,6 @@ fn x3dh_initiate_recv_sk(
     let dh3 = pre_key.diffie_hellman(&ephemeral_key);
 
     if let Some(one_time_key) = otk {
-        // Bob deletes any one-time prekey private key that was used, for forward secrecy.
         let dh4 = client
             .fetch_wipe_one_time_secret_key(&one_time_key)?
             .diffie_hellman(&ephemeral_key);
@@ -189,10 +188,9 @@ fn x3dh_initiate_recv(
     one_time_key: Option<X25519PublicKey>,
     ciphertext: &str,
 ) -> Result<Vec<u8>> {
-    // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message.
+    // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message. Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
     let identity_key = client.get_identity_key()?;
     let pre_key = client.get_pre_key()?;
-    // Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
     // Using these keys, Bob repeats the DH and KDF calculations from the previous section to derive SK, and then deletes the DH values.
     let secret_key = x3dh_initiate_recv_sk(
         client,
@@ -203,18 +201,12 @@ fn x3dh_initiate_recv(
         pre_key,
     )?;
 
-    // Bob then constructs the AD byte sequence using IKA and IKB, as described in the previous section.
     let associated_data = [sender_identity_key.to_bytes(), identity_key.to_bytes()].concat();
-
-    //Bob may then continue using SK or keys derived from SK within the post-X3DH protocol for communication with Alice.
     client.set_session_key(sender.clone(), &secret_key);
-
-    //  Finally, Bob attempts to decrypt the initial ciphertext using SK and AD.
     let cipher = ChaCha20Poly1305::new_from_slice(&secret_key)?;
     match decrypt_data(ciphertext, &associated_data, &cipher) {
         Ok(msg) => Ok(msg),
         Err(e) => {
-            //If the initial ciphertext fails to decrypt, then Bob aborts the protocol and deletes SK.
             client.destroy_session_key(&sender);
             Err(e)
         }
@@ -424,11 +416,11 @@ mod tests {
     use crate::*;
     use chacha20poly1305::aead::OsRng;
 
-    struct TestOTKManager {
+    struct TestOtkManager {
         private_key: X25519StaticSecret,
         public_key: X25519PublicKey,
     }
-    impl OTKManager for TestOTKManager {
+    impl OTKManager for TestOtkManager {
         fn fetch_wipe_one_time_secret_key(
             &mut self,
             one_time_key: &X25519PublicKey,
@@ -466,7 +458,7 @@ mod tests {
         } = x3dh_initiate_send_sk(bob_ik.verifying_key(), bob_spk, Some(otk_pub), &alice_ik)?;
 
         let recv_sk = x3dh_initiate_recv_sk(
-            &mut TestOTKManager {
+            &mut TestOtkManager {
                 private_key: otk,
                 public_key: otk_pub,
             },
