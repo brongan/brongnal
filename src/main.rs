@@ -112,11 +112,10 @@ fn x3dh_initiate_send_get_sk(
 //    An initial ciphertext encrypted with some AEAD encryption scheme [4] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
 fn x3dh_initiate_send(
     server: &mut dyn X3DHServer,
-    client: &mut dyn Client,
     recipient_identity: &Identity,
     sender_key: &SigningKey,
     message: &str,
-) -> Result<Message> {
+) -> Result<([u8; 32], Message)> {
     let PreKeyBundle {
         identity_key,
         otk,
@@ -135,8 +134,6 @@ fn x3dh_initiate_send(
     ]
     .concat();
 
-    client.set_session_key(recipient_identity.clone(), &secret_key);
-
     // The initial ciphertext is typically the first message in some post-X3DH communication protocol. In other words, this ciphertext typically has two roles, serving as the first message within some post-X3DH protocol, and as part of Alice's X3DH initial message.
     // After sending this, Alice may continue using SK or keys derived from SK within the post-X3DH protocol for communication with Bob
     let ciphertext = encrypt_data(
@@ -144,15 +141,18 @@ fn x3dh_initiate_send(
             msg: message.as_bytes(),
             aad: &associated_data,
         },
-        &client.get_encryption_key(recipient_identity)?,
+        &ChaCha20Poly1305::new_from_slice(&secret_key).unwrap(),
     )?;
 
-    Ok(Message {
-        sender_identity_key: client.get_identity_key()?.verifying_key(),
-        ephemeral_key,
-        otk,
-        ciphertext,
-    })
+    Ok((
+        secret_key,
+        Message {
+            sender_identity_key: sender_key.verifying_key(),
+            ephemeral_key,
+            otk,
+            ciphertext,
+        },
+    ))
 }
 
 fn x3dh_initiate_recv_get_sk(
@@ -196,7 +196,7 @@ fn x3dh_initiate_recv(
     ephemeral_key: X25519PublicKey,
     one_time_key: Option<X25519PublicKey>,
     ciphertext: &str,
-) -> Result<Vec<u8>> {
+) -> Result<([u8; 32], Vec<u8>)> {
     // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message.
     let identity_key = client.get_identity_key()?;
     let pre_key = client.get_pre_key()?;
@@ -220,12 +220,10 @@ fn x3dh_initiate_recv(
     .concat();
 
     // Bob may then continue using SK or keys derived from SK within the post-X3DH protocol for communication with Alice.
-    client.set_session_key(sender.clone(), &secret_key);
-
     // Finally, Bob attempts to decrypt the initial ciphertext using SK and AD.
     let cipher = ChaCha20Poly1305::new_from_slice(&secret_key)?;
     match decrypt_data(ciphertext, &associated_data, &cipher) {
-        Ok(msg) => Ok(msg),
+        Ok(msg) => Ok((secret_key, msg)),
         Err(e) => {
             //If the initial ciphertext fails to decrypt, then Bob aborts the protocol and deletes SK.
             client.destroy_session_key(&sender);
@@ -539,7 +537,7 @@ mod tests {
 
         // 1. Bob publishes his identity key and prekeys to a server.
         let mut bob = InMemoryClient::new();
-        let bob_otks = bob.add_one_time_keys(100);
+        let bob_otks = bob.add_one_time_keys(1);
         server.set_spk(
             "Bob".to_string(),
             bob.identity_key.verifying_key(),
@@ -547,33 +545,32 @@ mod tests {
         )?;
         server.publish_otk_bundle("Bob".to_owned(), bob.identity_key.verifying_key(), bob_otks)?;
 
-        // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
-        let plaintext = "Hello";
-        let mut alice = InMemoryClient::new();
-        let alice_ik = alice.identity_key.clone();
-        let message = x3dh_initiate_send(
-            &mut server,
-            &mut alice,
-            &"Bob".to_owned(),
-            &alice_ik,
-            &plaintext,
-        )?;
+        let alice = InMemoryClient::new();
+        for i in 0..2 {
+            let plaintext = format!("Hello Bob! #{i}");
+            // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
+            let (send_sk, message) = x3dh_initiate_send(
+                &mut server,
+                &"Bob".to_owned(),
+                &alice.identity_key,
+                &plaintext,
+            )?;
 
-        server.send_message(&"Bob".to_owned(), message)?;
+            server.send_message(&"Bob".to_owned(), message)?;
 
-        // 3. Bob receives and processes Alice's initial message.
-        let x3dh_messages = server.retrieve_messages(&"Bob".to_owned());
-        assert_eq!(x3dh_messages.len(), 1);
-        let x3dh_message = &x3dh_messages[0];
-        let decrypted = x3dh_initiate_recv(
-            &mut bob,
-            &"Bob".to_string(),
-            &x3dh_message.sender_identity_key,
-            x3dh_message.ephemeral_key,
-            x3dh_message.otk,
-            &x3dh_message.ciphertext,
-        )?;
-        assert_eq!(plaintext, String::from_utf8(decrypted)?);
+            // 3. Bob receives and processes Alice's initial message.
+            let x3dh_message = &server.retrieve_messages(&"Bob".to_owned())[0];
+            let (recv_sk, decrypted) = x3dh_initiate_recv(
+                &mut bob,
+                &"Bob".to_string(),
+                &x3dh_message.sender_identity_key,
+                x3dh_message.ephemeral_key,
+                x3dh_message.otk,
+                &x3dh_message.ciphertext,
+            )?;
+            assert_eq!(send_sk, recv_sk);
+            assert_eq!(format!("Hello Bob! #{i}"), String::from_utf8(decrypted)?);
+        }
 
         Ok(())
     }
