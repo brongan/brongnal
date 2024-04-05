@@ -2,6 +2,7 @@
 #![feature(trait_upcasting)]
 #![allow(dead_code)]
 use crate::bundle::*;
+use crate::traits::{Client, KeyManager, OTKManager, SessionKeyManager, X3DHServer};
 use crate::x3dh::*;
 use anyhow::{Context, Result};
 use blake2::{Blake2b512, Digest};
@@ -13,41 +14,14 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSec
 
 mod aead;
 mod bundle;
+mod traits;
 mod x3dh;
 
-type Identity = String;
-
-trait X3DHServer {
-    // Bob publishes a set of elliptic curve public keys to the server, containing:
-    //    Bob's identity key IKB
-    //    Bob's signed prekey SPKB
-    //    Bob's prekey signature Sig(IKB, Encode(SPKB))
-    //    A set of Bob's one-time prekeys (OPKB1, OPKB2, OPKB3, ...)
-    fn set_spk(&mut self, identity: Identity, ik: VerifyingKey, spk: SignedPreKey) -> Result<()>;
-    fn publish_otk_bundle(
-        &mut self,
-        identity: Identity,
-        ik: VerifyingKey,
-        otk_bundle: SignedPreKeys,
-    ) -> Result<()>;
-
-    // To perform an X3DH key agreement with Bob, Alice contacts the server and fetches a "prekey bundle" containing the following values:
-    //    Bob's identity key IKB
-    //    Bob's signed prekey SPKB
-    //    Bob's prekey signature Sig(IKB, Encode(SPKB))
-    //    (Optionally) Bob's one-time prekey OPKB
-    fn fetch_prekey_bundle(&mut self, recipient_identity: &Identity) -> Result<PreKeyBundle>;
-
-    // The server can store messages from Alice to Bob which Bob can later retrieve.
-    fn send_message(&mut self, recipient_identity: &Identity, message: Message) -> Result<()>;
-    fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message>;
-}
-
 struct InMemoryServer {
-    identity_key: HashMap<Identity, VerifyingKey>,
-    current_pre_key: HashMap<Identity, SignedPreKey>,
-    one_time_pre_keys: HashMap<Identity, Vec<X25519PublicKey>>,
-    messages: HashMap<Identity, Vec<Message>>,
+    identity_key: HashMap<String, VerifyingKey>,
+    current_pre_key: HashMap<String, SignedPreKey>,
+    one_time_pre_keys: HashMap<String, Vec<X25519PublicKey>>,
+    messages: HashMap<String, Vec<Message>>,
 }
 
 impl InMemoryServer {
@@ -61,8 +35,8 @@ impl InMemoryServer {
     }
 }
 
-impl X3DHServer for InMemoryServer {
-    fn set_spk(&mut self, identity: Identity, ik: VerifyingKey, spk: SignedPreKey) -> Result<()> {
+impl X3DHServer<String> for InMemoryServer {
+    fn set_spk(&mut self, identity: String, ik: VerifyingKey, spk: SignedPreKey) -> Result<()> {
         verify_bundle(&ik, &[spk.pre_key], &spk.signature)?;
         self.identity_key.insert(identity.clone(), ik);
         self.current_pre_key.insert(identity, spk);
@@ -71,7 +45,7 @@ impl X3DHServer for InMemoryServer {
 
     fn publish_otk_bundle(
         &mut self,
-        identity: Identity,
+        identity: String,
         ik: VerifyingKey,
         otk_bundle: SignedPreKeys,
     ) -> Result<()> {
@@ -86,7 +60,7 @@ impl X3DHServer for InMemoryServer {
         Ok(())
     }
 
-    fn fetch_prekey_bundle(&mut self, recipient_identity: &Identity) -> Result<PreKeyBundle> {
+    fn fetch_prekey_bundle(&mut self, recipient_identity: &String) -> Result<PreKeyBundle> {
         let identity_key = self
             .identity_key
             .get(recipient_identity)
@@ -110,7 +84,7 @@ impl X3DHServer for InMemoryServer {
         })
     }
 
-    fn send_message(&mut self, recipient_identity: &Identity, message: Message) -> Result<()> {
+    fn send_message(&mut self, recipient_identity: &String, message: Message) -> Result<()> {
         let _ = self
             .messages
             .try_insert(recipient_identity.clone(), Vec::new());
@@ -121,42 +95,19 @@ impl X3DHServer for InMemoryServer {
         Ok(())
     }
 
-    fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message> {
+    fn retrieve_messages(&mut self, identity: &String) -> Vec<Message> {
         self.messages.remove(identity).unwrap_or(Vec::new())
     }
 }
 
-trait OTKManager {
-    fn fetch_wipe_one_time_secret_key(
-        &mut self,
-        one_time_key: &X25519PublicKey,
-    ) -> Result<X25519StaticSecret>;
-}
-
-trait KeyManager {
-    fn get_identity_key(&self) -> Result<SigningKey>;
-    fn get_pre_key(&mut self) -> Result<X25519StaticSecret>;
-    fn get_spk(&self) -> Result<SignedPreKey>;
-}
-
-trait SessionKeyManager {
-    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]);
-    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305>;
-    fn destroy_session_key(&mut self, peer: &Identity);
-}
-
-trait Client: OTKManager + KeyManager + SessionKeyManager {
-    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys;
-}
-
-struct InMemoryClient {
+struct InMemoryClient<String> {
     identity_key: SigningKey,
     pre_key: X25519StaticSecret,
     one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
-    session_keys: HashMap<Identity, [u8; 32]>,
+    session_keys: HashMap<String, [u8; 32]>,
 }
 
-impl InMemoryClient {
+impl InMemoryClient<String> {
     fn new() -> Self {
         Self {
             identity_key: SigningKey::generate(&mut OsRng),
@@ -167,7 +118,7 @@ impl InMemoryClient {
     }
 }
 
-impl OTKManager for InMemoryClient {
+impl OTKManager for InMemoryClient<String> {
     fn fetch_wipe_one_time_secret_key(
         &mut self,
         one_time_key: &X25519PublicKey,
@@ -178,7 +129,7 @@ impl OTKManager for InMemoryClient {
     }
 }
 
-impl KeyManager for InMemoryClient {
+impl KeyManager for InMemoryClient<String> {
     fn get_identity_key(&self) -> Result<SigningKey> {
         Ok(self.identity_key.clone())
     }
@@ -198,7 +149,7 @@ impl KeyManager for InMemoryClient {
     }
 }
 
-impl Client for InMemoryClient {
+impl Client<String> for InMemoryClient<String> {
     fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
         let otks = create_prekey_bundle(&self.identity_key, num_keys);
         let pre_keys = otks.bundle.iter().map(|(_, _pub)| _pub.clone()).collect();
@@ -223,12 +174,12 @@ fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     (l, r)
 }
 
-impl SessionKeyManager for InMemoryClient {
-    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]) {
+impl SessionKeyManager<String> for InMemoryClient<String> {
+    fn set_session_key(&mut self, recipient_identity: String, secret_key: &[u8; 32]) {
         self.session_keys.insert(recipient_identity, *secret_key);
     }
 
-    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
+    fn get_encryption_key(&mut self, recipient_identity: &String) -> Result<ChaCha20Poly1305> {
         let key = self
             .session_keys
             .get(recipient_identity)
@@ -236,7 +187,7 @@ impl SessionKeyManager for InMemoryClient {
         Ok(ChaCha20Poly1305::new_from_slice(key).unwrap())
     }
 
-    fn destroy_session_key(&mut self, peer: &Identity) {
+    fn destroy_session_key(&mut self, peer: &String) {
         self.session_keys.remove(peer);
     }
 }
