@@ -111,26 +111,20 @@ fn x3dh_initiate_send_get_sk(
 //    Identifiers stating which of Bob's prekeys Alice used
 //    An initial ciphertext encrypted with some AEAD encryption scheme [4] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
 fn x3dh_initiate_send(
-    server: &mut dyn X3DHServer,
-    recipient_identity: &Identity,
+    bundle: PreKeyBundle,
     sender_key: &SigningKey,
     message: &str,
 ) -> Result<([u8; 32], Message)> {
-    let PreKeyBundle {
-        identity_key,
-        otk,
-        spk,
-    } = server.fetch_prekey_bundle(recipient_identity)?;
     let X3DHSendKeyAgreement {
         ephemeral_key,
         secret_key,
-    } = x3dh_initiate_send_get_sk(identity_key, spk, otk, &sender_key)?;
+    } = x3dh_initiate_send_get_sk(bundle.identity_key, bundle.spk, bundle.otk, &sender_key)?;
     // Alice then calculates an "associated data" byte sequence AD that contains identity information for both parties:
     //   AD = Encode(IKA) || Encode(IKB)
     // Alice may optionally append additional information to AD, such as Alice and Bob's usernames, certificates, or other identifying information.
     let associated_data = [
         sender_key.verifying_key().to_bytes(),
-        identity_key.to_bytes(),
+        bundle.identity_key.to_bytes(),
     ]
     .concat();
 
@@ -149,19 +143,18 @@ fn x3dh_initiate_send(
         Message {
             sender_identity_key: sender_key.verifying_key(),
             ephemeral_key,
-            otk,
+            otk: bundle.otk,
             ciphertext,
         },
     ))
 }
 
 fn x3dh_initiate_recv_get_sk(
-    client: &mut dyn OTKManager,
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
-    otk: Option<X25519PublicKey>,
+    otk: Option<X25519StaticSecret>,
     identity_key: &SigningKey,
-    pre_key: X25519StaticSecret,
+    pre_key: &X25519StaticSecret,
 ) -> Result<[u8; 32]> {
     let dh1 = pre_key.diffie_hellman(&X25519PublicKey::from(
         sender_identity_key.to_montgomery().to_bytes(),
@@ -172,9 +165,7 @@ fn x3dh_initiate_recv_get_sk(
 
     if let Some(one_time_key) = otk {
         // Bob deletes any one-time prekey private key that was used, for forward secrecy.
-        let dh4 = client
-            .fetch_wipe_one_time_secret_key(&one_time_key)?
-            .diffie_hellman(&ephemeral_key);
+        let dh4 = one_time_key.diffie_hellman(&ephemeral_key);
         Ok(kdf(&[
             dh1.to_bytes(),
             dh2.to_bytes(),
@@ -191,31 +182,30 @@ fn x3dh_initiate_recv_get_sk(
 
 fn x3dh_initiate_recv(
     client: &mut dyn Client,
+    recv_identity_key: &SigningKey,
+    recv_pre_key: &X25519StaticSecret,
     sender: &Identity,
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
-    one_time_key: Option<X25519PublicKey>,
+    one_time_key: Option<X25519StaticSecret>,
     ciphertext: &str,
 ) -> Result<([u8; 32], Vec<u8>)> {
     // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message.
-    let identity_key = client.get_identity_key()?;
-    let pre_key = client.get_pre_key()?;
     // Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
     // Using these keys, Bob repeats the DH and KDF calculations from the previous section to derive SK, and then deletes the DH values.
     let secret_key = x3dh_initiate_recv_get_sk(
-        client,
         sender_identity_key,
         ephemeral_key,
         one_time_key,
-        &identity_key,
-        pre_key,
+        &recv_identity_key,
+        recv_pre_key,
     )?;
 
     // Bob then constructs the AD byte sequence using IKA and IKB, as described in the previous section.
     // AD = Encode(IKA) || Encode(IKB)
     let associated_data = [
         sender_identity_key.to_bytes(),
-        identity_key.verifying_key().to_bytes(),
+        recv_identity_key.verifying_key().to_bytes(),
     ]
     .concat();
 
@@ -517,15 +507,11 @@ mod tests {
         } = x3dh_initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, Some(otk_pub), &alice_ik)?;
 
         let recv_sk = x3dh_initiate_recv_get_sk(
-            &mut TestOTKManager {
-                private_key: otk,
-                public_key: otk_pub,
-            },
             &alice_ik.verifying_key(),
             ephemeral_key,
-            Some(otk_pub),
+            Some(otk),
             &bob_ik,
-            bob_spk_secret,
+            &bob_spk_secret,
         )?;
         assert_eq!(secret_key, recv_sk);
         Ok(())
@@ -549,23 +535,26 @@ mod tests {
         for i in 0..2 {
             let plaintext = format!("Hello Bob! #{i}");
             // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
-            let (send_sk, message) = x3dh_initiate_send(
-                &mut server,
-                &"Bob".to_owned(),
-                &alice.identity_key,
-                &plaintext,
-            )?;
+            let bundle = server.fetch_prekey_bundle(&"Bob".to_owned())?;
+            let (send_sk, message) = x3dh_initiate_send(bundle, &alice.identity_key, &plaintext)?;
 
             server.send_message(&"Bob".to_owned(), message)?;
 
             // 3. Bob receives and processes Alice's initial message.
             let x3dh_message = &server.retrieve_messages(&"Bob".to_owned())[0];
+            let otk = x3dh_message
+                .otk
+                .map(|otk_pub| bob.fetch_wipe_one_time_secret_key(&otk_pub).unwrap());
+            let bob_ik = bob.get_identity_key()?;
+            let bob_pre_key = bob.get_pre_key()?;
             let (recv_sk, decrypted) = x3dh_initiate_recv(
                 &mut bob,
+                &bob_ik,
+                &bob_pre_key,
                 &"Bob".to_string(),
                 &x3dh_message.sender_identity_key,
                 x3dh_message.ephemeral_key,
-                x3dh_message.otk,
+                otk,
                 &x3dh_message.ciphertext,
             )?;
             assert_eq!(send_sk, recv_sk);
