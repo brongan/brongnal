@@ -5,6 +5,7 @@ use crate::aead::{decrypt_data, encrypt_data};
 use crate::bundle::*;
 use anyhow::{anyhow, Context, Result};
 use blake2::{Blake2b512, Digest};
+use chacha20poly1305::aead::OsRng;
 use chacha20poly1305::{
     aead::{KeyInit, Payload},
     ChaCha20Poly1305,
@@ -49,7 +50,7 @@ fn kdf(km: &[u8]) -> [u8; 32] {
     okm
 }
 
-struct X3DHInitiateSendSkResult {
+struct X3DHSendKeyAgreement {
     ephemeral_key: X25519PublicKey,
     secret_key: [u8; 32],
 }
@@ -62,12 +63,12 @@ struct X3DHInitiateSendSkResult {
 //If the bundle does contain a one-time prekey, the calculation is modified to include an additional DH:
 //    DH4 = DH(EKA, OPKB)
 //    SK = KDF(DH1 || DH2 || DH3 || DH4)
-fn x3dh_initiate_send_sk(
+fn x3dh_initiate_send_get_sk(
     identity_key: VerifyingKey,
     signed_pre_key: SignedPreKey,
     one_time_key: Option<X25519PublicKey>,
     sender_key: &SigningKey,
-) -> Result<X3DHInitiateSendSkResult> {
+) -> Result<X3DHSendKeyAgreement> {
     let _ = verify_bundle(
         &identity_key,
         &[signed_pre_key.pre_key],
@@ -75,29 +76,31 @@ fn x3dh_initiate_send_sk(
     )
     .map_err(|e| anyhow!("Failed to verify bundle: {e}"));
 
-    let reusable_secret = X25519ReusableSecret::random();
+    let ephemeral_secret = X25519ReusableSecret::random();
+    let ephemeral_key = X25519PublicKey::from(&ephemeral_secret);
     let dh1 = X25519StaticSecret::from(sender_key.to_scalar_bytes())
         .diffie_hellman(&signed_pre_key.pre_key);
-    let dh2 = reusable_secret.diffie_hellman(&X25519PublicKey::from(
+    let dh2 = ephemeral_secret.diffie_hellman(&X25519PublicKey::from(
         identity_key.to_montgomery().to_bytes(),
     ));
-    let dh3 = reusable_secret.diffie_hellman(&signed_pre_key.pre_key);
+    let dh3 = ephemeral_secret.diffie_hellman(&signed_pre_key.pre_key);
 
-    let secret_key = if let Some(one_time_key) = one_time_key {
-        let dh4 = reusable_secret.diffie_hellman(&one_time_key);
-        kdf(&[
-            dh1.to_bytes(),
-            dh2.to_bytes(),
-            dh3.to_bytes(),
-            dh4.to_bytes(),
-        ]
-        .concat())
-    } else {
-        kdf(&[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat())
+    let secret_key = match one_time_key {
+        Some(one_time_key) => {
+            let dh4 = ephemeral_secret.diffie_hellman(&one_time_key);
+            kdf(&[
+                dh1.to_bytes(),
+                dh2.to_bytes(),
+                dh3.to_bytes(),
+                dh4.to_bytes(),
+            ]
+            .concat())
+        }
+        None => kdf(&[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat()),
     };
 
-    Ok(X3DHInitiateSendSkResult {
-        ephemeral_key: X25519PublicKey::from(&reusable_secret),
+    Ok(X3DHSendKeyAgreement {
+        ephemeral_key,
         secret_key,
     })
 }
@@ -111,7 +114,7 @@ fn x3dh_initiate_send(
     server: &mut dyn X3DHServer,
     client: &mut dyn Client,
     recipient_identity: &Identity,
-    sender_key: SigningKey,
+    sender_key: &SigningKey,
     message: &str,
 ) -> Result<Message> {
     let PreKeyBundle {
@@ -119,10 +122,13 @@ fn x3dh_initiate_send(
         otk,
         spk,
     } = server.fetch_prekey_bundle(recipient_identity)?;
-    let X3DHInitiateSendSkResult {
+    let X3DHSendKeyAgreement {
         ephemeral_key,
         secret_key,
-    } = x3dh_initiate_send_sk(identity_key, spk, otk, &sender_key)?;
+    } = x3dh_initiate_send_get_sk(identity_key, spk, otk, &sender_key)?;
+    // Alice then calculates an "associated data" byte sequence AD that contains identity information for both parties:
+    //   AD = Encode(IKA) || Encode(IKB)
+    // Alice may optionally append additional information to AD, such as Alice and Bob's usernames, certificates, or other identifying information.
     let associated_data = [
         sender_key.verifying_key().to_bytes(),
         identity_key.to_bytes(),
@@ -131,6 +137,8 @@ fn x3dh_initiate_send(
 
     client.set_session_key(recipient_identity.clone(), &secret_key);
 
+    // The initial ciphertext is typically the first message in some post-X3DH communication protocol. In other words, this ciphertext typically has two roles, serving as the first message within some post-X3DH protocol, and as part of Alice's X3DH initial message.
+    // After sending this, Alice may continue using SK or keys derived from SK within the post-X3DH protocol for communication with Bob
     let ciphertext = encrypt_data(
         Payload {
             msg: message.as_bytes(),
@@ -140,14 +148,14 @@ fn x3dh_initiate_send(
     )?;
 
     Ok(Message {
-        identity_key,
+        sender_identity_key: client.get_identity_key()?.verifying_key(),
         ephemeral_key,
         otk,
         ciphertext,
     })
 }
 
-fn x3dh_initiate_recv_sk(
+fn x3dh_initiate_recv_get_sk(
     client: &mut dyn OTKManager,
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
@@ -194,7 +202,7 @@ fn x3dh_initiate_recv(
     let pre_key = client.get_pre_key()?;
     // Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
     // Using these keys, Bob repeats the DH and KDF calculations from the previous section to derive SK, and then deletes the DH values.
-    let secret_key = x3dh_initiate_recv_sk(
+    let secret_key = x3dh_initiate_recv_get_sk(
         client,
         sender_identity_key,
         ephemeral_key,
@@ -204,12 +212,17 @@ fn x3dh_initiate_recv(
     )?;
 
     // Bob then constructs the AD byte sequence using IKA and IKB, as described in the previous section.
-    let associated_data = [sender_identity_key.to_bytes(), identity_key.to_bytes()].concat();
+    // AD = Encode(IKA) || Encode(IKB)
+    let associated_data = [
+        sender_identity_key.to_bytes(),
+        identity_key.verifying_key().to_bytes(),
+    ]
+    .concat();
 
-    //Bob may then continue using SK or keys derived from SK within the post-X3DH protocol for communication with Alice.
+    // Bob may then continue using SK or keys derived from SK within the post-X3DH protocol for communication with Alice.
     client.set_session_key(sender.clone(), &secret_key);
 
-    //  Finally, Bob attempts to decrypt the initial ciphertext using SK and AD.
+    // Finally, Bob attempts to decrypt the initial ciphertext using SK and AD.
     let cipher = ChaCha20Poly1305::new_from_slice(&secret_key)?;
     match decrypt_data(ciphertext, &associated_data, &cipher) {
         Ok(msg) => Ok(msg),
@@ -222,7 +235,7 @@ fn x3dh_initiate_recv(
 }
 
 struct Message {
-    identity_key: VerifyingKey,
+    sender_identity_key: VerifyingKey,
     ephemeral_key: X25519PublicKey,
     otk: Option<X25519PublicKey>,
     ciphertext: String,
@@ -255,8 +268,8 @@ trait X3DHServer {
     //    (Optionally) Bob's one-time prekey OPKB
     fn fetch_prekey_bundle(&mut self, recipient_identity: &Identity) -> Result<PreKeyBundle>;
 
+    // The server can store messages from Alice to Bob which Bob can later retrieve.
     fn send_message(&mut self, recipient_identity: &Identity, message: Message) -> Result<()>;
-
     fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message>;
 }
 
@@ -353,6 +366,7 @@ trait OTKManager {
 trait KeyManager {
     fn get_identity_key(&self) -> Result<SigningKey>;
     fn get_pre_key(&mut self) -> Result<X25519StaticSecret>;
+    fn get_spk(&self) -> Result<SignedPreKey>;
 }
 
 trait SessionKeyManager {
@@ -361,13 +375,26 @@ trait SessionKeyManager {
     fn destroy_session_key(&mut self, peer: &Identity);
 }
 
-trait Client: OTKManager + KeyManager + SessionKeyManager {}
+trait Client: OTKManager + KeyManager + SessionKeyManager {
+    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys;
+}
 
 struct InMemoryClient {
     identity_key: SigningKey,
     pre_key: X25519StaticSecret,
     one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
     session_keys: HashMap<Identity, [u8; 32]>,
+}
+
+impl InMemoryClient {
+    fn new() -> Self {
+        Self {
+            identity_key: SigningKey::generate(&mut OsRng),
+            pre_key: X25519StaticSecret::random_from_rng(&mut OsRng),
+            one_time_pre_keys: HashMap::new(),
+            session_keys: HashMap::new(),
+        }
+    }
 }
 
 impl OTKManager for InMemoryClient {
@@ -389,9 +416,42 @@ impl KeyManager for InMemoryClient {
     fn get_pre_key(&mut self) -> Result<X25519StaticSecret> {
         Ok(self.pre_key.clone())
     }
+
+    fn get_spk(&self) -> Result<SignedPreKey> {
+        Ok(SignedPreKey {
+            pre_key: X25519PublicKey::from(&self.pre_key),
+            signature: sign_bundle(
+                &self.identity_key,
+                &[(self.pre_key.clone(), X25519PublicKey::from(&self.pre_key))],
+            ),
+        })
+    }
 }
 
-impl Client for InMemoryClient {}
+impl Client for InMemoryClient {
+    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
+        let otks = create_prekey_bundle(&self.identity_key, num_keys);
+        let pre_keys = otks.bundle.iter().map(|(_, _pub)| _pub.clone()).collect();
+        for otk in otks.bundle {
+            self.one_time_pre_keys.insert(otk.1, otk.0);
+        }
+        SignedPreKeys {
+            pre_keys,
+            signature: otks.signature,
+        }
+    }
+}
+
+fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    let mut hasher = Blake2b512::new();
+    hasher.update(&key);
+    let blake2b_mac = hasher.finalize();
+    let mut l = [0; 32];
+    let mut r = [0; 32];
+    l.clone_from_slice(&blake2b_mac[0..32]);
+    r.clone_from_slice(&blake2b_mac[32..]);
+    (l, r)
+}
 
 impl SessionKeyManager for InMemoryClient {
     fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]) {
@@ -399,17 +459,11 @@ impl SessionKeyManager for InMemoryClient {
     }
 
     fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
-        if let Some(key) = self.session_keys.get_mut(recipient_identity) {
-            let mut hasher = Blake2b512::new();
-            hasher.update(&key);
-            let blake2b_mac = hasher.finalize();
-            key.clone_from_slice(&blake2b_mac[0..32]);
-            ChaCha20Poly1305::new_from_slice(&blake2b_mac[32..]).map_err(|e| anyhow!("oop: {e}"))
-        } else {
-            Err(anyhow!(
-                "SessionKeyManager does not contain {recipient_identity}"
-            ))
-        }
+        let key = self
+            .session_keys
+            .get(recipient_identity)
+            .context("Session key not found.")?;
+        Ok(ChaCha20Poly1305::new_from_slice(key).unwrap())
     }
 
     fn destroy_session_key(&mut self, peer: &Identity) {
@@ -422,7 +476,6 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use chacha20poly1305::aead::OsRng;
 
     struct TestOTKManager {
         private_key: X25519StaticSecret,
@@ -460,12 +513,12 @@ mod tests {
         let otk = X25519StaticSecret::random_from_rng(&mut OsRng);
         let otk_pub = X25519PublicKey::from(&otk);
         let alice_ik = SigningKey::generate(&mut OsRng);
-        let X3DHInitiateSendSkResult {
+        let X3DHSendKeyAgreement {
             ephemeral_key,
             secret_key,
-        } = x3dh_initiate_send_sk(bob_ik.verifying_key(), bob_spk, Some(otk_pub), &alice_ik)?;
+        } = x3dh_initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, Some(otk_pub), &alice_ik)?;
 
-        let recv_sk = x3dh_initiate_recv_sk(
+        let recv_sk = x3dh_initiate_recv_get_sk(
             &mut TestOTKManager {
                 private_key: otk,
                 public_key: otk_pub,
@@ -483,54 +536,26 @@ mod tests {
     #[test]
     fn x3dh_send_recv() -> Result<()> {
         let mut server = InMemoryServer::new();
-        let bob_ik = SigningKey::generate(&mut OsRng);
-        let plaintext = "Hello".to_string();
-        let bob_spk = create_prekey_bundle(&bob_ik, 1);
-        let bob_otks = create_prekey_bundle(&bob_ik, 100);
-        let bob_signed_prekeys = SignedPreKeys {
-            pre_keys: bob_otks
-                .bundle
-                .iter()
-                .map(|(_, _pub)| _pub.clone())
-                .collect(),
-            signature: bob_otks.signature,
-        };
-
-        let alice = InMemoryClient {
-            identity_key: SigningKey::generate(&mut OsRng),
-            pre_key: X25519StaticSecret::random_from_rng(&mut OsRng),
-            one_time_pre_keys: HashMap::new(),
-            session_keys: HashMap::new(),
-        };
-
-        let mut bob = InMemoryClient {
-            identity_key: bob_ik.clone(),
-            pre_key: bob_spk.bundle.get(0).unwrap().0.clone(),
-            one_time_pre_keys: bob_otks
-                .bundle
-                .into_iter()
-                .map(|(_0, _1)| (_1, _0))
-                .collect(),
-            session_keys: HashMap::new(),
-        };
 
         // 1. Bob publishes his identity key and prekeys to a server.
+        let mut bob = InMemoryClient::new();
+        let bob_otks = bob.add_one_time_keys(100);
         server.set_spk(
             "Bob".to_string(),
-            bob_ik.verifying_key(),
-            SignedPreKey {
-                pre_key: bob_spk.bundle[0].1,
-                signature: bob_spk.signature,
-            },
+            bob.identity_key.verifying_key(),
+            bob.get_spk()?,
         )?;
-        server.publish_otk_bundle("Bob".to_owned(), bob_ik.verifying_key(), bob_signed_prekeys)?;
+        server.publish_otk_bundle("Bob".to_owned(), bob.identity_key.verifying_key(), bob_otks)?;
 
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
+        let plaintext = "Hello";
+        let mut alice = InMemoryClient::new();
+        let alice_ik = alice.identity_key.clone();
         let message = x3dh_initiate_send(
             &mut server,
-            &mut bob,
+            &mut alice,
             &"Bob".to_owned(),
-            alice.identity_key.clone(),
+            &alice_ik,
             &plaintext,
         )?;
 
@@ -543,12 +568,11 @@ mod tests {
         let decrypted = x3dh_initiate_recv(
             &mut bob,
             &"Bob".to_string(),
-            &x3dh_message.identity_key,
+            &x3dh_message.sender_identity_key,
             x3dh_message.ephemeral_key,
             x3dh_message.otk,
             &x3dh_message.ciphertext,
         )?;
-        assert_eq!(plaintext, x3dh_message.ciphertext);
         assert_eq!(plaintext, String::from_utf8(decrypted)?);
 
         Ok(())
