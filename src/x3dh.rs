@@ -220,34 +220,21 @@ pub fn x3dh_initiate_recv(
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
-    use anyhow::anyhow;
+    use super::{
+        x3dh_initiate_recv, x3dh_initiate_recv_get_sk, x3dh_initiate_send,
+        x3dh_initiate_send_get_sk, SignedPreKey, X3DHSendKeyAgreement,
+    };
+    use crate::{create_prekey_bundle, PreKeyBundle};
+    use anyhow::Result;
+    use chacha20poly1305::aead::OsRng;
+    use ed25519_dalek::SigningKey;
+    use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
-    struct TestOTKManager {
-        private_key: X25519StaticSecret,
-        public_key: X25519PublicKey,
-    }
-    impl OTKManager for TestOTKManager {
-        fn fetch_wipe_one_time_secret_key(
-            &mut self,
-            one_time_key: &X25519PublicKey,
-        ) -> Result<X25519StaticSecret> {
-            if &self.public_key == one_time_key {
-                Ok(self.private_key.clone())
-            } else {
-                Err(anyhow!(
-                    "Otk mismatch. Expected: {:?}, Found: {:?}",
-                    self.public_key,
-                    one_time_key
-                ))
-            }
-        }
-    }
-    #[test]
     // 1. Bob publishes his identity key and prekeys to a server.
     // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
     // 3. Bob receives and processes Alice's initial message.
-    fn x3dh_key_agreement() -> Result<()> {
+    #[test]
+    fn x3dh_key_agreement_otk() -> Result<()> {
         let bob_ik = SigningKey::generate(&mut OsRng);
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
         let bob_spk_secret = bob_spk.bundle[0].clone().0;
@@ -255,9 +242,11 @@ mod tests {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
+        let alice_ik = SigningKey::generate(&mut OsRng);
+
         let otk = X25519StaticSecret::random_from_rng(&mut OsRng);
         let otk_pub = X25519PublicKey::from(&otk);
-        let alice_ik = SigningKey::generate(&mut OsRng);
+
         let X3DHSendKeyAgreement {
             ephemeral_key,
             secret_key,
@@ -275,44 +264,104 @@ mod tests {
     }
 
     #[test]
-    fn x3dh_send_recv() -> Result<()> {
-        let mut server = InMemoryServer::new();
+    fn x3dh_key_agreement() -> Result<()> {
+        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_spk = create_prekey_bundle(&bob_ik, 1);
+        let bob_spk_secret = bob_spk.bundle[0].clone().0;
+        let bob_spk = SignedPreKey {
+            pre_key: bob_spk.bundle[0].1,
+            signature: bob_spk.signature,
+        };
+        let alice_ik = SigningKey::generate(&mut OsRng);
 
+        let X3DHSendKeyAgreement {
+            ephemeral_key,
+            secret_key,
+        } = x3dh_initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, None, &alice_ik)?;
+
+        let recv_sk = x3dh_initiate_recv_get_sk(
+            &alice_ik.verifying_key(),
+            ephemeral_key,
+            None,
+            &bob_ik,
+            &bob_spk_secret,
+        );
+        assert_eq!(secret_key, recv_sk);
+
+        Ok(())
+    }
+
+    #[test]
+    fn x3dh_send_recv_otk() -> Result<()> {
         // 1. Bob publishes his identity key and prekeys to a server.
-        let mut bob = InMemoryClient::new();
-        let bob_otks = bob.add_one_time_keys(1);
-        server.set_spk(
-            "Bob".to_string(),
-            bob.identity_key.verifying_key(),
-            bob.get_spk()?,
+        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_spk = create_prekey_bundle(&bob_ik, 1);
+        let bob_spk_secret = bob_spk.bundle[0].clone().0;
+        let bob_spk = SignedPreKey {
+            pre_key: bob_spk.bundle[0].1,
+            signature: bob_spk.signature,
+        };
+        let bob_otk_priv = X25519StaticSecret::random_from_rng(&mut OsRng);
+        let bob_otk_pub = X25519PublicKey::from(&bob_otk_priv);
+
+        let alice_ik = SigningKey::generate(&mut OsRng);
+
+        let plaintext = "Hello Bob!";
+        // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
+        let bundle = PreKeyBundle {
+            identity_key: bob_ik.verifying_key(),
+            otk: Some(bob_otk_pub),
+            spk: bob_spk.clone(),
+        };
+        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, &plaintext)?;
+
+        // 3. Bob receives and processes Alice's initial message.
+        let (recv_sk, decrypted) = x3dh_initiate_recv(
+            &bob_ik,
+            &bob_spk_secret,
+            &message.sender_identity_key,
+            message.ephemeral_key,
+            Some(bob_otk_priv),
+            &message.ciphertext,
         )?;
-        server.publish_otk_bundle("Bob".to_owned(), bob.identity_key.verifying_key(), bob_otks)?;
+        assert_eq!(send_sk, recv_sk);
+        assert_eq!("Hello Bob!", String::from_utf8(decrypted)?);
 
-        let alice = InMemoryClient::new();
-        for i in 0..2 {
-            let plaintext = format!("Hello Bob! #{i}");
-            // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
-            let bundle = server.fetch_prekey_bundle(&"Bob".to_owned())?;
-            let (send_sk, message) = x3dh_initiate_send(bundle, &alice.identity_key, &plaintext)?;
+        Ok(())
+    }
 
-            server.send_message(&"Bob".to_owned(), message)?;
+    #[test]
+    fn x3dh_send_recv() -> Result<()> {
+        // 1. Bob publishes his identity key and prekeys to a server.
+        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_spk = create_prekey_bundle(&bob_ik, 1);
+        let bob_spk_secret = bob_spk.bundle[0].clone().0;
+        let bob_spk = SignedPreKey {
+            pre_key: bob_spk.bundle[0].1,
+            signature: bob_spk.signature,
+        };
+        let alice_ik = SigningKey::generate(&mut OsRng);
 
-            // 3. Bob receives and processes Alice's initial message.
-            let x3dh_message = &server.retrieve_messages(&"Bob".to_owned())[0];
-            let otk = x3dh_message
-                .otk
-                .map(|otk_pub| bob.fetch_wipe_one_time_secret_key(&otk_pub).unwrap());
-            let (recv_sk, decrypted) = x3dh_initiate_recv(
-                &bob.get_identity_key()?,
-                &bob.get_pre_key()?,
-                &x3dh_message.sender_identity_key,
-                x3dh_message.ephemeral_key,
-                otk,
-                &x3dh_message.ciphertext,
-            )?;
-            assert_eq!(send_sk, recv_sk);
-            assert_eq!(format!("Hello Bob! #{i}"), String::from_utf8(decrypted)?);
-        }
+        let plaintext = "Hello Bob!";
+        // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
+        let bundle = PreKeyBundle {
+            identity_key: bob_ik.verifying_key(),
+            otk: None,
+            spk: bob_spk.clone(),
+        };
+        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, &plaintext)?;
+
+        // 3. Bob receives and processes Alice's initial message.
+        let (recv_sk, decrypted) = x3dh_initiate_recv(
+            &bob_ik,
+            &bob_spk_secret,
+            &message.sender_identity_key,
+            message.ephemeral_key,
+            None,
+            &message.ciphertext,
+        )?;
+        assert_eq!(send_sk, recv_sk);
+        assert_eq!("Hello Bob!", String::from_utf8(decrypted)?);
 
         Ok(())
     }
