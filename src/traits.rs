@@ -1,6 +1,5 @@
 use crate::x3dh::*;
 use anyhow::Result;
-use chacha20poly1305::ChaCha20Poly1305;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
@@ -30,25 +29,13 @@ pub trait X3DHServer<Identity> {
     fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message>;
 }
 
-pub trait OTKManager {
+pub trait Client {
     fn fetch_wipe_one_time_secret_key(
         &mut self,
         one_time_key: &X25519PublicKey,
     ) -> Result<X25519StaticSecret>;
-}
-
-pub trait KeyManager {
     fn get_identity_key(&self) -> Result<SigningKey>;
     fn get_pre_key(&mut self) -> Result<X25519StaticSecret>;
     fn get_spk(&self) -> Result<SignedPreKey>;
-}
-
-pub trait SessionKeyManager<Identity> {
-    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]);
-    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305>;
-    fn destroy_session_key(&mut self, peer: &Identity);
-}
-
-pub trait Client<Identity>: OTKManager + KeyManager + SessionKeyManager<Identity> {
     fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys;
 }
