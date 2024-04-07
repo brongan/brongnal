@@ -2,30 +2,26 @@
 #![feature(trait_upcasting)]
 #![allow(dead_code)]
 use crate::bundle::*;
-use crate::traits::{X3DHClient, X3DHServer, X3DHServerClient};
+use crate::traits::{X3DHClient, X3DHServer};
 use crate::x3dh::*;
 use anyhow::{Context, Result};
 use blake2::{Blake2b512, Digest};
 use chacha20poly1305::aead::OsRng;
 use chacha20poly1305::{aead::KeyInit, ChaCha20Poly1305};
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use futures::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tarpc::{
-    client, context,
-    server::{self, Channel},
-};
+use tarpc::context;
 use tokio::sync::Mutex;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
 mod aead;
-mod bundle;
-mod traits;
-mod x3dh;
+pub mod bundle;
+pub mod traits;
+pub mod x3dh;
 
 #[derive(Clone)]
-struct MemoryServer {
+pub struct MemoryServer {
     identity_key: Arc<Mutex<HashMap<String, VerifyingKey>>>,
     current_pre_key: Arc<Mutex<HashMap<String, SignedPreKey>>>,
     one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
@@ -33,7 +29,7 @@ struct MemoryServer {
 }
 
 impl MemoryServer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         MemoryServer {
             identity_key: Arc::new(Mutex::new(HashMap::new())),
             current_pre_key: Arc::new(Mutex::new(HashMap::new())),
@@ -132,14 +128,14 @@ impl X3DHServer for MemoryServer {
     }
 }
 
-struct MemoryClient {
+pub struct MemoryClient {
     identity_key: SigningKey,
     pre_key: X25519StaticSecret,
     one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
 }
 
 impl MemoryClient {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             identity_key: SigningKey::generate(&mut OsRng),
             pre_key: X25519StaticSecret::random_from_rng(&mut OsRng),
@@ -220,69 +216,4 @@ impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
     fn destroy_session_key(&mut self, peer: &Identity) {
         self.session_keys.remove(peer);
     }
-}
-
-// Each defined rpc generates an async fn that serves the RPC
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let (client_transport, server_transport) = tarpc::transport::channel::unbounded();
-
-    let server = server::BaseChannel::with_defaults(server_transport);
-    tokio::spawn(
-        server
-            .execute(MemoryServer::new().serve())
-            .for_each(|response| async move {
-                tokio::spawn(response);
-            }),
-    );
-
-    let rpc_client = X3DHServerClient::new(client::Config::default(), client_transport).spawn();
-    let mut bob = MemoryClient::new();
-    rpc_client
-        .set_spk(
-            context::current(),
-            "Bob".to_owned(),
-            bob.get_identity_key()?.verifying_key(),
-            bob.get_spk()?,
-        )
-        .await??;
-
-    rpc_client
-        .publish_otk_bundle(
-            context::current(),
-            "Bob".to_owned(),
-            bob.get_identity_key()?.verifying_key(),
-            bob.add_one_time_keys(100),
-        )
-        .await??;
-
-    let bundle = rpc_client
-        .fetch_prekey_bundle(context::current(), "Bob".to_owned())
-        .await??;
-
-    let alice = MemoryClient::new();
-    let (_send_sk, message) = x3dh_initiate_send(bundle, &alice.get_identity_key()?, b"Hi Bob")?;
-    rpc_client
-        .send_message(context::current(), "Bob".to_owned(), message)
-        .await??;
-
-    let messages = rpc_client
-        .retrieve_messages(context::current(), "Bob".to_owned())
-        .await?;
-    let message = &messages.get(0).unwrap();
-
-    let (_recv_sk, msg) = x3dh_initiate_recv(
-        &bob.get_identity_key()?.clone(),
-        &bob.pre_key.clone(),
-        &message.sender_identity_key,
-        message.ephemeral_key,
-        message
-            .otk
-            .map(|otk_pub| bob.fetch_wipe_one_time_secret_key(&otk_pub).unwrap()),
-        &message.ciphertext,
-    )?;
-
-    println!("Alice sent to Bob: {}", String::from_utf8(msg)?);
-
-    Ok(())
 }
