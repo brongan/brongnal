@@ -7,19 +7,26 @@ use chacha20poly1305::{
 };
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use hkdf::Hkdf;
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use x25519_dalek::{
     PublicKey as X25519PublicKey, ReusableSecret as X25519ReusableSecret,
     StaticSecret as X25519StaticSecret,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKey {
     pub pre_key: X25519PublicKey,
     pub signature: Signature,
 }
 
-#[derive(Clone, Debug)]
+impl SignedPreKey {
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.pre_key.to_bytes()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKeys {
     pub pre_keys: Vec<X25519PublicKey>,
     pub signature: Signature,
@@ -30,7 +37,7 @@ pub struct X3DHSendKeyAgreement {
     pub secret_key: [u8; 32],
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
     pub sender_identity_key: VerifyingKey,
     pub ephemeral_key: X25519PublicKey,
@@ -38,7 +45,7 @@ pub struct Message {
     pub ciphertext: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PreKeyBundle {
     pub identity_key: VerifyingKey,
     pub otk: Option<X25519PublicKey>,
