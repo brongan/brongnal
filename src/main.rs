@@ -261,7 +261,7 @@ async fn main() -> anyhow::Result<()> {
         .await??;
 
     let alice = MemoryClient::new();
-    let (_send_sk, message) = x3dh_initiate_send(bundle, &alice.get_identity_key()?, "Hi Bob")?;
+    let (_send_sk, message) = x3dh_initiate_send(bundle, &alice.get_identity_key()?, b"Hi Bob")?;
     rpc_client
         .send_message(context::current(), "Bob".to_owned(), message)
         .await??;

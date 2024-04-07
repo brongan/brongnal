@@ -117,7 +117,7 @@ pub fn x3dh_initiate_send_get_sk(
 pub fn x3dh_initiate_send(
     bundle: PreKeyBundle,
     sender_key: &SigningKey,
-    message: &str,
+    message: &[u8],
 ) -> Result<([u8; 32], Message)> {
     let X3DHSendKeyAgreement {
         ephemeral_key,
@@ -136,7 +136,7 @@ pub fn x3dh_initiate_send(
     // After sending this, Alice may continue using SK or keys derived from SK within the post-X3DH protocol for communication with Bob
     let ciphertext = encrypt_data(
         Payload {
-            msg: message.as_bytes(),
+            msg: message,
             aad: &associated_data,
         },
         &ChaCha20Poly1305::new_from_slice(&secret_key).unwrap(),
@@ -315,7 +315,7 @@ mod tests {
             otk: Some(bob_otk_pub),
             spk: bob_spk.clone(),
         };
-        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, &plaintext)?;
+        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, plaintext.as_bytes())?;
 
         // 3. Bob receives and processes Alice's initial message.
         let (recv_sk, decrypted) = x3dh_initiate_recv(
@@ -344,14 +344,13 @@ mod tests {
         };
         let alice_ik = SigningKey::generate(&mut OsRng);
 
-        let plaintext = "Hello Bob!";
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
         let bundle = PreKeyBundle {
             identity_key: bob_ik.verifying_key(),
             otk: None,
             spk: bob_spk.clone(),
         };
-        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, &plaintext)?;
+        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, b"Hello Bob!")?;
 
         // 3. Bob receives and processes Alice's initial message.
         let (recv_sk, decrypted) = x3dh_initiate_recv(
