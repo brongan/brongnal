@@ -13,13 +13,13 @@ use x25519_dalek::{
     StaticSecret as X25519StaticSecret,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SignedPreKey {
     pub pre_key: X25519PublicKey,
     pub signature: Signature,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SignedPreKeys {
     pub pre_keys: Vec<X25519PublicKey>,
     pub signature: Signature,
@@ -30,6 +30,7 @@ pub struct X3DHSendKeyAgreement {
     pub secret_key: [u8; 32],
 }
 
+#[derive(Clone, Debug)]
 pub struct Message {
     pub sender_identity_key: VerifyingKey,
     pub ephemeral_key: X25519PublicKey,
@@ -37,6 +38,7 @@ pub struct Message {
     pub ciphertext: String,
 }
 
+#[derive(Clone, Debug)]
 pub struct PreKeyBundle {
     pub identity_key: VerifyingKey,
     pub otk: Option<X25519PublicKey>,

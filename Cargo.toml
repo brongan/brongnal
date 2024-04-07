@@ -8,7 +8,10 @@ anyhow = "1.0.81"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+futures = "0.3.30"
 hex = "0.4.3"
 hkdf = "0.12.4"
 sha2 = "0.10.8"
+tarpc = { version = "0.34.0", features = ["tokio1"] }
+tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros"] }
 x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets"] }

@@ -3,15 +3,18 @@ use anyhow::Result;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
-pub trait X3DHServer<Identity> {
+type Identity = String;
+
+#[tarpc::service]
+pub trait X3DHServer {
     // Bob publishes a set of elliptic curve public keys to the server, containing:
     //    Bob's identity key IKB
     //    Bob's signed prekey SPKB
     //    Bob's prekey signature Sig(IKB, Encode(SPKB))
     //    A set of Bob's one-time prekeys (OPKB1, OPKB2, OPKB3, ...)
-    fn set_spk(&mut self, identity: Identity, ik: VerifyingKey, spk: SignedPreKey) -> Result<()>;
-    fn publish_otk_bundle(
-        &mut self,
+    async fn set_spk(identity: Identity, ik: VerifyingKey, spk: SignedPreKey) -> Result<()>;
+
+    async fn publish_otk_bundle(
         identity: Identity,
         ik: VerifyingKey,
         otk_bundle: SignedPreKeys,
@@ -22,14 +25,14 @@ pub trait X3DHServer<Identity> {
     //    Bob's signed prekey SPKB
     //    Bob's prekey signature Sig(IKB, Encode(SPKB))
     //    (Optionally) Bob's one-time prekey OPKB
-    fn fetch_prekey_bundle(&mut self, recipient_identity: &Identity) -> Result<PreKeyBundle>;
+    async fn fetch_prekey_bundle(recipient_identity: Identity) -> Result<PreKeyBundle>;
 
     // The server can store messages from Alice to Bob which Bob can later retrieve.
-    fn send_message(&mut self, recipient_identity: &Identity, message: Message) -> Result<()>;
-    fn retrieve_messages(&mut self, identity: &Identity) -> Vec<Message>;
+    async fn send_message(recipient_identity: Identity, message: Message) -> Result<()>;
+    async fn retrieve_messages(identity: Identity) -> Vec<Message>;
 }
 
-pub trait Client {
+pub trait X3DHClient {
     fn fetch_wipe_one_time_secret_key(
         &mut self,
         one_time_key: &X25519PublicKey,
