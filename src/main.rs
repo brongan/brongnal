@@ -2,7 +2,7 @@
 #![feature(trait_upcasting)]
 #![allow(dead_code)]
 use crate::bundle::*;
-use crate::traits::{Client, KeyManager, OTKManager, SessionKeyManager, X3DHServer};
+use crate::traits::{Client, X3DHServer};
 use crate::x3dh::*;
 use anyhow::{Context, Result};
 use blake2::{Blake2b512, Digest};
@@ -100,25 +100,23 @@ impl X3DHServer<String> for InMemoryServer {
     }
 }
 
-struct InMemoryClient<String> {
+struct InMemoryClient {
     identity_key: SigningKey,
     pre_key: X25519StaticSecret,
     one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
-    session_keys: HashMap<String, [u8; 32]>,
 }
 
-impl InMemoryClient<String> {
+impl InMemoryClient {
     fn new() -> Self {
         Self {
             identity_key: SigningKey::generate(&mut OsRng),
             pre_key: X25519StaticSecret::random_from_rng(&mut OsRng),
             one_time_pre_keys: HashMap::new(),
-            session_keys: HashMap::new(),
         }
     }
 }
 
-impl OTKManager for InMemoryClient<String> {
+impl Client for InMemoryClient {
     fn fetch_wipe_one_time_secret_key(
         &mut self,
         one_time_key: &X25519PublicKey,
@@ -127,9 +125,7 @@ impl OTKManager for InMemoryClient<String> {
             .remove(&one_time_key)
             .context("Client failed to find pre key.")
     }
-}
 
-impl KeyManager for InMemoryClient<String> {
     fn get_identity_key(&self) -> Result<SigningKey> {
         Ok(self.identity_key.clone())
     }
@@ -147,9 +143,7 @@ impl KeyManager for InMemoryClient<String> {
             ),
         })
     }
-}
 
-impl Client<String> for InMemoryClient<String> {
     fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
         let otks = create_prekey_bundle(&self.identity_key, num_keys);
         let pre_keys = otks.bundle.iter().map(|(_, _pub)| _pub.clone()).collect();
@@ -174,12 +168,16 @@ fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     (l, r)
 }
 
-impl SessionKeyManager<String> for InMemoryClient<String> {
-    fn set_session_key(&mut self, recipient_identity: String, secret_key: &[u8; 32]) {
+struct SessionKeys<T> {
+    session_keys: HashMap<T, [u8; 32]>,
+}
+
+impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
+    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]) {
         self.session_keys.insert(recipient_identity, *secret_key);
     }
 
-    fn get_encryption_key(&mut self, recipient_identity: &String) -> Result<ChaCha20Poly1305> {
+    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
         let key = self
             .session_keys
             .get(recipient_identity)
@@ -187,7 +185,7 @@ impl SessionKeyManager<String> for InMemoryClient<String> {
         Ok(ChaCha20Poly1305::new_from_slice(key).unwrap())
     }
 
-    fn destroy_session_key(&mut self, peer: &String) {
+    fn destroy_session_key(&mut self, peer: &Identity) {
         self.session_keys.remove(peer);
     }
 }
