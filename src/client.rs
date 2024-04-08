@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     let messages = rpc_client
         .retrieve_messages(context::current(), "Bob".to_owned())
         .await?;
-    let message = &messages.get(0).unwrap();
+    let message = &messages.first().unwrap();
 
     let (_recv_sk, msg) = x3dh_initiate_recv(
         &bob.get_identity_key()?.clone(),

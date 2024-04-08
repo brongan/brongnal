@@ -40,6 +40,12 @@ pub struct MemoryServer {
     messages: Arc<Mutex<HashMap<String, Vec<Message>>>>,
 }
 
+impl Default for MemoryServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryServer {
     pub fn new() -> Self {
         MemoryServer {
@@ -93,13 +99,12 @@ impl X3DHServer for MemoryServer {
         _: context::Context,
         recipient_identity: String,
     ) -> Result<PreKeyBundle, BrongnalServerError> {
-        let identity_key = self
+        let identity_key = *self
             .identity_key
             .lock()
             .await
             .get(&recipient_identity)
-            .ok_or(BrongnalServerError::PreconditionError)?
-            .clone();
+            .ok_or(BrongnalServerError::PreconditionError)?;
         let spk = self
             .current_pre_key
             .lock()
@@ -152,11 +157,17 @@ pub struct MemoryClient {
     one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
 }
 
+impl Default for MemoryClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryClient {
     pub fn new() -> Self {
         Self {
             identity_key: SigningKey::generate(&mut OsRng),
-            pre_key: X25519StaticSecret::random_from_rng(&mut OsRng),
+            pre_key: X25519StaticSecret::random_from_rng(OsRng),
             one_time_pre_keys: HashMap::new(),
         }
     }
@@ -168,7 +179,7 @@ impl X3DHClient for MemoryClient {
         one_time_key: &X25519PublicKey,
     ) -> Result<X25519StaticSecret> {
         self.one_time_pre_keys
-            .remove(&one_time_key)
+            .remove(one_time_key)
             .context("Client failed to find pre key.")
     }
 
@@ -192,7 +203,7 @@ impl X3DHClient for MemoryClient {
 
     fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
         let otks = create_prekey_bundle(&self.identity_key, num_keys);
-        let pre_keys = otks.bundle.iter().map(|(_, _pub)| _pub.clone()).collect();
+        let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
         for otk in otks.bundle {
             self.one_time_pre_keys.insert(otk.1, otk.0);
         }
@@ -205,7 +216,7 @@ impl X3DHClient for MemoryClient {
 
 fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     let mut hasher = Blake2b512::new();
-    hasher.update(&key);
+    hasher.update(key);
     let blake2b_mac = hasher.finalize();
     let mut l = [0; 32];
     let mut r = [0; 32];
