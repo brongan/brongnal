@@ -26,8 +26,8 @@ pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Strin
     Ok(format!(
         "{}{}{}",
         "v1",
-        hex::encode(&nonce),
-        hex::encode(&ciphertext)
+        hex::encode(nonce),
+        hex::encode(ciphertext)
     ))
 }
 
@@ -45,7 +45,7 @@ pub fn decrypt_data(
         hex::decode(&ciphertext[2..(NONCE_LEN * 2 + 2)]).map_err(|_| AeadError::Encoding)?;
     let msg = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..]).map_err(|_| AeadError::Encoding)?;
     cipher
-        .decrypt(&Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
+        .decrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
         .map_err(|_| AeadError::Encrypt)
 }
 

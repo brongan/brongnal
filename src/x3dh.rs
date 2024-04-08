@@ -130,7 +130,7 @@ pub fn x3dh_initiate_send(
     let X3DHSendKeyAgreement {
         ephemeral_key,
         secret_key,
-    } = x3dh_initiate_send_get_sk(bundle.identity_key, bundle.spk, bundle.otk, &sender_key)?;
+    } = x3dh_initiate_send_get_sk(bundle.identity_key, bundle.spk, bundle.otk, sender_key)?;
     // Alice then calculates an "associated data" byte sequence AD that contains identity information for both parties:
     //   AD = Encode(IKA) || Encode(IKB)
     // Alice may optionally append additional information to AD, such as Alice and Bob's usernames, certificates, or other identifying information.
@@ -207,7 +207,7 @@ pub fn x3dh_initiate_recv(
         sender_identity_key,
         ephemeral_key,
         otk,
-        &recv_identity_key,
+        recv_identity_key,
         recv_pre_key,
     );
 
@@ -254,7 +254,7 @@ mod tests {
         };
         let alice_ik = SigningKey::generate(&mut OsRng);
 
-        let otk = X25519StaticSecret::random_from_rng(&mut OsRng);
+        let otk = X25519StaticSecret::random_from_rng(OsRng);
         let otk_pub = X25519PublicKey::from(&otk);
 
         let X3DHSendKeyAgreement {
@@ -311,7 +311,7 @@ mod tests {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
-        let bob_otk_priv = X25519StaticSecret::random_from_rng(&mut OsRng);
+        let bob_otk_priv = X25519StaticSecret::random_from_rng(OsRng);
         let bob_otk_pub = X25519PublicKey::from(&bob_otk_priv);
 
         let alice_ik = SigningKey::generate(&mut OsRng);
