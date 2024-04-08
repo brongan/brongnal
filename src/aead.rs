@@ -1,16 +1,27 @@
-use anyhow::{anyhow, Result};
 use chacha20poly1305::{
     aead::{Aead, AeadCore, OsRng, Payload},
     ChaCha20Poly1305, Nonce,
 };
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 const NONCE_LEN: usize = 12;
 
-pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<String> {
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum AeadError {
+    #[error("Encryption Failed.")]
+    Encrypt,
+    #[error("Unexpected tag: `{0}`")]
+    Tag(String),
+    #[error("Ciphertext was not hex encoded.")]
+    Encoding,
+}
+
+pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<String, AeadError> {
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
     let ciphertext = cipher
         .encrypt(&nonce, payload)
-        .map_err(|e| anyhow!("encrypt failed: {e}"))?;
+        .map_err(|_| AeadError::Encrypt)?;
 
     Ok(format!(
         "{}{}{}",
@@ -20,25 +31,28 @@ pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Strin
     ))
 }
 
-pub fn decrypt_data(ciphertext: &str, aad: &[u8], cipher: &ChaCha20Poly1305) -> Result<Vec<u8>> {
+pub fn decrypt_data(
+    ciphertext: &str,
+    aad: &[u8],
+    cipher: &ChaCha20Poly1305,
+) -> Result<Vec<u8>, AeadError> {
     let version = &ciphertext[0..2];
     if version != "v1" {
-        return Err(anyhow!("Invalid version."));
+        return Err(AeadError::Tag(version.to_owned()));
     }
 
-    let nonce_bytes = hex::decode(&ciphertext[2..(NONCE_LEN * 2 + 2)])
-        .map_err(|e| anyhow!("Failed to decode nonce: {e}."))?;
-    let msg = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..])
-        .map_err(|e| anyhow!("Failed to decode ciphertext: {e}."))?;
+    let nonce_bytes =
+        hex::decode(&ciphertext[2..(NONCE_LEN * 2 + 2)]).map_err(|_| AeadError::Encoding)?;
+    let msg = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..]).map_err(|_| AeadError::Encoding)?;
     cipher
         .decrypt(&Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
-        .map_err(|e| anyhow!("decrypt failed: {e}"))
+        .map_err(|_| AeadError::Encrypt)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::aead::*;
-    use anyhow::Context;
+    use anyhow::{Context, Result};
     use chacha20poly1305::KeyInit;
 
     #[test]

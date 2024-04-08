@@ -1,6 +1,5 @@
-use crate::aead::{decrypt_data, encrypt_data};
+use crate::aead::{decrypt_data, encrypt_data, AeadError};
 use crate::bundle::*;
-use anyhow::{anyhow, Result};
 use chacha20poly1305::{
     aead::{KeyInit, Payload},
     ChaCha20Poly1305,
@@ -9,21 +8,15 @@ use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use thiserror::Error;
 use x25519_dalek::{
     PublicKey as X25519PublicKey, ReusableSecret as X25519ReusableSecret,
     StaticSecret as X25519StaticSecret,
 };
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKey {
     pub pre_key: X25519PublicKey,
     pub signature: Signature,
-}
-
-impl SignedPreKey {
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.pre_key.to_bytes()
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,6 +59,14 @@ fn kdf(km: &[u8]) -> [u8; 32] {
     okm
 }
 
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum X3DHError {
+    #[error("Signature failed to validate.")]
+    SignatureValidation,
+    #[error("Aead routine failed.")]
+    Aead(#[from] AeadError),
+}
+
 // If the bundle does not contain a one-time prekey, she calculates:
 //    DH1 = DH(IKA, SPKB)
 //    DH2 = DH(EKA, IKB)
@@ -79,13 +80,13 @@ pub fn x3dh_initiate_send_get_sk(
     signed_pre_key: SignedPreKey,
     one_time_key: Option<X25519PublicKey>,
     sender_key: &SigningKey,
-) -> Result<X3DHSendKeyAgreement> {
+) -> Result<X3DHSendKeyAgreement, X3DHError> {
     let _ = verify_bundle(
         &identity_key,
         &[signed_pre_key.pre_key],
         &signed_pre_key.signature,
     )
-    .map_err(|e| anyhow!("Failed to verify bundle: {e}"));
+    .map_err(|_| X3DHError::SignatureValidation);
 
     let ephemeral_secret = X25519ReusableSecret::random();
     let ephemeral_key = X25519PublicKey::from(&ephemeral_secret);
@@ -125,7 +126,7 @@ pub fn x3dh_initiate_send(
     bundle: PreKeyBundle,
     sender_key: &SigningKey,
     message: &[u8],
-) -> Result<([u8; 32], Message)> {
+) -> Result<([u8; 32], Message), X3DHError> {
     let X3DHSendKeyAgreement {
         ephemeral_key,
         secret_key,
@@ -198,7 +199,7 @@ pub fn x3dh_initiate_recv(
     ephemeral_key: X25519PublicKey,
     otk: Option<X25519StaticSecret>,
     ciphertext: &str,
-) -> Result<([u8; 32], Vec<u8>)> {
+) -> Result<([u8; 32], Vec<u8>), X3DHError> {
     // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message.
     // Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
     // Using these keys, Bob repeats the DH and KDF calculations from the previous section to derive SK, and then deletes the DH values.
@@ -220,7 +221,7 @@ pub fn x3dh_initiate_recv(
 
     // Bob may then continue using SK or keys derived from SK within the post-X3DH protocol for communication with Alice.
     // Finally, Bob attempts to decrypt the initial ciphertext using SK and AD.
-    let cipher = ChaCha20Poly1305::new_from_slice(&secret_key)?;
+    let cipher = ChaCha20Poly1305::new_from_slice(&secret_key).unwrap();
     Ok((
         secret_key,
         decrypt_data(ciphertext, &associated_data, &cipher)?,

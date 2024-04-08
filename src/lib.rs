@@ -9,9 +9,11 @@ use blake2::{Blake2b512, Digest};
 use chacha20poly1305::aead::OsRng;
 use chacha20poly1305::{aead::KeyInit, ChaCha20Poly1305};
 use ed25519_dalek::{SigningKey, VerifyingKey};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tarpc::context;
+use thiserror::Error;
 use tokio::sync::Mutex;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
@@ -19,6 +21,16 @@ mod aead;
 pub mod bundle;
 pub mod traits;
 pub mod x3dh;
+
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum BrongnalServerError {
+    #[error("Error Running X3DH.")]
+    X3DHError(#[from] X3DHError),
+    #[error("Signature failed to validate.")]
+    SignatureValidation,
+    #[error("User is not registered.")]
+    PreconditionError,
+}
 
 #[derive(Clone)]
 pub struct MemoryServer {
@@ -37,6 +49,10 @@ impl MemoryServer {
             messages: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+
+    pub async fn spawn(fut: impl futures::Future<Output = ()> + Send + 'static) {
+        tokio::spawn(fut);
+    }
 }
 
 impl X3DHServer for MemoryServer {
@@ -46,8 +62,9 @@ impl X3DHServer for MemoryServer {
         identity: String,
         ik: VerifyingKey,
         spk: SignedPreKey,
-    ) -> Result<()> {
-        verify_bundle(&ik, &[spk.pre_key], &spk.signature)?;
+    ) -> Result<(), BrongnalServerError> {
+        verify_bundle(&ik, &[spk.pre_key], &spk.signature)
+            .map_err(|_| BrongnalServerError::SignatureValidation)?;
         self.identity_key.lock().await.insert(identity.clone(), ik);
         self.current_pre_key.lock().await.insert(identity, spk);
         Ok(())
@@ -59,8 +76,9 @@ impl X3DHServer for MemoryServer {
         identity: String,
         ik: VerifyingKey,
         otk_bundle: SignedPreKeys,
-    ) -> Result<()> {
-        verify_bundle(&ik, &otk_bundle.pre_keys, &otk_bundle.signature)?;
+    ) -> Result<(), BrongnalServerError> {
+        verify_bundle(&ik, &otk_bundle.pre_keys, &otk_bundle.signature)
+            .map_err(|_| BrongnalServerError::SignatureValidation)?;
         let mut one_time_pre_keys = self.one_time_pre_keys.lock().await;
         let _ = one_time_pre_keys.try_insert(identity.clone(), Vec::new());
         one_time_pre_keys
@@ -74,20 +92,20 @@ impl X3DHServer for MemoryServer {
         self,
         _: context::Context,
         recipient_identity: String,
-    ) -> Result<PreKeyBundle> {
+    ) -> Result<PreKeyBundle, BrongnalServerError> {
         let identity_key = self
             .identity_key
             .lock()
             .await
             .get(&recipient_identity)
-            .context("Server has IK.")?
+            .ok_or(BrongnalServerError::PreconditionError)?
             .clone();
         let spk = self
             .current_pre_key
             .lock()
             .await
             .get(&recipient_identity)
-            .context("Server has spk.")?
+            .ok_or(BrongnalServerError::PreconditionError)?
             .clone();
         let otk = if let Some(otks) = self
             .one_time_pre_keys
@@ -112,7 +130,7 @@ impl X3DHServer for MemoryServer {
         _: context::Context,
         recipient_identity: String,
         message: Message,
-    ) -> Result<()> {
+    ) -> Result<(), BrongnalServerError> {
         let mut messages = self.messages.lock().await;
         let _ = messages.try_insert(recipient_identity.clone(), Vec::new());
         messages.get_mut(&recipient_identity).unwrap().push(message);
