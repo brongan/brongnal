@@ -4,11 +4,14 @@ use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use ed25519_dalek::SigningKey;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh::{x3dh_initiate_recv, x3dh_initiate_send, SignedPreKey, SignedPreKeys};
+use rustls::pki_types::ServerName;
 use server::X3DHServerClient;
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv6Addr};
-use tarpc::tokio_serde::formats::Json;
+use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{client, context};
+use tokio::net::TcpStream;
+use tokio_rustls::client::TlsStream;
+use tokio_rustls::TlsConnector;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
 pub trait X3DHClient {
@@ -107,13 +110,28 @@ impl X3DHClient for MemoryClient {
     }
 }
 
+async fn connect_tcp(domain: String, port: u16) -> Result<TlsStream<TcpStream>, std::io::Error> {
+    use std::sync::Arc;
+    let host = format!("{}:{}", &domain, port);
+
+    let root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    let connector = TlsConnector::from(Arc::new(config));
+    let servername = ServerName::try_from(domain).unwrap();
+
+    let stream = TcpStream::connect(host).await?;
+    connector.connect(servername, stream).await
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let server_addr = (IpAddr::V6(Ipv6Addr::LOCALHOST), 8080);
-    let mut transport = tarpc::serde_transport::tcp::connect(server_addr, Json::default);
-    transport.config_mut().max_frame_length(usize::MAX);
+    let stream = connect_tcp("brongnal.brongan.com".to_string(), 8080).await?;
+    let transport = tarpc::serde_transport::Transport::from((stream, Bincode::default()));
 
-    let rpc_client = X3DHServerClient::new(client::Config::default(), transport.await?).spawn();
+    let rpc_client = X3DHServerClient::new(client::Config::default(), transport).spawn();
 
     let mut bob = MemoryClient::new();
     rpc_client

@@ -3,13 +3,13 @@ use futures::prelude::*;
 use std::net::{IpAddr, Ipv6Addr};
 use tarpc::{
     server::{self, incoming::Incoming, Channel},
-    tokio_serde::formats::Json,
+    tokio_serde::formats::Bincode,
 };
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let server_addr = (IpAddr::V6(Ipv6Addr::UNSPECIFIED), 8080);
-    let mut listener = tarpc::serde_transport::tcp::listen(&server_addr, Json::default).await?;
+    let mut listener = tarpc::serde_transport::tcp::listen(&server_addr, Bincode::default).await?;
     listener.config_mut().max_frame_length(usize::MAX);
     listener
         // Ignore accept errors.
