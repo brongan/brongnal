@@ -1,0 +1,18 @@
+[package]
+name = "server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.81"
+blake2 = "0.10.6"
+chacha20poly1305 = "0.10.1"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
+futures = "0.3.30"
+protocol = { path = "../protocol/" }
+serde = { version = "1.0.197", features = ["derive"] }
+tarpc = { version = "0.34.0", features = ["tokio1", "full"] }
+thiserror = "1.0.58"
+tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros"] }
+x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
+
