@@ -1,0 +1,16 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.81"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
+futures = "0.3.30"
+protocol = { path = "../protocol/" }
+server = { path = "../server/" }
+tarpc = { version = "0.34.0", features = ["tokio1", "full"] }
+tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros"] }
+x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
+chacha20poly1305 = "0.10.1"
+

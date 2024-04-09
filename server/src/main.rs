@@ -1,5 +1,4 @@
-use brongnal::traits::X3DHServer;
-use brongnal::MemoryServer;
+use ::server::{MemoryServer, X3DHServer};
 use futures::prelude::*;
 use std::net::{IpAddr, Ipv6Addr};
 use tarpc::{

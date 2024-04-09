@@ -1,26 +1,15 @@
 #![feature(map_try_insert)]
-#![feature(trait_upcasting)]
-#![allow(dead_code)]
-use crate::bundle::*;
-use crate::traits::{X3DHClient, X3DHServer};
-use crate::x3dh::*;
-use anyhow::{Context, Result};
-use blake2::{Blake2b512, Digest};
-use chacha20poly1305::aead::OsRng;
-use chacha20poly1305::{aead::KeyInit, ChaCha20Poly1305};
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use ed25519_dalek::VerifyingKey;
+use futures::lock::Mutex;
+use protocol::bundle::verify_bundle;
+use protocol::x3dh::{Message, PreKeyBundle, SignedPreKey, SignedPreKeys, X3DHError};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tarpc::context;
 use thiserror::Error;
-use tokio::sync::Mutex;
-use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
+use x25519_dalek::PublicKey as X25519PublicKey;
 
-mod aead;
-pub mod bundle;
-pub mod traits;
-pub mod x3dh;
+type Identity = String;
 
 #[derive(Error, Debug, Serialize, Deserialize)]
 pub enum BrongnalServerError {
@@ -30,6 +19,42 @@ pub enum BrongnalServerError {
     SignatureValidation,
     #[error("User is not registered.")]
     PreconditionError,
+}
+
+#[tarpc::service]
+pub trait X3DHServer {
+    // Bob publishes a set of elliptic curve public keys to the server, containing:
+    //    Bob's identity key IKB
+    //    Bob's signed prekey SPKB
+    //    Bob's prekey signature Sig(IKB, Encode(SPKB))
+    //    A set of Bob's one-time prekeys (OPKB1, OPKB2, OPKB3, ...)
+    async fn set_spk(
+        identity: Identity,
+        ik: VerifyingKey,
+        spk: SignedPreKey,
+    ) -> Result<(), BrongnalServerError>;
+
+    async fn publish_otk_bundle(
+        identity: Identity,
+        ik: VerifyingKey,
+        otk_bundle: SignedPreKeys,
+    ) -> Result<(), BrongnalServerError>;
+
+    // To perform an X3DH key agreement with Bob, Alice contacts the server and fetches a "prekey bundle" containing the following values:
+    //    Bob's identity key IKB
+    //    Bob's signed prekey SPKB
+    //    Bob's prekey signature Sig(IKB, Encode(SPKB))
+    //    (Optionally) Bob's one-time prekey OPKB
+    async fn fetch_prekey_bundle(
+        recipient_identity: Identity,
+    ) -> Result<PreKeyBundle, BrongnalServerError>;
+
+    // The server can store messages from Alice to Bob which Bob can later retrieve.
+    async fn send_message(
+        recipient_identity: Identity,
+        message: Message,
+    ) -> Result<(), BrongnalServerError>;
+    async fn retrieve_messages(identity: Identity) -> Vec<Message>;
 }
 
 #[derive(Clone)]
@@ -148,101 +173,5 @@ impl X3DHServer for MemoryServer {
             .await
             .remove(&identity)
             .unwrap_or(Vec::new())
-    }
-}
-
-pub struct MemoryClient {
-    identity_key: SigningKey,
-    pre_key: X25519StaticSecret,
-    one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
-}
-
-impl Default for MemoryClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MemoryClient {
-    pub fn new() -> Self {
-        Self {
-            identity_key: SigningKey::generate(&mut OsRng),
-            pre_key: X25519StaticSecret::random_from_rng(OsRng),
-            one_time_pre_keys: HashMap::new(),
-        }
-    }
-}
-
-impl X3DHClient for MemoryClient {
-    fn fetch_wipe_one_time_secret_key(
-        &mut self,
-        one_time_key: &X25519PublicKey,
-    ) -> Result<X25519StaticSecret> {
-        self.one_time_pre_keys
-            .remove(one_time_key)
-            .context("Client failed to find pre key.")
-    }
-
-    fn get_identity_key(&self) -> Result<SigningKey> {
-        Ok(self.identity_key.clone())
-    }
-
-    fn get_pre_key(&mut self) -> Result<X25519StaticSecret> {
-        Ok(self.pre_key.clone())
-    }
-
-    fn get_spk(&self) -> Result<SignedPreKey> {
-        Ok(SignedPreKey {
-            pre_key: X25519PublicKey::from(&self.pre_key),
-            signature: sign_bundle(
-                &self.identity_key,
-                &[(self.pre_key.clone(), X25519PublicKey::from(&self.pre_key))],
-            ),
-        })
-    }
-
-    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
-        let otks = create_prekey_bundle(&self.identity_key, num_keys);
-        let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
-        for otk in otks.bundle {
-            self.one_time_pre_keys.insert(otk.1, otk.0);
-        }
-        SignedPreKeys {
-            pre_keys,
-            signature: otks.signature,
-        }
-    }
-}
-
-fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-    let mut hasher = Blake2b512::new();
-    hasher.update(key);
-    let blake2b_mac = hasher.finalize();
-    let mut l = [0; 32];
-    let mut r = [0; 32];
-    l.clone_from_slice(&blake2b_mac[0..32]);
-    r.clone_from_slice(&blake2b_mac[32..]);
-    (l, r)
-}
-
-struct SessionKeys<T> {
-    session_keys: HashMap<T, [u8; 32]>,
-}
-
-impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
-    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]) {
-        self.session_keys.insert(recipient_identity, *secret_key);
-    }
-
-    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
-        let key = self
-            .session_keys
-            .get(recipient_identity)
-            .context("Session key not found.")?;
-        Ok(ChaCha20Poly1305::new_from_slice(key).unwrap())
-    }
-
-    fn destroy_session_key(&mut self, peer: &Identity) {
-        self.session_keys.remove(peer);
     }
 }

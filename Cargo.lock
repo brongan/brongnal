@@ -99,25 +99,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "brongnal"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake2",
- "chacha20poly1305",
- "ed25519-dalek",
- "futures",
- "hex",
- "hkdf",
- "serde",
- "sha2",
- "tarpc",
- "thiserror",
- "tokio",
- "x25519-dalek",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -174,6 +155,21 @@ dependencies = [
  "crypto-common",
  "inout",
  "zeroize",
+]
+
+[[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chacha20poly1305",
+ "ed25519-dalek",
+ "futures",
+ "protocol",
+ "server",
+ "tarpc",
+ "tokio",
+ "x25519-dalek",
 ]
 
 [[package]]
@@ -753,6 +749,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "protocol"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake2",
+ "chacha20poly1305",
+ "ed25519-dalek",
+ "hex",
+ "hkdf",
+ "serde",
+ "sha2",
+ "thiserror",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -847,6 +859,23 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake2",
+ "chacha20poly1305",
+ "ed25519-dalek",
+ "futures",
+ "protocol",
+ "serde",
+ "tarpc",
+ "thiserror",
+ "tokio",
+ "x25519-dalek",
 ]
 
 [[package]]

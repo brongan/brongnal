@@ -230,11 +230,11 @@ pub fn x3dh_initiate_recv(
 
 #[cfg(test)]
 mod tests {
+    use super::PreKeyBundle;
     use super::{
-        x3dh_initiate_recv, x3dh_initiate_recv_get_sk, x3dh_initiate_send,
+        create_prekey_bundle, x3dh_initiate_recv, x3dh_initiate_recv_get_sk, x3dh_initiate_send,
         x3dh_initiate_send_get_sk, SignedPreKey, X3DHSendKeyAgreement,
     };
-    use crate::{create_prekey_bundle, PreKeyBundle};
     use anyhow::Result;
     use chacha20poly1305::aead::OsRng;
     use ed25519_dalek::SigningKey;
