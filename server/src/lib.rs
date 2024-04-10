@@ -94,10 +94,12 @@ impl X3DHServer for MemoryServer {
         ik: VerifyingKey,
         spk: SignedPreKey,
     ) -> Result<(), BrongnalServerError> {
+        eprintln!("Identity: {identity} set their IK and SPK");
         verify_bundle(&ik, &[spk.pre_key], &spk.signature)
             .map_err(|_| BrongnalServerError::SignatureValidation)?;
         self.identity_key.lock().await.insert(identity.clone(), ik);
         self.current_pre_key.lock().await.insert(identity, spk);
+        self.one_time_pre_keys.lock().await.clear();
         Ok(())
     }
 
@@ -108,6 +110,7 @@ impl X3DHServer for MemoryServer {
         ik: VerifyingKey,
         otk_bundle: SignedPreKeys,
     ) -> Result<(), BrongnalServerError> {
+        eprintln!("Identity: {identity} added otk bundle.");
         verify_bundle(&ik, &otk_bundle.pre_keys, &otk_bundle.signature)
             .map_err(|_| BrongnalServerError::SignatureValidation)?;
         let mut one_time_pre_keys = self.one_time_pre_keys.lock().await;
@@ -124,6 +127,7 @@ impl X3DHServer for MemoryServer {
         _: context::Context,
         recipient_identity: String,
     ) -> Result<PreKeyBundle, BrongnalServerError> {
+        eprintln!("PreKeyBundle requested for: {recipient_identity}.");
         let identity_key = *self
             .identity_key
             .lock()
@@ -161,6 +165,7 @@ impl X3DHServer for MemoryServer {
         recipient_identity: String,
         message: Message,
     ) -> Result<(), BrongnalServerError> {
+        eprintln!("Message sent to: {recipient_identity}");
         let mut messages = self.messages.lock().await;
         let _ = messages.try_insert(recipient_identity.clone(), Vec::new());
         messages.get_mut(&recipient_identity).unwrap().push(message);
@@ -168,6 +173,7 @@ impl X3DHServer for MemoryServer {
     }
 
     async fn retrieve_messages(self, _: context::Context, identity: String) -> Vec<Message> {
+        eprintln!("Retrieving messages for: {identity}");
         self.messages
             .lock()
             .await
