@@ -75,7 +75,7 @@ pub enum X3DHError {
 //If the bundle does contain a one-time prekey, the calculation is modified to include an additional DH:
 //    DH4 = DH(EKA, OPKB)
 //    SK = KDF(DH1 || DH2 || DH3 || DH4)
-pub fn x3dh_initiate_send_get_sk(
+fn x3dh_initiate_send_get_sk(
     identity_key: VerifyingKey,
     signed_pre_key: SignedPreKey,
     one_time_key: Option<X25519PublicKey>,
@@ -161,7 +161,7 @@ pub fn x3dh_initiate_send(
     ))
 }
 
-pub fn x3dh_initiate_recv_get_sk(
+fn x3dh_initiate_recv_get_sk(
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
     otk: Option<X25519StaticSecret>,

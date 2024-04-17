@@ -1,114 +1,20 @@
-use anyhow::{Context, Result};
-use chacha20poly1305::aead::OsRng;
-use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
-use ed25519_dalek::SigningKey;
-use protocol::bundle::{create_prekey_bundle, sign_bundle};
-use protocol::x3dh::{x3dh_initiate_recv, x3dh_initiate_send, SignedPreKey, SignedPreKeys};
+use ::client::{MemoryClient, X3DHClient};
+use anyhow::Result;
+use nom::branch::alt;
+use nom::bytes::complete::tag;
+use nom::character::complete::{alphanumeric1, multispace1};
+use nom::combinator::map;
+use nom::sequence::preceded;
+use nom::IResult;
+use protocol::x3dh::{x3dh_initiate_recv, x3dh_initiate_send, Message};
 use rustls::pki_types::ServerName;
 use server::X3DHServerClient;
-use std::collections::HashMap;
+use std::io::{stdin, BufRead, BufReader};
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{client, context};
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
-use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
-
-pub trait X3DHClient {
-    fn fetch_wipe_one_time_secret_key(
-        &mut self,
-        one_time_key: &X25519PublicKey,
-    ) -> Result<X25519StaticSecret, anyhow::Error>;
-    fn get_identity_key(&self) -> Result<SigningKey, anyhow::Error>;
-    fn get_pre_key(&mut self) -> Result<X25519StaticSecret, anyhow::Error>;
-    fn get_spk(&self) -> Result<SignedPreKey, anyhow::Error>;
-    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys;
-}
-
-struct SessionKeys<T> {
-    session_keys: HashMap<T, [u8; 32]>,
-}
-
-impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
-    fn set_session_key(&mut self, recipient_identity: Identity, secret_key: &[u8; 32]) {
-        self.session_keys.insert(recipient_identity, *secret_key);
-    }
-
-    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
-        let key = self
-            .session_keys
-            .get(recipient_identity)
-            .context("Session key not found.")?;
-        Ok(ChaCha20Poly1305::new_from_slice(key).unwrap())
-    }
-
-    fn destroy_session_key(&mut self, peer: &Identity) {
-        self.session_keys.remove(peer);
-    }
-}
-
-pub struct MemoryClient {
-    identity_key: SigningKey,
-    pre_key: X25519StaticSecret,
-    one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
-}
-
-impl Default for MemoryClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MemoryClient {
-    pub fn new() -> Self {
-        Self {
-            identity_key: SigningKey::generate(&mut OsRng),
-            pre_key: X25519StaticSecret::random_from_rng(OsRng),
-            one_time_pre_keys: HashMap::new(),
-        }
-    }
-}
-
-impl X3DHClient for MemoryClient {
-    fn fetch_wipe_one_time_secret_key(
-        &mut self,
-        one_time_key: &X25519PublicKey,
-    ) -> Result<X25519StaticSecret> {
-        self.one_time_pre_keys
-            .remove(one_time_key)
-            .context("Client failed to find pre key.")
-    }
-
-    fn get_identity_key(&self) -> Result<SigningKey> {
-        Ok(self.identity_key.clone())
-    }
-
-    fn get_pre_key(&mut self) -> Result<X25519StaticSecret> {
-        Ok(self.pre_key.clone())
-    }
-
-    fn get_spk(&self) -> Result<SignedPreKey> {
-        Ok(SignedPreKey {
-            pre_key: X25519PublicKey::from(&self.pre_key),
-            signature: sign_bundle(
-                &self.identity_key,
-                &[(self.pre_key.clone(), X25519PublicKey::from(&self.pre_key))],
-            ),
-        })
-    }
-
-    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
-        let otks = create_prekey_bundle(&self.identity_key, num_keys);
-        let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
-        for otk in otks.bundle {
-            self.one_time_pre_keys.insert(otk.1, otk.0);
-        }
-        SignedPreKeys {
-            pre_keys,
-            signature: otks.signature,
-        }
-    }
-}
 
 async fn connect_tcp(domain: String, port: u16) -> Result<TlsStream<TcpStream>, std::io::Error> {
     use std::sync::Arc;
@@ -126,59 +32,145 @@ async fn connect_tcp(domain: String, port: u16) -> Result<TlsStream<TcpStream>, 
     connector.connect(servername, stream).await
 }
 
+#[derive(Debug)]
+enum Command {
+    Register(String),
+    Message(String, String),
+    GetMessages,
+}
+
+fn parse_name(input: &str) -> IResult<&str, &str> {
+    alphanumeric1(input)
+}
+
+fn parse_register_command(input: &str) -> IResult<&str, Command> {
+    let (input, _) = preceded(tag("register"), multispace1)(input)?;
+    map(parse_name, |name| Command::Register(name.to_owned()))(input)
+}
+
+fn parse_message_command(input: &str) -> IResult<&str, Command> {
+    eprintln!("Parsing: {input}");
+    let (input, _) = preceded(tag("message"), multispace1)(input)?;
+    let (input, name) = parse_name(input)?;
+    let (message, _) = multispace1(input)?;
+    Ok((&"", Command::Message(name.to_owned(), message.to_owned())))
+}
+
+fn parse_get_messages_command(input: &str) -> IResult<&str, Command> {
+    map(tag("get_messages"), |_| Command::GetMessages)(input)
+}
+
+fn parse_command(input: &str) -> IResult<&str, Command> {
+    alt((
+        parse_register_command,
+        parse_message_command,
+        parse_get_messages_command,
+    ))(input)
+}
+
+async fn register(
+    identity: String,
+    client: &mut dyn X3DHClient,
+    stub: &X3DHServerClient,
+) -> Result<()> {
+    println!("Registering {identity}!");
+    let ik = client.get_identity_key()?.verifying_key();
+    let spk = client.get_spk()?;
+    let otk_bundle = client.add_one_time_keys(100);
+    stub.set_spk(context::current(), identity.clone(), ik, spk)
+        .await??;
+    stub.publish_otk_bundle(context::current(), identity.clone(), ik, otk_bundle)
+        .await??;
+    println!("Registered: {identity}!");
+    Ok(())
+}
+
+async fn send_message(
+    recipient_identity: String,
+    client: &dyn X3DHClient,
+    stub: &X3DHServerClient,
+    message: &[u8],
+) -> Result<()> {
+    println!("Messaging {recipient_identity}.");
+    let prekey_bundle = stub
+        .fetch_prekey_bundle(context::current(), recipient_identity.clone())
+        .await??;
+    let (_sk, message) = x3dh_initiate_send(prekey_bundle, &client.get_identity_key()?, message)?;
+    stub.send_message(context::current(), recipient_identity, message)
+        .await??;
+    println!("Message Sent!");
+    Ok(())
+}
+
+async fn get_messages(
+    name: String,
+    client: &mut dyn X3DHClient,
+    stub: &X3DHServerClient,
+) -> Result<()> {
+    let messages = stub.retrieve_messages(context::current(), name).await?;
+    println!("Retrieved {} messages.", messages.len());
+    for Message {
+        sender_identity_key,
+        ephemeral_key,
+        otk,
+        ciphertext,
+    } in messages
+    {
+        let otk = if let Some(otk) = otk {
+            Some(client.fetch_wipe_one_time_secret_key(&otk)?)
+        } else {
+            None
+        };
+        let (_sk, message) = x3dh_initiate_recv(
+            &client.get_identity_key()?,
+            &client.get_pre_key()?,
+            &sender_identity_key,
+            ephemeral_key,
+            otk,
+            &ciphertext,
+        )?;
+        let message = String::from_utf8(message)?;
+        println!("{message}");
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let stream = connect_tcp("brongnal.brongan.com".to_string(), 8080).await?;
     let transport = tarpc::serde_transport::Transport::from((stream, Bincode::default()));
+    let stub = X3DHServerClient::new(client::Config::default(), transport).spawn();
 
-    let rpc_client = X3DHServerClient::new(client::Config::default(), transport).spawn();
+    let mut x3dh_client = MemoryClient::new();
 
-    let mut bob = MemoryClient::new();
-    rpc_client
-        .set_spk(
-            context::current(),
-            "Bob".to_owned(),
-            bob.get_identity_key()?.verifying_key(),
-            bob.get_spk()?,
-        )
-        .await??;
+    println!(
+        r#"Commands:
+             register NAME
+             message NAME MESSAGE
+             get_messages
+             Type Control-D (on Unix) or Control-Z (on Windows)
+             to close the connection."#
+    );
+    let mut my_name = "".to_string();
 
-    rpc_client
-        .publish_otk_bundle(
-            context::current(),
-            "Bob".to_owned(),
-            bob.get_identity_key()?.verifying_key(),
-            bob.add_one_time_keys(100),
-        )
-        .await??;
-
-    let bundle = rpc_client
-        .fetch_prekey_bundle(context::current(), "Bob".to_owned())
-        .await??;
-
-    let alice = MemoryClient::new();
-    let (_send_sk, message) = x3dh_initiate_send(bundle, &alice.get_identity_key()?, b"Hi Bob")?;
-    rpc_client
-        .send_message(context::current(), "Bob".to_owned(), message)
-        .await??;
-
-    let messages = rpc_client
-        .retrieve_messages(context::current(), "Bob".to_owned())
-        .await?;
-    let message = &messages.first().unwrap();
-
-    let (_recv_sk, msg) = x3dh_initiate_recv(
-        &bob.get_identity_key()?.clone(),
-        &bob.get_pre_key()?.clone(),
-        &message.sender_identity_key,
-        message.ephemeral_key,
-        message
-            .otk
-            .map(|otk_pub| bob.fetch_wipe_one_time_secret_key(&otk_pub).unwrap()),
-        &message.ciphertext,
-    )?;
-
-    println!("Alice sent to Bob: {}", String::from_utf8(msg)?);
+    let mut command_lines = BufReader::new(stdin()).lines();
+    while let Some(command) = command_lines.next() {
+        let command = command?;
+        let (_, command) = parse_command(&command).map_err(|e| e.to_owned())?;
+        let result = match &command {
+            Command::Register(name) => {
+                my_name = name.clone();
+                register(my_name.clone(), &mut x3dh_client, &stub).await
+            }
+            Command::Message(name, message) => {
+                send_message(name.clone(), &x3dh_client, &stub, message.as_bytes()).await
+            }
+            Command::GetMessages => get_messages(my_name.clone(), &mut x3dh_client, &stub).await,
+        };
+        if let Err(e) = result {
+            eprintln!("Command {command:?} failed: {e}");
+        }
+    }
 
     Ok(())
 }

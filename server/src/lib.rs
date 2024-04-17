@@ -1,9 +1,9 @@
 #![feature(map_try_insert)]
 use ed25519_dalek::VerifyingKey;
-use futures::lock::Mutex;
 use protocol::bundle::verify_bundle;
 use protocol::x3dh::{Message, PreKeyBundle, SignedPreKey, SignedPreKeys, X3DHError};
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 use tarpc::context;
 use thiserror::Error;
@@ -97,9 +97,12 @@ impl X3DHServer for MemoryServer {
         eprintln!("Identity: {identity} set their IK and SPK");
         verify_bundle(&ik, &[spk.pre_key], &spk.signature)
             .map_err(|_| BrongnalServerError::SignatureValidation)?;
-        self.identity_key.lock().await.insert(identity.clone(), ik);
-        self.current_pre_key.lock().await.insert(identity, spk);
-        self.one_time_pre_keys.lock().await.clear();
+        self.identity_key
+            .lock()
+            .unwrap()
+            .insert(identity.clone(), ik);
+        self.current_pre_key.lock().unwrap().insert(identity, spk);
+        self.one_time_pre_keys.lock().unwrap().clear();
         Ok(())
     }
 
@@ -113,7 +116,7 @@ impl X3DHServer for MemoryServer {
         eprintln!("Identity: {identity} added otk bundle.");
         verify_bundle(&ik, &otk_bundle.pre_keys, &otk_bundle.signature)
             .map_err(|_| BrongnalServerError::SignatureValidation)?;
-        let mut one_time_pre_keys = self.one_time_pre_keys.lock().await;
+        let mut one_time_pre_keys = self.one_time_pre_keys.lock().unwrap();
         let _ = one_time_pre_keys.try_insert(identity.clone(), Vec::new());
         one_time_pre_keys
             .get_mut(&identity)
@@ -128,23 +131,24 @@ impl X3DHServer for MemoryServer {
         recipient_identity: String,
     ) -> Result<PreKeyBundle, BrongnalServerError> {
         eprintln!("PreKeyBundle requested for: {recipient_identity}.");
+        eprintln!("{:?}", self.identity_key);
         let identity_key = *self
             .identity_key
             .lock()
-            .await
+            .unwrap()
             .get(&recipient_identity)
             .ok_or(BrongnalServerError::PreconditionError)?;
         let spk = self
             .current_pre_key
             .lock()
-            .await
+            .unwrap()
             .get(&recipient_identity)
             .ok_or(BrongnalServerError::PreconditionError)?
             .clone();
         let otk = if let Some(otks) = self
             .one_time_pre_keys
             .lock()
-            .await
+            .unwrap()
             .get_mut(&recipient_identity)
         {
             otks.pop()
@@ -166,7 +170,7 @@ impl X3DHServer for MemoryServer {
         message: Message,
     ) -> Result<(), BrongnalServerError> {
         eprintln!("Message sent to: {recipient_identity}");
-        let mut messages = self.messages.lock().await;
+        let mut messages = self.messages.lock().unwrap();
         let _ = messages.try_insert(recipient_identity.clone(), Vec::new());
         messages.get_mut(&recipient_identity).unwrap().push(message);
         Ok(())
@@ -176,7 +180,7 @@ impl X3DHServer for MemoryServer {
         eprintln!("Retrieving messages for: {identity}");
         self.messages
             .lock()
-            .await
+            .unwrap()
             .remove(&identity)
             .unwrap_or(Vec::new())
     }
