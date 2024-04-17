@@ -2,14 +2,17 @@ use anyhow::{Context, Result};
 use chacha20poly1305::aead::OsRng;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use ed25519_dalek::SigningKey;
+use futures::executor::block_on;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh::{x3dh_initiate_recv, x3dh_initiate_send, SignedPreKey, SignedPreKeys};
 use rustls::pki_types::ServerName;
 use server::X3DHServerClient;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{client, context};
 use tokio::net::TcpStream;
+use tokio::runtime::Handle;
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
@@ -111,7 +114,6 @@ impl X3DHClient for MemoryClient {
 }
 
 async fn connect_tcp(domain: String, port: u16) -> Result<TlsStream<TcpStream>, std::io::Error> {
-    use std::sync::Arc;
     let host = format!("{}:{}", &domain, port);
 
     let root_store =
@@ -126,14 +128,75 @@ async fn connect_tcp(domain: String, port: u16) -> Result<TlsStream<TcpStream>, 
     connector.connect(servername, stream).await
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let stream = connect_tcp("brongnal.brongan.com".to_string(), 8080).await?;
+use tokio::sync::OnceCell;
+static STUB: OnceCell<X3DHServerClient> = OnceCell::const_new();
+
+async fn create_client() -> X3DHServerClient {
+    let stream = connect_tcp("signal.brongan.com".to_string(), 8080)
+        .await
+        .unwrap();
     let transport = tarpc::serde_transport::Transport::from((stream, Bincode::default()));
+    return X3DHServerClient::new(client::Config::default(), transport).spawn();
+}
 
-    let rpc_client = X3DHServerClient::new(client::Config::default(), transport).spawn();
+struct MyApp {
+    client: Arc<Mutex<MemoryClient>>,
+    name: String,
+    stub: &'static X3DHServerClient,
+}
 
-    let mut bob = MemoryClient::new();
+impl MyApp {
+    fn new(stub: &'static X3DHServerClient) -> Result<Self> {
+        Ok(MyApp {
+            client: Arc::new(Mutex::new(MemoryClient::default())),
+            name: String::default(),
+            stub,
+        })
+    }
+}
+
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Brongnal Desktop");
+            ui.horizontal(|ui| {
+                let name_label = ui.label("Your name: ");
+                ui.text_edit_singleline(&mut self.name)
+                    .labelled_by(name_label.id);
+            });
+            if ui.button("Register").clicked() {
+                let name = self.name.clone();
+                let client = self.client.lock().unwrap();
+                let ik = client.get_identity_key().unwrap().verifying_key();
+                let spk = client.get_spk().unwrap();
+                let stub = self.stub;
+
+                tokio::spawn(async move {
+                    eprintln!("Registering: {name}");
+                    stub.set_spk(context::current(), name.clone(), ik, spk)
+                        .await
+                        .unwrap()
+                        .unwrap();
+                    eprintln!("Registered: {name}");
+                });
+            }
+            ui.label(format!("Hello '{}'", self.name));
+        });
+    }
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<(), eframe::Error> {
+    let stub = STUB.get_or_init(create_client).await;
+    let native_options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "Brongnal Desktop",
+        native_options,
+        Box::new(|_cc| Box::new(MyApp::new(stub).unwrap())),
+    )
+    .into()
+
+    /*
     rpc_client
         .set_spk(
             context::current(),
@@ -179,6 +242,5 @@ async fn main() -> Result<()> {
     )?;
 
     println!("Alice sent to Bob: {}", String::from_utf8(msg)?);
-
-    Ok(())
+    */
 }
