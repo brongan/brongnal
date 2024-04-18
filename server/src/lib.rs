@@ -3,11 +3,17 @@ use ed25519_dalek::VerifyingKey;
 use protocol::bundle::verify_bundle;
 use protocol::x3dh::{Message, PreKeyBundle, SignedPreKey, SignedPreKeys, X3DHError};
 use serde::{Deserialize, Serialize};
+use service::brongnal::{Brongnal, BrongnalServer};
+use service::{PreKeyBundle, RegisterPreKeyBundleRequest};
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
-use tarpc::context;
 use thiserror::Error;
+use tonic::{transport::Server, Request, Response, Status};
 use x25519_dalek::PublicKey as X25519PublicKey;
+
+pub mod service {
+    tonic::include_proto!("service"); // The string specified here must match the proto package name
+}
 
 type Identity = String;
 
@@ -21,43 +27,7 @@ pub enum BrongnalServerError {
     PreconditionError,
 }
 
-#[tarpc::service]
-pub trait X3DHServer {
-    // Bob publishes a set of elliptic curve public keys to the server, containing:
-    //    Bob's identity key IKB
-    //    Bob's signed prekey SPKB
-    //    Bob's prekey signature Sig(IKB, Encode(SPKB))
-    //    A set of Bob's one-time prekeys (OPKB1, OPKB2, OPKB3, ...)
-    async fn set_spk(
-        identity: Identity,
-        ik: VerifyingKey,
-        spk: SignedPreKey,
-    ) -> Result<(), BrongnalServerError>;
-
-    async fn publish_otk_bundle(
-        identity: Identity,
-        ik: VerifyingKey,
-        otk_bundle: SignedPreKeys,
-    ) -> Result<(), BrongnalServerError>;
-
-    // To perform an X3DH key agreement with Bob, Alice contacts the server and fetches a "prekey bundle" containing the following values:
-    //    Bob's identity key IKB
-    //    Bob's signed prekey SPKB
-    //    Bob's prekey signature Sig(IKB, Encode(SPKB))
-    //    (Optionally) Bob's one-time prekey OPKB
-    async fn fetch_prekey_bundle(
-        recipient_identity: Identity,
-    ) -> Result<PreKeyBundle, BrongnalServerError>;
-
-    // The server can store messages from Alice to Bob which Bob can later retrieve.
-    async fn send_message(
-        recipient_identity: Identity,
-        message: Message,
-    ) -> Result<(), BrongnalServerError>;
-    async fn retrieve_messages(identity: Identity) -> Vec<Message>;
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MemoryServer {
     identity_key: Arc<Mutex<HashMap<String, VerifyingKey>>>,
     current_pre_key: Arc<Mutex<HashMap<String, SignedPreKey>>>,
@@ -86,10 +56,10 @@ impl MemoryServer {
     }
 }
 
-impl X3DHServer for MemoryServer {
+#[tonic::async_trait]
+impl Brongnal for MemoryServer {
     async fn set_spk(
         self,
-        _: context::Context,
         identity: String,
         ik: VerifyingKey,
         spk: SignedPreKey,
@@ -108,7 +78,6 @@ impl X3DHServer for MemoryServer {
 
     async fn publish_otk_bundle(
         self,
-        _: context::Context,
         identity: String,
         ik: VerifyingKey,
         otk_bundle: SignedPreKeys,
@@ -127,7 +96,6 @@ impl X3DHServer for MemoryServer {
 
     async fn fetch_prekey_bundle(
         self,
-        _: context::Context,
         recipient_identity: String,
     ) -> Result<PreKeyBundle, BrongnalServerError> {
         eprintln!("PreKeyBundle requested for: {recipient_identity}.");
@@ -165,7 +133,6 @@ impl X3DHServer for MemoryServer {
 
     async fn send_message(
         self,
-        _: context::Context,
         recipient_identity: String,
         message: Message,
     ) -> Result<(), BrongnalServerError> {
@@ -176,7 +143,7 @@ impl X3DHServer for MemoryServer {
         Ok(())
     }
 
-    async fn retrieve_messages(self, _: context::Context, identity: String) -> Vec<Message> {
+    async fn retrieve_messages(self, identity: String) -> Vec<Message> {
         eprintln!("Retrieving messages for: {identity}");
         self.messages
             .lock()

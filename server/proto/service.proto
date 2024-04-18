@@ -1,0 +1,62 @@
+syntax = "proto2";
+package service;
+
+service Brongnal {
+	rpc RegisterPreKeyBundle (RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
+	rpc RequestPreKeys (RequestPreKeysRequest) returns (PreKeyBundle);
+	rpc SendMessage (SendMessageRequest) returns (SendMessageResponse);
+	rpc RetrieveMessges (RetrieveMessagesRequest) returns (RetrieveMessagesResponse);
+}
+
+message SignedPreKey {
+	optional bytes pre_key = 1;
+	optional bytes signature = 2;
+}
+
+message SignedPreyKeys {
+	repeated string pre_keys = 1;
+	optional bytes signature = 2;
+}
+
+message RegisterPreKeyBundleRequest {
+	optional string identity = 1;
+	optional bytes ik = 2;
+	optional SignedPreKey spk = 3;
+	optional SignedPreyKeys otk_bundle = 4;
+}
+
+message RegisterPreKeyBundleResponse {}
+
+
+message RequestPreKeysRequest {
+	optional string identity = 1;
+}
+
+message PreKeyBundle {
+	optional bytes identity_key = 1;
+	optional bytes otk = 2;
+	optional SignedPreKey spk = 3;
+}
+
+message X3DHMessage {
+	optional bytes sender_ik = 1;
+	optional bytes ephemeral_key = 2;
+	optional bytes otk = 3;
+	optional string ciphertext = 4;
+}
+
+message SendMessageRequest {
+	optional string recipient_identity = 1;
+	optional X3DHMessage message = 2;
+}
+
+message SendMessageResponse {}
+
+message RetrieveMessagesRequest {
+	optional string identity = 1;
+}
+
+message RetrieveMessagesResponse {
+	repeated X3DHMessage messages = 1;
+}
+
