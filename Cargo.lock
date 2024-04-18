@@ -1166,7 +1166,6 @@ dependencies = [
  "futures",
  "prost",
  "protocol",
- "serde",
  "thiserror",
  "tokio",
  "tonic",
