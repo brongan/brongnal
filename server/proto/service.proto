@@ -42,7 +42,7 @@ message X3DHMessage {
 	optional bytes sender_ik = 1;
 	optional bytes ephemeral_key = 2;
 	optional bytes otk = 3;
-	optional string ciphertext = 4;
+	optional bytes ciphertext = 4;
 }
 
 message SendMessageRequest {
