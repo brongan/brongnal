@@ -5,7 +5,7 @@ service Brongnal {
 	rpc RegisterPreKeyBundle (RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
 	rpc RequestPreKeys (RequestPreKeysRequest) returns (PreKeyBundle);
 	rpc SendMessage (SendMessageRequest) returns (SendMessageResponse);
-	rpc RetrieveMessges (RetrieveMessagesRequest) returns (RetrieveMessagesResponse);
+	rpc RetrieveMessages (RetrieveMessagesRequest) returns (RetrieveMessagesResponse);
 }
 
 message SignedPreKey {
