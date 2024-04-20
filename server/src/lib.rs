@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use service::brongnal_server::{Brongnal, BrongnalServer};
 use service::{
     PreKeyBundle as PreKeyBundleProto, RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse,
-    RequestPreKeysRequest, SignedPreKey as SignedPreKeyProto,
+    RequestPreKeysRequest, SendMessageRequest, SendMessageResponse,
+    SignedPreKey as SignedPreKeyProto, X3dhMessage as MessageProto,
 };
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
@@ -83,11 +84,37 @@ impl TryFrom<SignedPreKeyProto> for SignedPreKey {
             ));
         }
         // TODO verify point is on curve.
-        let pre_key = X25519PublicKey::from(value.pre_key().try_into()?);
+        let pre_key = X25519PublicKey::try_from(value.pre_key().try_into()?)?;
         let signature = Signature::from_slice(value.signature()).map_err(|e| {
             Status::invalid_argument("Pre Key has an invalid X25519 Signature: {e}")
         })?;
         Ok(SignedPreKey { pre_key, signature })
+    }
+}
+
+impl TryFrom<MessageProto> for Message {
+    type Error = tonic::Status;
+
+    fn try_from(value: MessageProto) -> Result<Self, Self::Error> {
+        // TODO Verify ik is a curve25519_dalek::curve::CompressedEdwardsY.
+        let sender_identity_key = VerifyingKey::from_bytes(
+            value
+                .sender_ik()
+                .try_into()
+                .map_err(|e| Status::invalid_argument("Sender Identity Key was invalid: {e}"))?,
+        )
+        .map_err(|e| Status::invalid_argument("Sender Identity Key was invalid: {e}"))?;
+        // TODO verify point is on curve.
+        let ephemeral_key = X25519PublicKey::try_from(value.ephemeral_key().try_into()?)
+            .map_err(|e| Status::invalid_argument("Invalid Ephemeral Key: {e}"))?;
+
+        if let Some(otk) = 
+        Ok(Message {
+            sender_identity_key,
+            ephemeral_key,
+            otk,
+            ciphertext,
+        })
     }
 }
 
@@ -163,15 +190,22 @@ impl Brongnal for MemoryServer {
     }
 
     async fn send_message(
-        self,
-        recipient_identity: String,
-        message: Message,
-    ) -> Result<(), BrongnalServerError> {
-        eprintln!("Message sent to: {recipient_identity}");
-        let mut messages = self.messages.lock().unwrap();
-        let _ = messages.try_insert(recipient_identity.clone(), Vec::new());
-        messages.get_mut(&recipient_identity).unwrap().push(message);
-        Ok(())
+        &self,
+        request: Request<SendMessageRequest>,
+    ) -> Result<Response<SendMessageResponse>, Status> {
+        println!("Got a request: {:?}", request);
+        let request = request.into_inner();
+        let recipient_identity = request.recipient_identity().to_string();
+
+        if let Some(message) = request.message {
+            let mut messages = self.messages.lock().unwrap();
+            let _ = messages.try_insert(recipient_identity, Vec::new());
+            messages.get_mut(&recipient_identity).unwrap().push(message);
+            let reply = SendMessageResponse {};
+            Ok(Response::new(reply))
+        } else {
+            return Err(Status::invalid_argument("Request missing message."));
+        }
     }
 
     async fn retrieve_messages(self, identity: String) -> Vec<Message> {
