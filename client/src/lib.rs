@@ -6,7 +6,6 @@ use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh::{x3dh_initiate_recv, x3dh_initiate_send, SignedPreKey, SignedPreKeys};
 use std::collections::HashMap;
 use std::io::{stdin, BufRead, BufReader};
-use tarpc::{client, context};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
 pub trait X3DHClient {

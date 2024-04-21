@@ -13,8 +13,8 @@ message SignedPreKey {
 	optional bytes signature = 2;
 }
 
-message SignedPreyKeys {
-	repeated string pre_keys = 1;
+message SignedPreKeys {
+	repeated bytes pre_keys = 1;
 	optional bytes signature = 2;
 }
 
@@ -22,7 +22,7 @@ message RegisterPreKeyBundleRequest {
 	optional string identity = 1;
 	optional bytes ik = 2;
 	optional SignedPreKey spk = 3;
-	optional SignedPreyKeys otk_bundle = 4;
+	optional SignedPreKeys otk_bundle = 4;
 }
 
 message RegisterPreKeyBundleResponse {}

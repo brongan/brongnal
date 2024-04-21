@@ -1,5 +1,5 @@
 use blake2::{Blake2b512, Digest};
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
 pub fn sign_bundle(
@@ -24,7 +24,7 @@ pub fn verify_bundle(
     for public_key in public_keys {
         hasher.update(public_key.as_bytes());
     }
-    verifying_key.verify(&hasher.finalize(), signature)
+    verifying_key.verify_strict(&hasher.finalize(), signature)
 }
 
 pub struct X3DHPreKeyBundle {
