@@ -51,16 +51,16 @@ fn parse_command(input: &str) -> IResult<&str, Command> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut stub = BrongnalClient::connect("http://[::1]:8080").await?;
+    let mut stub = BrongnalClient::connect("https://signal.brongan.com:8080").await?;
     let mut x3dh_client = MemoryClient::new();
 
     println!(
         r#"Commands:
-             register NAME
-             message NAME MESSAGE
-             get_messages
-             Type Control-D (on Unix) or Control-Z (on Windows)
-             to close the connection."#
+        register NAME
+        message NAME MESSAGE
+        get_messages
+        Type Control-D (on Unix) or Control-Z (on Windows)
+        to close the connection."#
     );
     let mut my_name = "".to_string();
 

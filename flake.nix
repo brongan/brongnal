@@ -37,7 +37,7 @@
           inherit src;
           version = "0.1.0";
           strictDeps = true;
-          nativeBuildInputs = with pkgs; [ pkg-config ];
+          nativeBuildInputs = with pkgs; [ pkg-config protobuf ];
         };
         nativeArgs = commonArgs // {
           CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
