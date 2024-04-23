@@ -1,21 +1,23 @@
 #![feature(map_try_insert)]
 use ed25519_dalek::{Signature, VerifyingKey};
-use protocol::bundle::verify_bundle;
-use protocol::x3dh::{Message, PreKeyBundle, SignedPreKey, SignedPreKeys};
-use service::brongnal_server::Brongnal;
-use service::{
-    PreKeyBundle as PreKeyBundleProto, RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse,
-    RequestPreKeysRequest, RetrieveMessagesRequest, RetrieveMessagesResponse, SendMessageRequest,
-    SendMessageResponse, SignedPreKey as SignedPreKeyProto, SignedPreKeys as SignedPreKeysProto,
+use proto::{
+    brongnal_server::Brongnal, PreKeyBundle as PreKeyBundleProto, RegisterPreKeyBundleRequest,
+    RegisterPreKeyBundleResponse, RequestPreKeysRequest, RetrieveMessagesRequest,
+    RetrieveMessagesResponse, SendMessageRequest, SendMessageResponse,
+    SignedPreKey as SignedPreKeyProto, SignedPreKeys as SignedPreKeysProto,
     X3dhMessage as MessageProto,
 };
+use protocol::bundle::verify_bundle;
+use protocol::x3dh::{Message, PreKeyBundle, SignedPreKey, SignedPreKeys};
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 use tonic::{Request, Response, Status};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
-pub mod service {
-    tonic::include_proto!("service"); // The string specified here must match the proto package name
+pub mod proto {
+    tonic::include_proto!("service");
+    pub const FILE_DESCRIPTOR_SET: &[u8] =
+        tonic::include_file_descriptor_set!("service_descriptor");
 }
 
 #[derive(Clone, Debug)]

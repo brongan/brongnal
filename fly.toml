@@ -16,11 +16,9 @@ DB = "TODO"
   processes = ["app"]
 
   [[services.ports]]
-    port = 8080
+    port = 443
     handlers = ["tls"]
 
-  [services.concurrency]
-    type = "connections"
-    hard_limit = 25
-    soft_limit = 20
+  [services.ports.tls_options]
+    alpn = ["h2"]
 
