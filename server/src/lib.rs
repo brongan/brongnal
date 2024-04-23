@@ -71,7 +71,6 @@ impl Into<SignedPreKeysProto> for SignedPreKeys {
     }
 }
 
-// TODO Verify ik is a curve25519_dalek::curve::CompressedEdwardsY.
 fn parse_verifying_key(key: Vec<u8>) -> Result<VerifyingKey, Status> {
     VerifyingKey::from_bytes(
         &key.try_into()
@@ -80,7 +79,6 @@ fn parse_verifying_key(key: Vec<u8>) -> Result<VerifyingKey, Status> {
     .map_err(|_| Status::invalid_argument("ED25519 key was invalid."))
 }
 
-// TODO Verify point is on curve.
 fn parse_x25519_public_key(key: Vec<u8>) -> Result<X25519PublicKey, Status> {
     let key: [u8; 32] = key
         .try_into()
