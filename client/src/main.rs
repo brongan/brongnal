@@ -7,8 +7,8 @@ use nom::combinator::map;
 use nom::sequence::preceded;
 use nom::IResult;
 use protocol::x3dh::{x3dh_initiate_recv, x3dh_initiate_send, Message};
-use server::service::brongnal_client::BrongnalClient;
-use server::service::{
+use server::proto::brongnal_client::BrongnalClient;
+use server::proto::{
     RegisterPreKeyBundleRequest, RequestPreKeysRequest, RetrieveMessagesRequest, SendMessageRequest,
 };
 use std::io::{stdin, BufRead, BufReader};
@@ -51,7 +51,7 @@ fn parse_command(input: &str) -> IResult<&str, Command> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut stub = BrongnalClient::connect("https://signal.brongan.com:8080").await?;
+    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443").await?;
     let mut x3dh_client = MemoryClient::new();
 
     println!(
