@@ -28,25 +28,23 @@
             pkgs.pkgsStatic.stdenv;
         };
         inherit (pkgs) lib;
-        nativeToolchain = pkgs.rust-bin.nightly.latest.default.override {
+        toolchain = pkgs.rust-bin.nightly.latest.default.override {
           targets = [ "x86_64-unknown-linux-musl" ];
         };
-        nativeCraneLib = (crane.mkLib pkgs).overrideToolchain nativeToolchain;
+        craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
         src = lib.cleanSource ./.;
-        commonArgs = {
+        args = {
           inherit src;
           version = "0.1.0";
           strictDeps = true;
           nativeBuildInputs = with pkgs; [ pkg-config protobuf ];
-        };
-        nativeArgs = commonArgs // {
-          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+		  CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
           CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
           buildInputs = [ sqliteStatic ];
 		  pname = "server";
         };
-        nativeArtifacts = nativeCraneLib.buildDepsOnly nativeArgs;
-        myServer = nativeCraneLib.buildPackage (nativeArgs // {
+        nativeArtifacts = craneLib.buildDepsOnly args;
+        myServer = craneLib.buildPackage (args // {
 		  cargoExtraArgs = "--package=server";
           cargoArtifacts = nativeArtifacts;
         });
