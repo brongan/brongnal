@@ -174,8 +174,18 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
-        body: const Text("hello world"),
-        backgroundColor: theme.colorScheme.background,
+        body: Conversation(
+          avatar: CircleAvatar(
+            backgroundColor: Colors.brown.shade800,
+            child: const Text('AH'),
+          ),
+          name: "Alice",
+          lastMessage: "Hello Bob.",
+          lastMessageTime: DateTime.utc(1970, 0, 0),
+          read: true,
+        ),
+        // TODO make text white so this works.
+        // backgroundColor: theme.colorScheme.background,
         floatingActionButton: const BrongnalFloatingActionButtons(),
         bottomNavigationBar: BottomNavigationBar(
           selectedItemColor: theme.bottomNavigationBarTheme.selectedItemColor,
@@ -199,6 +209,46 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+}
+
+class Conversation extends StatelessWidget {
+  final CircleAvatar avatar;
+  final String name;
+  final String lastMessage;
+  final DateTime lastMessageTime;
+  final bool read;
+  const Conversation({
+    super.key,
+    required this.avatar,
+    required this.name,
+    required this.lastMessage,
+    required this.lastMessageTime,
+    required this.read,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO Implement conversation rendering.
+    return Row(
+      children: [
+        avatar,
+        Text(name),
+        Text(lastMessage),
+        Text('$lastMessageTime'),
+      ],
+    );
+  }
+}
+
+class ConversationsList extends StatelessWidget {
+  const ConversationsList({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text("hello world");
   }
 }
 
