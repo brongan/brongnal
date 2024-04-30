@@ -64,6 +64,12 @@ enum SampleItem {
   settings,
 }
 
+enum MessageState {
+  sending,
+  sent,
+  read,
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
@@ -174,15 +180,39 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
-        body: Conversation(
-          avatar: CircleAvatar(
-            backgroundColor: Colors.brown.shade800,
-            child: const Text('AH'),
-          ),
-          name: "Alice",
-          lastMessage: "Hello Bob.",
-          lastMessageTime: DateTime.utc(1970, 0, 0),
-          read: true,
+        body: Column(
+          children: [
+            Conversation(
+              avatar: CircleAvatar(
+                backgroundColor: randomColor(),
+                child: const Text('Al'),
+              ),
+              name: "Alice",
+              lastMessage: "Hello Brennan.",
+              lastMessageTime: DateTime.utc(2024, 4, 30),
+              messageState: MessageState.sent,
+            ),
+            Conversation(
+              avatar: CircleAvatar(
+                backgroundColor: randomColor(),
+                child: const Text('Al'),
+              ),
+              name: "Alice",
+              lastMessage: "Hi Alice",
+              lastMessageTime: DateTime.utc(2024, 4, 30),
+              messageState: MessageState.sending,
+            ),
+            Conversation(
+              avatar: CircleAvatar(
+                backgroundColor: randomColor(),
+                child: const Text('MA'),
+              ),
+              name: "Madeleine Appelmans",
+              lastMessage: "Bob please write better rust.",
+              lastMessageTime: DateTime.utc(2024, 4, 29),
+              messageState: MessageState.read,
+            ),
+          ],
         ),
         // TODO make text white so this works.
         // backgroundColor: theme.colorScheme.background,
@@ -212,31 +242,74 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+IconData getIcon(MessageState messageState) {
+  switch (messageState) {
+    case MessageState.sending:
+      return Icons.radio_button_unchecked_outlined;
+    case MessageState.sent:
+      return Icons.check_circle;
+    case MessageState.read:
+      return Icons.check_circle_outline_outlined;
+  }
+}
+
 class Conversation extends StatelessWidget {
   final CircleAvatar avatar;
   final String name;
   final String lastMessage;
   final DateTime lastMessageTime;
-  final bool read;
+  final MessageState messageState;
   const Conversation({
     super.key,
     required this.avatar,
     required this.name,
     required this.lastMessage,
     required this.lastMessageTime,
-    required this.read,
+    required this.messageState,
   });
 
   @override
   Widget build(BuildContext context) {
-    // TODO Implement conversation rendering.
-    return Row(
-      children: [
-        avatar,
-        Text(name),
-        Text(lastMessage),
-        Text('$lastMessageTime'),
-      ],
+    var delta = DateTime.now().difference(lastMessageTime).inHours;
+
+    var readIcon = Icon(getIcon(messageState));
+    return SizedBox(
+      height: 60,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: avatar,
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    lastMessage,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                Text('${delta}h'),
+                readIcon,
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
