@@ -25,7 +25,7 @@ class BrongnalApp extends StatelessWidget {
         title: 'Brongnal',
         theme: ThemeData.light(),
         darkTheme: ThemeData.dark(),
-        themeMode: ThemeMode.dark, // Default mode
+        themeMode: ThemeMode.system,
         home: const HomePage(),
       ),
     );
@@ -142,80 +142,45 @@ class _HomePageState extends State<HomePage> {
                 decoration: BoxDecoration(
                   color: theme.colorScheme.background,
                 ),
-                child: const Text(
-                  'Settings',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
+                child: Column(children: [
+                  const Text(
+                    'Settings',
+                    style: TextStyle(
+                      fontSize: 24,
+                    ),
                   ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.message),
-                title: const Text('Messages'),
-                onTap: () {
-                  setState(() {
-                    selectedPage = 'Messages';
-                  });
-                },
+                  AccountInfo(
+                    avatar: CircleAvatar(
+                      backgroundColor: randomColor(),
+                      child: const Text('BR', style: TextStyle(fontSize: 24)),
+                    ),
+                    name: "Brennan",
+                    username: "brongan.69",
+                  )
+                ]),
               ),
               ListTile(
                 leading: const Icon(Icons.account_circle),
-                title: const Text('Profile'),
+                title: const Text('Account'),
                 onTap: () {
                   setState(() {
-                    selectedPage = 'Profile';
+                    selectedPage = 'Account';
                   });
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.settings),
-                title: const Text('Settings'),
+                leading: const Icon(Icons.message),
+                title: const Text('Appearance'),
                 onTap: () {
                   setState(() {
-                    selectedPage = 'Settings';
+                    selectedPage = 'Appearance';
                   });
                 },
               ),
             ],
           ),
         ),
-        body: Column(
-          children: [
-            Conversation(
-              avatar: CircleAvatar(
-                backgroundColor: randomColor(),
-                child: const Text('Al'),
-              ),
-              name: "Alice",
-              lastMessage: "Hello Brennan.",
-              lastMessageTime: DateTime.utc(2024, 4, 30),
-              messageState: MessageState.sent,
-            ),
-            Conversation(
-              avatar: CircleAvatar(
-                backgroundColor: randomColor(),
-                child: const Text('Al'),
-              ),
-              name: "Alice",
-              lastMessage: "Hi Alice",
-              lastMessageTime: DateTime.utc(2024, 4, 30),
-              messageState: MessageState.sending,
-            ),
-            Conversation(
-              avatar: CircleAvatar(
-                backgroundColor: randomColor(),
-                child: const Text('MA'),
-              ),
-              name: "Madeleine Appelmans",
-              lastMessage: "Bob please write better rust.",
-              lastMessageTime: DateTime.utc(2024, 4, 29),
-              messageState: MessageState.read,
-            ),
-          ],
-        ),
-        // TODO make text white so this works.
-        // backgroundColor: theme.colorScheme.background,
+        body: const ConversationsList(),
         floatingActionButton: const BrongnalFloatingActionButtons(),
         bottomNavigationBar: BottomNavigationBar(
           selectedItemColor: theme.bottomNavigationBarTheme.selectedItemColor,
@@ -238,6 +203,100 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class AccountInfo extends StatelessWidget {
+  final CircleAvatar avatar;
+  final String name;
+  final String username;
+
+  const AccountInfo({
+    super.key,
+    required this.avatar,
+    required this.name,
+    required this.username,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 60,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: avatar,
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    username,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Icon(Icons.qr_code),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ConversationsList extends StatelessWidget {
+  const ConversationsList({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Conversation(
+          avatar: CircleAvatar(
+            backgroundColor: randomColor(),
+            child: const Text('Al'),
+          ),
+          name: "Alice",
+          lastMessage: "Hello Brennan.",
+          lastMessageTime: DateTime.utc(2024, 4, 30),
+          messageState: MessageState.sent,
+        ),
+        Conversation(
+          avatar: CircleAvatar(
+            backgroundColor: randomColor(),
+            child: const Text('Al'),
+          ),
+          name: "Alice",
+          lastMessage: "Hi Alice",
+          lastMessageTime: DateTime.utc(2024, 4, 30),
+          messageState: MessageState.sending,
+        ),
+        Conversation(
+          avatar: CircleAvatar(
+            backgroundColor: randomColor(),
+            child: const Text('MA'),
+          ),
+          name: "Madeleine Appelmans",
+          lastMessage: "Bob please write better rust.",
+          lastMessageTime: DateTime.utc(2024, 4, 29),
+          messageState: MessageState.read,
+        ),
+      ],
     );
   }
 }
@@ -273,55 +332,48 @@ class Conversation extends StatelessWidget {
     var delta = DateTime.now().difference(lastMessageTime).inHours;
 
     var readIcon = Icon(getIcon(messageState));
-    return SizedBox(
-      height: 60,
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: avatar,
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(4.0),
+    return TextButton(
+      onPressed: () {},
+      onLongPress: null,
+      child: SizedBox(
+        height: 60,
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: avatar,
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      lastMessage,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    name,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    lastMessage,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text('${delta}h'),
+                  readIcon,
                 ],
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              children: [
-                Text('${delta}h'),
-                readIcon,
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
-  }
-}
-
-class ConversationsList extends StatelessWidget {
-  const ConversationsList({
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return const Text("hello world");
   }
 }
 
@@ -341,9 +393,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
           padding: const EdgeInsets.all(8.0),
           child: FloatingActionButton(
             backgroundColor: theme.floatingActionButtonTheme.backgroundColor,
-            onPressed: () {
-              // TODO create message modal.
-            },
+            onPressed: () {},
             child: const Icon(Icons.photo_camera_outlined),
           ),
         ),
@@ -351,9 +401,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
           padding: const EdgeInsets.all(8.0),
           child: FloatingActionButton(
               foregroundColor: theme.floatingActionButtonTheme.foregroundColor,
-              onPressed: () {
-                // TODO send image.
-              },
+              onPressed: () {},
               child: const Icon(Icons.create_outlined)),
         ),
       ],
