@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() {
   runApp(const BrongnalApp());
 }
+
+const Color background = Color.fromRGBO(26, 28, 32, 1.0);
+const Color textColor = Color.fromRGBO(190, 192, 197, 1.0);
 
 Color randomColor() {
   final random = math.Random();
@@ -23,8 +27,25 @@ class BrongnalApp extends StatelessWidget {
       create: (context) => BrongnalAppState(),
       child: MaterialApp(
         title: 'Brongnal',
-        theme: ThemeData.light(),
-        darkTheme: ThemeData.dark(),
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.purple,
+            brightness: Brightness.dark,
+          ),
+          textTheme: TextTheme(
+            displayLarge: const TextStyle(
+              fontSize: 72,
+              fontWeight: FontWeight.bold,
+            ),
+            titleLarge: GoogleFonts.oswald(
+              fontSize: 30,
+              fontStyle: FontStyle.italic,
+            ),
+            bodyMedium: GoogleFonts.merriweather(),
+            bodySmall: GoogleFonts.roboto(),
+          ),
+        ),
         themeMode: ThemeMode.system,
         home: const HomePage(),
       ),
@@ -87,122 +108,146 @@ class _HomePageState extends State<HomePage> {
     final theme = Theme.of(context);
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Brongnal'),
-          leading: Builder(
-            builder: (BuildContext context) {
-              return IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () {
-                  Scaffold.of(context).openDrawer();
-                },
-                tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-              );
-            },
-          ),
-          backgroundColor: theme.primaryColorDark,
-          actions: <Widget>[
-            IconButton(
-              icon: const Icon(Icons.search_outlined),
-              tooltip: 'Search',
-              onPressed: () {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('Search')));
-              },
-            ),
-            PopupMenuButton<SampleItem>(
-              onSelected: (SampleItem item) {},
-              itemBuilder: (BuildContext context) =>
-                  <PopupMenuEntry<SampleItem>>[
-                const PopupMenuItem<SampleItem>(
-                  value: SampleItem.newGroup,
-                  child: Text('New Group'),
-                ),
-                const PopupMenuItem<SampleItem>(
-                  value: SampleItem.markAllRead,
-                  child: Text('Mark All Read'),
-                ),
-                const PopupMenuItem<SampleItem>(
-                  value: SampleItem.inviteFriends,
-                  child: Text('Invite Friends'),
-                ),
-                const PopupMenuItem<SampleItem>(
-                  value: SampleItem.settings,
-                  child: Text('Settings'),
-                ),
-              ],
-            ),
-          ],
-        ),
-        drawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: <Widget>[
-              DrawerHeader(
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.background,
-                ),
-                child: Column(children: [
-                  const Text(
-                    'Settings',
-                    style: TextStyle(
-                      fontSize: 24,
-                    ),
-                  ),
-                  AccountInfo(
-                    avatar: CircleAvatar(
-                      backgroundColor: randomColor(),
-                      child: const Text('BR', style: TextStyle(fontSize: 24)),
-                    ),
-                    name: "Brennan",
-                    username: "brongan.69",
-                  )
-                ]),
-              ),
-              ListTile(
-                leading: const Icon(Icons.account_circle),
-                title: const Text('Account'),
-                onTap: () {
-                  setState(() {
-                    selectedPage = 'Account';
-                  });
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.message),
-                title: const Text('Appearance'),
-                onTap: () {
-                  setState(() {
-                    selectedPage = 'Appearance';
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
+        appBar: getAppBar(context),
+        drawer: getDrawer(theme),
+        backgroundColor: background,
         body: const ConversationsList(),
         floatingActionButton: const BrongnalFloatingActionButtons(),
-        bottomNavigationBar: BottomNavigationBar(
-          selectedItemColor: theme.bottomNavigationBarTheme.selectedItemColor,
-          unselectedItemColor:
-              theme.bottomNavigationBarTheme.unselectedItemColor,
-          backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline_outlined),
-              label: 'Chats',
+        bottomNavigationBar: getBottomNavBar(),
+      ),
+    );
+  }
+
+  BottomNavigationBar getBottomNavBar() {
+    return BottomNavigationBar(
+      selectedItemColor: textColor,
+      unselectedItemColor: textColor,
+      backgroundColor: const Color.fromRGBO(40, 43, 48, 1.0),
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat_bubble_outline_outlined),
+          label: 'Chats',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.call_outlined),
+          label: 'Calls',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.web_stories_outlined),
+          label: 'Stories',
+        ),
+      ],
+    );
+  }
+
+  Drawer getDrawer(ThemeData theme) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: <Widget>[
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.background,
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.call_outlined),
-              label: 'Calls',
+            child: Column(children: [
+              const Text(
+                'Settings',
+                style: TextStyle(
+                  fontSize: 24,
+                ),
+              ),
+              AccountInfo(
+                avatar: CircleAvatar(
+                  backgroundColor: randomColor(),
+                  child: const Text('BR', style: TextStyle(fontSize: 24)),
+                ),
+                name: "Brennan",
+                username: "brongan.69",
+              )
+            ]),
+          ),
+          ListTile(
+            leading: const Icon(Icons.account_circle),
+            title: const Text('Account'),
+            onTap: () {
+              setState(() {
+                selectedPage = 'Account';
+              });
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.message),
+            title: const Text('Appearance'),
+            onTap: () {
+              setState(() {
+                selectedPage = 'Appearance';
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  AppBar getAppBar(BuildContext context) {
+    return AppBar(
+      title: const Text('Brongnal', style: TextStyle(color: textColor)),
+      leading: Builder(
+        builder: (BuildContext context) {
+          return IconButton(
+            icon: CircleAvatar(
+              radius: 16,
+              backgroundColor: randomColor(),
+              child: const Text(
+                'BR',
+                style: TextStyle(fontSize: 16),
+              ),
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.web_stories_outlined),
-              label: 'Stories',
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+            tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
+          );
+        },
+      ),
+      backgroundColor: background,
+      actions: <Widget>[
+        IconButton(
+          icon: const Icon(
+            Icons.search_outlined,
+            color: textColor,
+            size: 24,
+          ),
+          tooltip: 'Search',
+          onPressed: () {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('Search')));
+          },
+        ),
+        PopupMenuButton<SampleItem>(
+          onSelected: (SampleItem item) {},
+          iconColor: textColor,
+          iconSize: 24,
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<SampleItem>>[
+            const PopupMenuItem<SampleItem>(
+              value: SampleItem.newGroup,
+              child: Text('New Group'),
+            ),
+            const PopupMenuItem<SampleItem>(
+              value: SampleItem.markAllRead,
+              child: Text('Mark All Read'),
+            ),
+            const PopupMenuItem<SampleItem>(
+              value: SampleItem.inviteFriends,
+              child: Text('Invite Friends'),
+            ),
+            const PopupMenuItem<SampleItem>(
+              value: SampleItem.settings,
+              child: Text('Settings'),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -264,7 +309,7 @@ class ConversationsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return ListView(
       children: [
         Conversation(
           avatar: CircleAvatar(
@@ -292,7 +337,8 @@ class ConversationsList extends StatelessWidget {
             child: const Text('MA'),
           ),
           name: "Madeleine Appelmans",
-          lastMessage: "Bob please write better rust.",
+          lastMessage:
+              "Brennan is a terrible software developer and needs to write better code.",
           lastMessageTime: DateTime.utc(2024, 4, 29),
           messageState: MessageState.read,
         ),
@@ -330,32 +376,54 @@ class Conversation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var delta = DateTime.now().difference(lastMessageTime).inHours;
+    final theme = Theme.of(context);
 
-    var readIcon = Icon(getIcon(messageState));
+    var readIcon = Icon(
+      getIcon(messageState),
+      color: textColor,
+      size: 14,
+    );
     return TextButton(
       onPressed: () {},
       onLongPress: null,
       child: SizedBox(
-        height: 60,
+        height: 76,
         child: Row(
           children: [
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(12.0),
               child: avatar,
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(4.0),
+                padding: const EdgeInsets.all(8.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       name,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontStyle: FontStyle.normal,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Roboto',
+                        fontSize: 17,
+                        color: textColor,
+                      ),
                     ),
                     Text(
                       lastMessage,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        height: 1.15,
+                        fontStyle: FontStyle.normal,
+                        fontWeight: FontWeight.w400,
+                        fontFamily: 'Roboto',
+                        fontSize: 14,
+                        color: textColor,
+                      ),
+                      maxLines: 2,
                     ),
                   ],
                 ),
@@ -365,7 +433,10 @@ class Conversation extends StatelessWidget {
               padding: const EdgeInsets.all(8.0),
               child: Column(
                 children: [
-                  Text('${delta}h'),
+                  Text(
+                    '${delta}h',
+                    style: const TextStyle(color: textColor),
+                  ),
                   readIcon,
                 ],
               ),
@@ -383,7 +454,6 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
   });
 
   @override
-  // TODO remove outline when active.
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
@@ -392,17 +462,17 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: FloatingActionButton(
-            backgroundColor: theme.floatingActionButtonTheme.backgroundColor,
+            backgroundColor: const Color.fromRGBO(47, 49, 51, 1.0),
             onPressed: () {},
-            child: const Icon(Icons.photo_camera_outlined),
+            child: const Icon(Icons.photo_camera_outlined, color: textColor),
           ),
         ),
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: FloatingActionButton(
-              foregroundColor: theme.floatingActionButtonTheme.foregroundColor,
+              backgroundColor: const Color.fromRGBO(70, 75, 92, 1.0),
               onPressed: () {},
-              child: const Icon(Icons.create_outlined)),
+              child: const Icon(Icons.create_outlined, color: textColor)),
         ),
       ],
     );
