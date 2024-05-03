@@ -1,39 +1,12 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:random_name_generator/random_name_generator.dart';
+import 'conversation_list.dart';
+import 'util.dart';
+import 'theme.dart';
 
 void main() {
   runApp(const BrongnalApp());
 }
-
-Color randomColor() {
-  final random = math.Random();
-  return Color.fromRGBO(random.nextInt(256), random.nextInt(256),
-      random.nextInt(256), 1.0); // 1.0 for full opacity
-}
-
-const String loremIpsum =
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
-
-const Color textColor = Color.fromRGBO(190, 192, 197, 1.0);
-
-const conversationNameStyle = TextStyle(
-  fontStyle: FontStyle.normal,
-  fontWeight: FontWeight.w500,
-  fontFamily: 'Roboto',
-  fontSize: 17,
-  color: textColor,
-);
-const conversationMessageStyle = TextStyle(
-  height: 1.15,
-  fontStyle: FontStyle.normal,
-  fontWeight: FontWeight.w400,
-  fontFamily: 'Roboto',
-  fontSize: 14,
-  color: textColor,
-);
 
 class BrongnalAppState extends ChangeNotifier {}
 
@@ -46,29 +19,7 @@ class BrongnalApp extends StatelessWidget {
       create: (context) => BrongnalAppState(),
       child: MaterialApp(
         title: 'Brongnal',
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.deepOrange,
-            brightness: Brightness.dark,
-          ).copyWith(background: Color.fromRGBO(26, 28, 32, 1.0)),
-          navigationBarTheme: const NavigationBarThemeData(
-            backgroundColor: Color.fromRGBO(40, 43, 48, 1.0),
-          ),
-          iconTheme: const IconThemeData(color: textColor),
-          textTheme: TextTheme(
-            displayLarge: const TextStyle(
-              fontSize: 72,
-              fontWeight: FontWeight.bold,
-            ),
-            titleLarge: GoogleFonts.oswald(
-              fontSize: 30,
-              fontStyle: FontStyle.italic,
-            ),
-            bodyMedium: conversationNameStyle,
-            bodySmall: conversationMessageStyle,
-          ),
-        ),
+        darkTheme: bronganlDarkTheme,
         themeMode: ThemeMode.dark,
         home: const HomePage(),
       ),
@@ -76,42 +27,11 @@ class BrongnalApp extends StatelessWidget {
   }
 }
 
-/*
-IconButton(
-              icon: const Icon(Icons.navigate_next),
-              tooltip: 'Go to the next page',
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute<void>(
-                  builder: (BuildContext context) {
-                    return Scaffold(
-                      appBar: AppBar(
-                        title: const Text('Next page'),
-                      ),
-                      body: const Center(
-                        child: Text(
-                          'This is the next page',
-                          style: TextStyle(fontSize: 24),
-                        ),
-                      ),
-                    );
-                  },
-                ));
-              },
-            ),
-
-*/
-
-enum SampleItem {
+enum HomepagePopupItem {
   newGroup,
   markAllRead,
   inviteFriends,
   settings,
-}
-
-enum MessageState {
-  sending,
-  sent,
-  read,
 }
 
 class HomePage extends StatefulWidget {
@@ -129,23 +49,19 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return MaterialApp(
-      home: Scaffold(
-        appBar: getAppBar(context),
-        drawer: getDrawer(theme),
-        backgroundColor: theme.colorScheme.background,
-        body: const ConversationsList(),
-        floatingActionButton: const BrongnalFloatingActionButtons(),
-        bottomNavigationBar: getBottomNavBar(),
-      ),
+    return Scaffold(
+      appBar: getHomeAppBar(context),
+      drawer: getHomeDrawer(theme),
+      backgroundColor: theme.colorScheme.background,
+      body: const ConversationsList(),
+      floatingActionButton: const BrongnalFloatingActionButtons(),
+      bottomNavigationBar: getBottomNavBar(),
     );
   }
 
   BottomNavigationBar getBottomNavBar() {
     final theme = Theme.of(context);
     return BottomNavigationBar(
-      selectedItemColor: textColor,
-      unselectedItemColor: textColor,
       backgroundColor: theme.navigationBarTheme.backgroundColor,
       items: const [
         BottomNavigationBarItem(
@@ -164,7 +80,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Drawer getDrawer(ThemeData theme) {
+  Drawer getHomeDrawer(ThemeData theme) {
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -213,10 +129,10 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  AppBar getAppBar(BuildContext context) {
+  AppBar getHomeAppBar(BuildContext context) {
     final theme = Theme.of(context);
     return AppBar(
-      title: const Text('Brongnal', style: TextStyle(color: textColor)),
+      title: const Text('Brongnal'),
       leading: Builder(
         builder: (BuildContext context) {
           return IconButton(
@@ -237,37 +153,27 @@ class _HomePageState extends State<HomePage> {
       ),
       backgroundColor: theme.colorScheme.background,
       actions: <Widget>[
-        IconButton(
-          icon: const Icon(
-            Icons.search_outlined,
-            color: textColor,
-            size: 24,
-          ),
-          tooltip: 'Search',
-          onPressed: () {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('Search')));
-          },
-        ),
-        PopupMenuButton<SampleItem>(
-          onSelected: (SampleItem item) {},
+        const StubIconButton(icon: Icons.search_outlined, name: 'Search'),
+        PopupMenuButton<HomepagePopupItem>(
+          onSelected: (HomepagePopupItem item) {},
           iconColor: textColor,
           iconSize: 24,
-          itemBuilder: (BuildContext context) => <PopupMenuEntry<SampleItem>>[
-            const PopupMenuItem<SampleItem>(
-              value: SampleItem.newGroup,
+          itemBuilder: (BuildContext context) =>
+              <PopupMenuEntry<HomepagePopupItem>>[
+            const PopupMenuItem<HomepagePopupItem>(
+              value: HomepagePopupItem.newGroup,
               child: Text('New Group'),
             ),
-            const PopupMenuItem<SampleItem>(
-              value: SampleItem.markAllRead,
+            const PopupMenuItem<HomepagePopupItem>(
+              value: HomepagePopupItem.markAllRead,
               child: Text('Mark All Read'),
             ),
-            const PopupMenuItem<SampleItem>(
-              value: SampleItem.inviteFriends,
+            const PopupMenuItem<HomepagePopupItem>(
+              value: HomepagePopupItem.inviteFriends,
               child: Text('Invite Friends'),
             ),
-            const PopupMenuItem<SampleItem>(
-              value: SampleItem.settings,
+            const PopupMenuItem<HomepagePopupItem>(
+              value: HomepagePopupItem.settings,
               child: Text('Settings'),
             ),
           ],
@@ -327,121 +233,6 @@ class AccountInfo extends StatelessWidget {
   }
 }
 
-class ConversationsList extends StatelessWidget {
-  const ConversationsList({
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final randomNames = RandomNames(Zone.us);
-    return ListView.builder(itemBuilder: (context, index) {
-      final name = randomNames.fullName();
-      return Conversation(
-        avatar: CircleAvatar(
-          backgroundColor: randomColor(),
-          child: Text(name.substring(0, 2)),
-        ),
-        name: name,
-        lastMessage: loremIpsum,
-        lastMessageTime: DateTime.utc(2024, 4, 30),
-        messageState: MessageState.sent,
-      );
-    });
-  }
-}
-
-IconData getIcon(MessageState messageState) {
-  switch (messageState) {
-    case MessageState.sending:
-      return Icons.radio_button_unchecked_outlined;
-    case MessageState.sent:
-      return Icons.check_circle;
-    case MessageState.read:
-      return Icons.check_circle_outline_outlined;
-  }
-}
-
-class Conversation extends StatelessWidget {
-  final CircleAvatar avatar;
-  final String name;
-  final String lastMessage;
-  final DateTime lastMessageTime;
-  final MessageState messageState;
-  const Conversation({
-    super.key,
-    required this.avatar,
-    required this.name,
-    required this.lastMessage,
-    required this.lastMessageTime,
-    required this.messageState,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final delta = DateTime.now().difference(lastMessageTime).inHours;
-    final theme = Theme.of(context);
-    final style = theme.textTheme.displayMedium!.copyWith(
-      color: theme.colorScheme.onPrimary,
-    );
-
-    var readIcon = Icon(
-      getIcon(messageState),
-      color: textColor,
-      size: 14,
-    );
-    return TextButton(
-      onPressed: () {},
-      onLongPress: null,
-      child: SizedBox(
-        height: 76,
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: avatar,
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      name,
-                      overflow: TextOverflow.ellipsis,
-                      style: conversationNameStyle,
-                    ),
-                    Text(
-                      lastMessage,
-                      overflow: TextOverflow.ellipsis,
-                      style: conversationMessageStyle,
-                      maxLines: 2,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  Text(
-                    '${delta}h',
-                    style: const TextStyle(color: textColor),
-                  ),
-                  readIcon,
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class BrongnalFloatingActionButtons extends StatelessWidget {
   const BrongnalFloatingActionButtons({
     super.key,
@@ -449,7 +240,6 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
