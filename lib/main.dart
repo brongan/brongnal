@@ -248,6 +248,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
           child: FloatingActionButton(
             backgroundColor: const Color.fromRGBO(47, 49, 51, 1.0),
             onPressed: () {},
+            heroTag: "btn1",
             child: const Icon(Icons.photo_camera_outlined, color: textColor),
           ),
         ),
@@ -256,6 +257,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
           child: FloatingActionButton(
               backgroundColor: const Color.fromRGBO(70, 75, 92, 1.0),
               onPressed: () {},
+              heroTag: "btn2",
               child: const Icon(Icons.create_outlined, color: textColor)),
         ),
       ],
