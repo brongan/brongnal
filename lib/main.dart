@@ -8,16 +8,32 @@ void main() {
   runApp(const BrongnalApp());
 }
 
-const Color background = Color.fromRGBO(26, 28, 32, 1.0);
-const Color textColor = Color.fromRGBO(190, 192, 197, 1.0);
-const String loremIpsum =
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
-
 Color randomColor() {
   final random = math.Random();
   return Color.fromRGBO(random.nextInt(256), random.nextInt(256),
       random.nextInt(256), 1.0); // 1.0 for full opacity
 }
+
+const String loremIpsum =
+    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
+
+const Color textColor = Color.fromRGBO(190, 192, 197, 1.0);
+
+const conversationNameStyle = TextStyle(
+  fontStyle: FontStyle.normal,
+  fontWeight: FontWeight.w500,
+  fontFamily: 'Roboto',
+  fontSize: 17,
+  color: textColor,
+);
+const conversationMessageStyle = TextStyle(
+  height: 1.15,
+  fontStyle: FontStyle.normal,
+  fontWeight: FontWeight.w400,
+  fontFamily: 'Roboto',
+  fontSize: 14,
+  color: textColor,
+);
 
 class BrongnalAppState extends ChangeNotifier {}
 
@@ -30,12 +46,16 @@ class BrongnalApp extends StatelessWidget {
       create: (context) => BrongnalAppState(),
       child: MaterialApp(
         title: 'Brongnal',
-        theme: ThemeData(
+        darkTheme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.purple,
+            seedColor: Colors.deepOrange,
             brightness: Brightness.dark,
+          ).copyWith(background: Color.fromRGBO(26, 28, 32, 1.0)),
+          navigationBarTheme: const NavigationBarThemeData(
+            backgroundColor: Color.fromRGBO(40, 43, 48, 1.0),
           ),
+          iconTheme: const IconThemeData(color: textColor),
           textTheme: TextTheme(
             displayLarge: const TextStyle(
               fontSize: 72,
@@ -45,11 +65,11 @@ class BrongnalApp extends StatelessWidget {
               fontSize: 30,
               fontStyle: FontStyle.italic,
             ),
-            bodyMedium: GoogleFonts.merriweather(),
-            bodySmall: GoogleFonts.roboto(),
+            bodyMedium: conversationNameStyle,
+            bodySmall: conversationMessageStyle,
           ),
         ),
-        themeMode: ThemeMode.system,
+        themeMode: ThemeMode.dark,
         home: const HomePage(),
       ),
     );
@@ -113,7 +133,7 @@ class _HomePageState extends State<HomePage> {
       home: Scaffold(
         appBar: getAppBar(context),
         drawer: getDrawer(theme),
-        backgroundColor: background,
+        backgroundColor: theme.colorScheme.background,
         body: const ConversationsList(),
         floatingActionButton: const BrongnalFloatingActionButtons(),
         bottomNavigationBar: getBottomNavBar(),
@@ -122,10 +142,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   BottomNavigationBar getBottomNavBar() {
+    final theme = Theme.of(context);
     return BottomNavigationBar(
       selectedItemColor: textColor,
       unselectedItemColor: textColor,
-      backgroundColor: const Color.fromRGBO(40, 43, 48, 1.0),
+      backgroundColor: theme.navigationBarTheme.backgroundColor,
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.chat_bubble_outline_outlined),
@@ -193,6 +214,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   AppBar getAppBar(BuildContext context) {
+    final theme = Theme.of(context);
     return AppBar(
       title: const Text('Brongnal', style: TextStyle(color: textColor)),
       leading: Builder(
@@ -213,7 +235,7 @@ class _HomePageState extends State<HomePage> {
           );
         },
       ),
-      backgroundColor: background,
+      backgroundColor: theme.colorScheme.background,
       actions: <Widget>[
         IconButton(
           icon: const Icon(
@@ -312,9 +334,9 @@ class ConversationsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var randomNames = RandomNames(Zone.us);
+    final randomNames = RandomNames(Zone.us);
     return ListView.builder(itemBuilder: (context, index) {
-      var name = randomNames.fullName();
+      final name = randomNames.fullName();
       return Conversation(
         avatar: CircleAvatar(
           backgroundColor: randomColor(),
@@ -357,8 +379,11 @@ class Conversation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var delta = DateTime.now().difference(lastMessageTime).inHours;
+    final delta = DateTime.now().difference(lastMessageTime).inHours;
     final theme = Theme.of(context);
+    final style = theme.textTheme.displayMedium!.copyWith(
+      color: theme.colorScheme.onPrimary,
+    );
 
     var readIcon = Icon(
       getIcon(messageState),
@@ -386,25 +411,12 @@ class Conversation extends StatelessWidget {
                     Text(
                       name,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontStyle: FontStyle.normal,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Roboto',
-                        fontSize: 17,
-                        color: textColor,
-                      ),
+                      style: conversationNameStyle,
                     ),
                     Text(
                       lastMessage,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        height: 1.15,
-                        fontStyle: FontStyle.normal,
-                        fontWeight: FontWeight.w400,
-                        fontFamily: 'Roboto',
-                        fontSize: 14,
-                        color: textColor,
-                      ),
+                      style: conversationMessageStyle,
                       maxLines: 2,
                     ),
                   ],
