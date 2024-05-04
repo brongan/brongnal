@@ -48,6 +48,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String name = "Brennan";
   String username = "brongan.69";
+  bool registered = false;
   late ClientChannel _channel;
   late BrongnalClient _stub;
 
@@ -60,11 +61,35 @@ class _HomePageState extends State<HomePage> {
             const ChannelOptions(credentials: ChannelCredentials.secure()));
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) => Center(
+          child: AlertDialog(
+            insetPadding: const EdgeInsets.all(20),
+            contentPadding: const EdgeInsets.all(0),
+            content: SizedBox(
+              height: 200,
+              width: MediaQuery.of(context).size.width,
+              child: const Center(
+                child: Text("Alert dialog in app start up"),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   void _register() async {
+    if (!registered) {
+      return;
+    }
     await _stub
         .registerPreKeyBundle(RegisterPreKeyBundleRequest(identity: username));
+    setState(() {
+      registered = true;
+    });
   }
 
   @override
