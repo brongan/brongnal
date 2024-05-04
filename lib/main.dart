@@ -1,8 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'conversation_list.dart';
-import 'util.dart';
+import 'package:brongnal_app/generated/service.pbgrpc.dart';
+import 'package:flutter/material.dart';
+import 'package:grpc/grpc.dart';
+import 'package:provider/provider.dart';
 import 'theme.dart';
+import 'util.dart';
 
 void main() {
   runApp(const BrongnalApp());
@@ -44,7 +46,26 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  String selectedPage = '';
+  String name = "Brennan";
+  String username = "brongan.69";
+  late ClientChannel _channel;
+  late BrongnalClient _stub;
+
+  @override
+  void initState() {
+    super.initState();
+    _channel = ClientChannel('signal.brongan.com',
+        port: 443,
+        options:
+            const ChannelOptions(credentials: ChannelCredentials.secure()));
+    _stub = BrongnalClient(_channel,
+        options: CallOptions(timeout: const Duration(seconds: 30)));
+  }
+
+  void _register() async {
+    await _stub
+        .registerPreKeyBundle(RegisterPreKeyBundleRequest(identity: username));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,8 +122,8 @@ class _HomePageState extends State<HomePage> {
                   backgroundColor: randomColor(),
                   child: const Text('BR', style: TextStyle(fontSize: 24)),
                 ),
-                name: "Brennan",
-                username: "brongan.69",
+                name: name,
+                username: username,
               )
             ]),
           ),
@@ -110,18 +131,22 @@ class _HomePageState extends State<HomePage> {
             leading: const Icon(Icons.account_circle),
             title: const Text('Account'),
             onTap: () {
-              setState(() {
-                selectedPage = 'Account';
-              });
+              Navigator.push(context, MaterialPageRoute<void>(
+                builder: (BuildContext context) {
+                  return const Scaffold(body: Text("TODO"));
+                },
+              ));
             },
           ),
           ListTile(
             leading: const Icon(Icons.message),
             title: const Text('Appearance'),
             onTap: () {
-              setState(() {
-                selectedPage = 'Appearance';
-              });
+              Navigator.push(context, MaterialPageRoute<void>(
+                builder: (BuildContext context) {
+                  return const Scaffold(body: Text("TODO"));
+                },
+              ));
             },
           ),
         ],
