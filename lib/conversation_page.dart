@@ -104,7 +104,7 @@ class Message extends StatelessWidget {
 enum ConversationPopupItem { search }
 
 AppBar getConversationAppBar(BuildContext context, String name) {
-  final theme = Theme.of(context);
+  final theme = AppBarTheme.of(context);
   return AppBar(
     title: Row(
       children: [
@@ -118,7 +118,8 @@ AppBar getConversationAppBar(BuildContext context, String name) {
         Expanded(
             child: Row(
           children: [
-            Text(name, overflow: TextOverflow.fade),
+            Text(name,
+                overflow: TextOverflow.fade, style: theme.titleTextStyle),
           ],
         )),
         const Icon(
@@ -126,8 +127,7 @@ AppBar getConversationAppBar(BuildContext context, String name) {
         ),
       ],
     ),
-    foregroundColor: textColor,
-    backgroundColor: theme.colorScheme.background,
+    backgroundColor: theme.backgroundColor,
     actions: <Widget>[
       const StubIconButton(icon: Icons.videocam_outlined, name: 'Video Call'),
       const StubIconButton(icon: Icons.phone_outlined, name: 'Call'),
