@@ -29,9 +29,10 @@ class ConversationPage extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               itemBuilder: (context, index) {
+                final start = random.nextInt(lastMessage.length);
+                final end = random.nextInt(lastMessage.length - start) + start;
                 return Message(
-                  message:
-                      lastMessage.substring(random.nextInt(lastMessage.length)),
+                  message: lastMessage.substring(start, end),
                   time: DateTime.now(),
                   sender: random.nextBool() ? Sender.other : Sender.self,
                 );
@@ -67,34 +68,39 @@ class Message extends StatelessWidget {
       leftPadding = 36;
       rightPadding = 14;
       bubbleColor = Colors.indigoAccent.shade400;
-      alignment = Alignment.topRight;
+      alignment = Alignment.centerRight;
     } else {
       leftPadding = 14;
       rightPadding = 36;
       bubbleColor = Colors.grey.shade800;
-      alignment = Alignment.topLeft;
+      alignment = Alignment.centerLeft;
     }
-    return Container(
-      margin: EdgeInsets.only(
-          left: leftPadding, right: rightPadding, top: 10, bottom: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: bubbleColor,
-      ),
-      padding: const EdgeInsets.all(16),
-      child: RichText(
-        text: TextSpan(
-          text: message,
-          style: theme.textTheme.bodySmall!.copyWith(
-            color: Colors.white,
-            fontSize: 24,
-          ),
-          children: [
-            TextSpan(
-              text: DateFormat.jm().format(time),
-              style: theme.textTheme.bodySmall,
+    return Align(
+      alignment: alignment,
+      child: Container(
+        margin: EdgeInsets.only(
+            left: leftPadding, right: rightPadding, top: 10, bottom: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: bubbleColor,
+        ),
+        padding: const EdgeInsets.all(16),
+        child: RichText(
+          textAlign: TextAlign.left,
+          text: TextSpan(
+            text: message,
+            style: theme.textTheme.bodySmall!.copyWith(
+              color: Colors.white,
+              fontSize: 24,
             ),
-          ],
+            children: [
+              const TextSpan(text: ' '),
+              TextSpan(
+                text: DateFormat.jm().format(time),
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
         ),
       ),
     );
