@@ -67,6 +67,7 @@ class _HomePageState extends State<HomePage> {
             const ChannelOptions(credentials: ChannelCredentials.secure()));
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       TextEditingController usernameInput = TextEditingController();
       final registrationInfo = await showDialog(
@@ -76,6 +77,7 @@ class _HomePageState extends State<HomePage> {
           child: AlertDialog(
             title: const Text('Register'),
             insetPadding: const EdgeInsets.all(20),
+            backgroundColor: backgroundColor,
             contentPadding: const EdgeInsets.all(0),
             content: Padding(
               padding: const EdgeInsets.all(20.0),
@@ -86,13 +88,7 @@ class _HomePageState extends State<HomePage> {
             ),
             actions: <Widget>[
               ElevatedButton(
-                child: const Text('CANCEL'),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ElevatedButton(
-                child: const Text('OK'),
+                child: const Text('OK', style: conversationNameStyle),
                 onPressed: () {
                   Navigator.pop(context, usernameInput.text);
                 },
@@ -112,20 +108,21 @@ class _HomePageState extends State<HomePage> {
     if (destination == SelectedDestination.chats) {
       body = const ConversationsList();
     } else {
-      body = const Text("TODO");
+      body = Text("TODO", style: theme.textTheme.bodyMedium);
     }
 
     return Scaffold(
         appBar: getHomeAppBar(context),
-        drawer: getHomeDrawer(theme),
+        drawer: getHomeDrawer(context),
         backgroundColor: theme.colorScheme.background,
         body: body,
         floatingActionButton: const BrongnalFloatingActionButtons(),
         bottomNavigationBar: NavigationBar(
           backgroundColor: theme.navigationBarTheme.backgroundColor,
+          indicatorColor: theme.navigationBarTheme.indicatorColor,
           destinations: const [
             NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline_outlined),
+              icon: Icon(Icons.chat_bubble),
               label: 'Chats',
             ),
             NavigationDestination(
@@ -164,14 +161,15 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Drawer getHomeDrawer(ThemeData theme) {
+  Drawer getHomeDrawer(BuildContext context) {
+    final theme = DrawerTheme.of(context);
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: <Widget>[
           DrawerHeader(
             decoration: BoxDecoration(
-              color: theme.colorScheme.background,
+              color: theme.backgroundColor,
             ),
             child: Column(children: [
               const Text(
@@ -224,9 +222,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   AppBar getHomeAppBar(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = AppBarTheme.of(context);
     return AppBar(
-      title: const Text('Brongnal'),
+      title: Text('Brongnal', style: theme.titleTextStyle),
       leading: Builder(
         builder: (BuildContext context) {
           return IconButton(
@@ -245,12 +243,12 @@ class _HomePageState extends State<HomePage> {
           );
         },
       ),
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: theme.backgroundColor,
       actions: <Widget>[
         const StubIconButton(icon: Icons.search_outlined, name: 'Search'),
         PopupMenuButton<HomepagePopupItem>(
           onSelected: (HomepagePopupItem item) {},
-          iconColor: textColor,
+          iconColor: theme.foregroundColor,
           iconSize: 24,
           itemBuilder: (BuildContext context) =>
               <PopupMenuEntry<HomepagePopupItem>>[
