@@ -45,7 +45,13 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
+enum SelectedDestination {
+  chats,
+  calls,
+}
+
 class _HomePageState extends State<HomePage> {
+  SelectedDestination destination = SelectedDestination.chats;
   String name = "Brennan";
   String username = "brongan.69";
   bool registered = false;
@@ -81,6 +87,51 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final Widget body;
+    if (destination == SelectedDestination.chats) {
+      body = const ConversationsList();
+    } else {
+      body = const Text("TODO");
+    }
+
+    return Scaffold(
+      appBar: getHomeAppBar(context),
+      drawer: getHomeDrawer(theme),
+      backgroundColor: theme.colorScheme.background,
+      body: body,
+      floatingActionButton: const BrongnalFloatingActionButtons(),
+      bottomNavigationBar: () {
+        final theme = Theme.of(context);
+        return NavigationBar(
+          backgroundColor: theme.navigationBarTheme.backgroundColor,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline_outlined),
+              label: 'Chats',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.call_outlined),
+              label: 'Calls',
+            ),
+          ],
+          selectedIndex: destination.index,
+          onDestinationSelected: (int index) {
+            setState(() {
+              if (index == 1) {
+                destination = SelectedDestination.calls;
+              } else {
+                destination = SelectedDestination.chats;
+              }
+            });
+          },
+        );
+      }(),
+    );
+  }
+
   void _register() async {
     if (!registered) {
       return;
@@ -90,40 +141,6 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       registered = true;
     });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: getHomeAppBar(context),
-      drawer: getHomeDrawer(theme),
-      backgroundColor: theme.colorScheme.background,
-      body: const ConversationsList(),
-      floatingActionButton: const BrongnalFloatingActionButtons(),
-      bottomNavigationBar: getBottomNavBar(),
-    );
-  }
-
-  BottomNavigationBar getBottomNavBar() {
-    final theme = Theme.of(context);
-    return BottomNavigationBar(
-      backgroundColor: theme.navigationBarTheme.backgroundColor,
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.chat_bubble_outline_outlined),
-          label: 'Chats',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.call_outlined),
-          label: 'Calls',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.web_stories_outlined),
-          label: 'Stories',
-        ),
-      ],
-    );
   }
 
   Drawer getHomeDrawer(ThemeData theme) {
