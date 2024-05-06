@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'theme.dart';
 import 'util.dart';
 
 enum Sender {
@@ -22,6 +21,7 @@ class ConversationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final random = math.Random();
+    TextEditingController messageInput = TextEditingController();
     return Scaffold(
       appBar: getConversationAppBar(context, name),
       body: Column(
@@ -39,7 +39,28 @@ class ConversationPage extends StatelessWidget {
               },
             ),
           ),
-          const Text("hello"),
+          Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: TextField(
+                    controller: messageInput,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                      hintText: "Brongnal message",
+                      suffixIcon: const StubIconButton(
+                          icon: Icons.photo_camera_outlined,
+                          name: "Send a picture."),
+                    ),
+                  ),
+                ),
+              ),
+              const StubIconButton(
+                  icon: Icons.add_circle, name: "Add an attachment."),
+            ],
+          )
         ],
       ),
     );
