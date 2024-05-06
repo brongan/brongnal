@@ -68,22 +68,40 @@ class _HomePageState extends State<HomePage> {
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await showDialog(
+      TextEditingController usernameInput = TextEditingController();
+      final registrationInfo = await showDialog(
         context: context,
+        barrierDismissible: false,
         builder: (BuildContext context) => Center(
           child: AlertDialog(
+            title: const Text('Register'),
             insetPadding: const EdgeInsets.all(20),
             contentPadding: const EdgeInsets.all(0),
-            content: SizedBox(
-              height: 200,
-              width: MediaQuery.of(context).size.width,
-              child: const Center(
-                child: Text("Alert dialog in app start up"),
+            content: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: TextField(
+                controller: usernameInput,
+                decoration: const InputDecoration(hintText: "name"),
               ),
             ),
+            actions: <Widget>[
+              ElevatedButton(
+                child: const Text('CANCEL'),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ElevatedButton(
+                child: const Text('OK'),
+                onPressed: () {
+                  Navigator.pop(context, usernameInput.text);
+                },
+              ),
+            ],
           ),
         ),
       );
+      _register(registrationInfo);
     });
   }
 
@@ -98,14 +116,12 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Scaffold(
-      appBar: getHomeAppBar(context),
-      drawer: getHomeDrawer(theme),
-      backgroundColor: theme.colorScheme.background,
-      body: body,
-      floatingActionButton: const BrongnalFloatingActionButtons(),
-      bottomNavigationBar: () {
-        final theme = Theme.of(context);
-        return NavigationBar(
+        appBar: getHomeAppBar(context),
+        drawer: getHomeDrawer(theme),
+        backgroundColor: theme.colorScheme.background,
+        body: body,
+        floatingActionButton: const BrongnalFloatingActionButtons(),
+        bottomNavigationBar: NavigationBar(
           backgroundColor: theme.navigationBarTheme.backgroundColor,
           destinations: const [
             NavigationDestination(
@@ -127,19 +143,24 @@ class _HomePageState extends State<HomePage> {
               }
             });
           },
-        );
-      }(),
-    );
+        ));
   }
 
-  void _register() async {
-    if (!registered) {
+  void _register(String name) async {
+    if (registered) {
       return;
     }
-    await _stub
-        .registerPreKeyBundle(RegisterPreKeyBundleRequest(identity: username));
+    try {
+      final _ = await _stub.registerPreKeyBundle(
+          RegisterPreKeyBundleRequest(identity: name),
+          options: CallOptions(timeout: const Duration(seconds: 5)));
+    } catch (e) {
+      print('Caught error: $e');
+    }
     setState(() {
       registered = true;
+      name = name;
+      username = "${name.toLowerCase()}.69";
     });
   }
 
@@ -175,7 +196,11 @@ class _HomePageState extends State<HomePage> {
             onTap: () {
               Navigator.push(context, MaterialPageRoute<void>(
                 builder: (BuildContext context) {
-                  return const Scaffold(body: Text("TODO"));
+                  return Scaffold(
+                      appBar: AppBar(
+                        title: const Text("Account"),
+                      ),
+                      body: const Text("TODO"));
                 },
               ));
             },
@@ -186,7 +211,9 @@ class _HomePageState extends State<HomePage> {
             onTap: () {
               Navigator.push(context, MaterialPageRoute<void>(
                 builder: (BuildContext context) {
-                  return const Scaffold(body: Text("TODO"));
+                  return Scaffold(
+                      appBar: AppBar(title: const Text("Appearance")),
+                      body: const Text("TODO"));
                 },
               ));
             },
