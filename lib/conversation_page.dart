@@ -24,14 +24,22 @@ class ConversationPage extends StatelessWidget {
     final random = math.Random();
     return Scaffold(
       appBar: getConversationAppBar(context, name),
-      body: ListView.builder(
-        itemBuilder: (context, index) {
-          return Message(
-            message: lastMessage.substring(random.nextInt(lastMessage.length)),
-            time: DateTime.now(),
-            sender: random.nextBool() ? Sender.other : Sender.self,
-          );
-        },
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              itemBuilder: (context, index) {
+                return Message(
+                  message:
+                      lastMessage.substring(random.nextInt(lastMessage.length)),
+                  time: DateTime.now(),
+                  sender: random.nextBool() ? Sender.other : Sender.self,
+                );
+              },
+            ),
+          ),
+          const Text("hello"),
+        ],
       ),
     );
   }
@@ -67,34 +75,26 @@ class Message extends StatelessWidget {
       alignment = Alignment.topLeft;
     }
     return Container(
-      padding: EdgeInsets.only(
+      margin: EdgeInsets.only(
           left: leftPadding, right: rightPadding, top: 10, bottom: 10),
-      child: Align(
-        alignment: alignment,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: bubbleColor,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: bubbleColor,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: RichText(
+        text: TextSpan(
+          text: message,
+          style: theme.textTheme.bodySmall!.copyWith(
+            color: Colors.white,
+            fontSize: 24,
           ),
-          padding: const EdgeInsets.all(16),
-          child: OverflowBar(
-            children: [
-              Text(
-                message,
-                style: theme.textTheme.bodySmall!.copyWith(
-                  color: Colors.white,
-                ),
-              ),
-              Align(
-                alignment: Alignment.topRight,
-                child: Text(
-                  DateFormat.jm().format(time),
-                  textAlign: TextAlign.right,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
+          children: [
+            TextSpan(
+              text: DateFormat.jm().format(time),
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ),
       ),
     );
@@ -119,7 +119,11 @@ AppBar getConversationAppBar(BuildContext context, String name) {
             child: Row(
           children: [
             Text(name,
-                overflow: TextOverflow.fade, style: theme.titleTextStyle),
+                overflow: TextOverflow.fade,
+                style: theme.titleTextStyle!.copyWith(
+                  fontSize: 30,
+                  color: Colors.white,
+                )),
           ],
         )),
         const Icon(
@@ -127,6 +131,7 @@ AppBar getConversationAppBar(BuildContext context, String name) {
         ),
       ],
     ),
+    toolbarHeight: theme.toolbarHeight,
     backgroundColor: theme.backgroundColor,
     actions: <Widget>[
       const StubIconButton(icon: Icons.videocam_outlined, name: 'Video Call'),

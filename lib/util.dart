@@ -23,7 +23,7 @@ class StubIconButton extends StatelessWidget {
       icon: Icon(
         icon,
         color: textColor,
-        size: 36,
+        size: appbarIconThemeSize,
       ),
       tooltip: name,
       onPressed: () {

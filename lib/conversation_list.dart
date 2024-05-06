@@ -26,6 +26,7 @@ class ConversationsList extends StatelessWidget {
       return Conversation(
         avatar: CircleAvatar(
           backgroundColor: randomColor(),
+          radius: 36,
           child: Text(name.substring(0, 2)),
         ),
         name: name,
@@ -71,7 +72,7 @@ class Conversation extends StatelessWidget {
     var readIcon = Icon(
       getIcon(messageState),
       color: textColor,
-      size: 14,
+      size: 18,
     );
     return TextButton(
       onPressed: () {
@@ -83,11 +84,10 @@ class Conversation extends StatelessWidget {
       },
       onLongPress: null,
       child: SizedBox(
-        height: 76,
         child: Row(
           children: [
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(24.0),
               child: avatar,
             ),
             Expanded(

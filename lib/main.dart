@@ -21,6 +21,7 @@ class BrongnalApp extends StatelessWidget {
       create: (context) => BrongnalAppState(),
       child: MaterialApp(
         title: 'Brongnal',
+        debugShowCheckedModeBanner: false,
         darkTheme: bronganlDarkTheme,
         themeMode: ThemeMode.dark,
         home: const HomePage(),
@@ -48,6 +49,7 @@ class HomePage extends StatefulWidget {
 enum SelectedDestination {
   chats,
   calls,
+  stories,
 }
 
 class _HomePageState extends State<HomePage> {
@@ -116,18 +118,30 @@ class _HomePageState extends State<HomePage> {
         drawer: getHomeDrawer(context),
         backgroundColor: theme.colorScheme.background,
         body: body,
-        floatingActionButton: const BrongnalFloatingActionButtons(),
+        floatingActionButton:
+            BrongnalFloatingActionButtons(destination: destination),
         bottomNavigationBar: NavigationBar(
-          backgroundColor: theme.navigationBarTheme.backgroundColor,
+          backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
           indicatorColor: theme.navigationBarTheme.indicatorColor,
-          destinations: const [
+          height: 150,
+          animationDuration: const Duration(milliseconds: 1000),
+          destinations: [
             NavigationDestination(
-              icon: Icon(Icons.chat_bubble),
+              icon: Icon(Icons.chat_bubble_outline_outlined,
+                  size: theme.iconTheme.size),
+              selectedIcon: Icon(Icons.chat_bubble, size: theme.iconTheme.size),
               label: 'Chats',
             ),
             NavigationDestination(
-              icon: Icon(Icons.call_outlined),
+              icon: Icon(Icons.call_outlined, size: theme.iconTheme.size),
+              selectedIcon: Icon(Icons.call, size: theme.iconTheme.size),
               label: 'Calls',
+            ),
+            NavigationDestination(
+              icon:
+                  Icon(Icons.amp_stories_outlined, size: theme.iconTheme.size),
+              selectedIcon: Icon(Icons.amp_stories, size: theme.iconTheme.size),
+              label: 'Stories',
             ),
           ],
           selectedIndex: destination.index,
@@ -135,6 +149,8 @@ class _HomePageState extends State<HomePage> {
             setState(() {
               if (index == 1) {
                 destination = SelectedDestination.calls;
+              } else if (index == 2) {
+                destination = SelectedDestination.stories;
               } else {
                 destination = SelectedDestination.chats;
               }
@@ -225,11 +241,12 @@ class _HomePageState extends State<HomePage> {
     final theme = AppBarTheme.of(context);
     return AppBar(
       title: Text('Brongnal', style: theme.titleTextStyle),
+      toolbarHeight: theme.toolbarHeight,
       leading: Builder(
         builder: (BuildContext context) {
           return IconButton(
             icon: CircleAvatar(
-              radius: 16,
+              radius: 20,
               backgroundColor: randomColor(),
               child: const Text(
                 'BR',
@@ -249,7 +266,7 @@ class _HomePageState extends State<HomePage> {
         PopupMenuButton<HomepagePopupItem>(
           onSelected: (HomepagePopupItem item) {},
           iconColor: theme.foregroundColor,
-          iconSize: 24,
+          iconSize: appbarIconThemeSize,
           itemBuilder: (BuildContext context) =>
               <PopupMenuEntry<HomepagePopupItem>>[
             const PopupMenuItem<HomepagePopupItem>(
@@ -326,9 +343,8 @@ class AccountInfo extends StatelessWidget {
 }
 
 class BrongnalFloatingActionButtons extends StatelessWidget {
-  const BrongnalFloatingActionButtons({
-    super.key,
-  });
+  final SelectedDestination destination;
+  const BrongnalFloatingActionButtons({super.key, required this.destination});
 
   @override
   Widget build(BuildContext context) {
@@ -337,20 +353,22 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: FloatingActionButton(
+          child: FloatingActionButton.large(
             backgroundColor: const Color.fromRGBO(47, 49, 51, 1.0),
             onPressed: () {},
             heroTag: "btn1",
-            child: const Icon(Icons.photo_camera_outlined, color: textColor),
+            child: const Icon(Icons.photo_camera_outlined,
+                color: textColor, size: 40),
           ),
         ),
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: FloatingActionButton(
+          child: FloatingActionButton.large(
               backgroundColor: const Color.fromRGBO(70, 75, 92, 1.0),
               onPressed: () {},
               heroTag: "btn2",
-              child: const Icon(Icons.create_outlined, color: textColor)),
+              child: const Icon(Icons.create_outlined,
+                  color: textColor, size: 40)),
         ),
       ],
     );
