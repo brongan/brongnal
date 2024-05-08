@@ -196,7 +196,7 @@ class _HomePageState extends State<HomePage> {
               ),
               AccountInfo(
                 avatar: CircleAvatar(
-                  backgroundColor: randomColor(),
+                  backgroundColor: AppBarTheme.of(context).foregroundColor,
                   child: const Text('BR', style: TextStyle(fontSize: 24)),
                 ),
                 name: name,
@@ -247,7 +247,7 @@ class _HomePageState extends State<HomePage> {
           return IconButton(
             icon: CircleAvatar(
               radius: 20,
-              backgroundColor: randomColor(),
+              backgroundColor: theme.foregroundColor,
               child: const Text(
                 'BR',
                 style: TextStyle(fontSize: 16),
