@@ -21,7 +21,6 @@ class Chat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final random = math.Random();
-    TextEditingController messageInput = TextEditingController();
     return Scaffold(
       appBar: getConversationAppBar(context, name),
       body: Column(
@@ -39,30 +38,43 @@ class Chat extends StatelessWidget {
               },
             ),
           ),
-          Row(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: TextField(
-                    controller: messageInput,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20)),
-                      hintText: "Brongnal message",
-                      suffixIcon: const StubIconButton(
-                          icon: Icons.photo_camera_outlined,
-                          name: "Send a picture."),
-                    ),
-                  ),
-                ),
-              ),
-              const StubIconButton(
-                  icon: Icons.add_circle, name: "Add an attachment."),
-            ],
-          )
+          const SendMessageWidget()
         ],
       ),
+    );
+  }
+}
+
+class SendMessageWidget extends StatelessWidget {
+  const SendMessageWidget({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    TextEditingController messageInput = TextEditingController();
+    return Row(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: messageInput,
+              decoration: InputDecoration(
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
+                hintText: "Brongnal message",
+                suffixIcon: const StubIconButton(
+                  icon: Icons.photo_camera_outlined,
+                  name: "Send a picture.",
+                ),
+              ),
+            ),
+          ),
+        ),
+        const StubIconButton(
+            icon: Icons.add_circle, name: "Add an attachment."),
+      ],
     );
   }
 }

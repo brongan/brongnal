@@ -12,13 +12,13 @@ enum HomepagePopupItem {
   settings,
 }
 
-class HomePage extends StatefulWidget {
-  const HomePage({
+class Home extends StatefulWidget {
+  const Home({
     super.key,
   });
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<Home> createState() => _HomeState();
 }
 
 enum SelectedDestination {
@@ -27,7 +27,7 @@ enum SelectedDestination {
   stories,
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomeState extends State<Home> {
   SelectedDestination destination = SelectedDestination.chats;
   String name = "Brennan";
   String username = "brongan.69";
@@ -83,7 +83,7 @@ class _HomePageState extends State<HomePage> {
     final theme = Theme.of(context);
     final Widget body;
     if (destination == SelectedDestination.chats) {
-      body = const ConversationsList();
+      body = const Conversations();
     } else {
       body = Text("TODO", style: theme.textTheme.bodyMedium);
     }

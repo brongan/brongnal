@@ -12,8 +12,8 @@ enum MessageState {
   read,
 }
 
-class ConversationsList extends StatelessWidget {
-  const ConversationsList({
+class Conversations extends StatelessWidget {
+  const Conversations({
     super.key,
   });
 
