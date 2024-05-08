@@ -1,5 +1,5 @@
 import 'package:brongnal_app/common/theme.dart';
-import 'package:brongnal_app/screens/home_page.dart';
+import 'package:brongnal_app/screens/home.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -18,7 +18,7 @@ class BrongnalApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       darkTheme: bronganlDarkTheme,
       themeMode: ThemeMode.dark,
-      home: const HomePage(),
+      home: const Home(),
     );
   }
 }
