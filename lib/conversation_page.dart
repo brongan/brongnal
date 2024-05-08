@@ -142,20 +142,14 @@ AppBar getConversationAppBar(BuildContext context, String name) {
             child: Text(name.substring(0, 2)),
           ),
         ),
-        Expanded(
-            child: Row(
-          children: [
-            Text(name,
+        Flexible(
+            child: Text(name,
                 overflow: TextOverflow.fade,
                 style: theme.titleTextStyle!.copyWith(
                   fontSize: 30,
                   color: Colors.white,
-                )),
-          ],
-        )),
-        const Icon(
-          Icons.account_circle,
-        ),
+                ))),
+        const Icon(Icons.account_circle, size: 30),
       ],
     ),
     toolbarHeight: theme.toolbarHeight,
