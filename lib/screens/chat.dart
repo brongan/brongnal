@@ -1,15 +1,15 @@
 import 'dart:math' as math;
+import 'package:brongnal_app/common/util.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'util.dart';
 
 enum Sender {
   other,
   self,
 }
 
-class ConversationPage extends StatelessWidget {
-  const ConversationPage({
+class Chat extends StatelessWidget {
+  const Chat({
     super.key,
     required this.name,
     required this.lastMessage,
