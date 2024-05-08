@@ -138,7 +138,7 @@ AppBar getConversationAppBar(BuildContext context, String name) {
         Padding(
           padding: const EdgeInsets.only(right: 16.0),
           child: CircleAvatar(
-            backgroundColor: randomColor(),
+            backgroundColor: theme.foregroundColor,
             child: Text(name.substring(0, 2)),
           ),
         ),

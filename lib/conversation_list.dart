@@ -1,6 +1,5 @@
 import 'package:random_name_generator/random_name_generator.dart';
 import 'package:flutter/material.dart';
-import 'util.dart';
 import 'conversation_page.dart';
 import 'theme.dart';
 
@@ -25,7 +24,7 @@ class ConversationsList extends StatelessWidget {
       final name = randomNames.fullName();
       return Conversation(
         avatar: CircleAvatar(
-          backgroundColor: randomColor(),
+          backgroundColor: Colors.primaries[index % Colors.primaries.length],
           radius: 36,
           child: Text(name.substring(0, 2)),
         ),

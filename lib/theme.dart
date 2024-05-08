@@ -23,7 +23,7 @@ const conversationMessageStyle = TextStyle(
 ThemeData bronganlDarkTheme = ThemeData(
   useMaterial3: true,
   colorScheme: ColorScheme.fromSeed(
-    seedColor: Colors.deepPurple,
+    seedColor: Colors.deepOrange,
     brightness: Brightness.dark,
   ).copyWith(background: backgroundColor),
   dialogBackgroundColor: backgroundColor,
