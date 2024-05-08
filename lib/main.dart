@@ -1,10 +1,10 @@
-import 'conversation_list.dart';
+import 'package:brongnal_app/common/theme.dart';
+import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
+import 'package:brongnal_app/screens/conversations.dart';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 import 'package:provider/provider.dart';
-import 'theme.dart';
-import 'util.dart';
 
 void main() {
   runApp(const BrongnalApp());

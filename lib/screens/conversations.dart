@@ -1,7 +1,7 @@
+import 'package:brongnal_app/common/theme.dart';
+import 'package:brongnal_app/screens/chat.dart';
 import 'package:random_name_generator/random_name_generator.dart';
 import 'package:flutter/material.dart';
-import 'conversation_page.dart';
-import 'theme.dart';
 
 const String loremIpsum =
     'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
@@ -77,7 +77,7 @@ class Conversation extends StatelessWidget {
       onPressed: () {
         Navigator.push(context, MaterialPageRoute<void>(
           builder: (BuildContext context) {
-            return ConversationPage(name: name, lastMessage: lastMessage);
+            return Chat(name: name, lastMessage: lastMessage);
           },
         ));
       },
