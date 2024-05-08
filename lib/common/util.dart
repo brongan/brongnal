@@ -20,8 +20,9 @@ class StubIconButton extends StatelessWidget {
       ),
       tooltip: name,
       onPressed: () {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(name)));
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.removeCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(content: Text(name)));
       },
     );
   }
