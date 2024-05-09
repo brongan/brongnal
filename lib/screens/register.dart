@@ -18,11 +18,12 @@ class Register extends StatelessWidget {
     final theme = Theme.of(context);
     TextEditingController usernameInput = TextEditingController();
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: theme.colorScheme.background,
       body: Center(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Register'),
+            Text('Connect with Brongnal', style: theme.textTheme.displayMedium),
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: TextField(
@@ -31,19 +32,24 @@ class Register extends StatelessWidget {
               ),
             ),
             ElevatedButton(
-              child: const Text('OK', style: conversationNameStyle),
-              onPressed: () {
+              child: const Text('Register', style: conversationNameStyle),
+              onPressed: () async {
                 final name = usernameInput.text;
                 try {
-                  final _ = stub.registerPreKeyBundle(
+                  final _ = await stub.registerPreKeyBundle(
                       RegisterPreKeyBundleRequest(identity: name),
                       options:
                           CallOptions(timeout: const Duration(seconds: 5)));
                   onRegisterSuccess(name);
                 } catch (e) {
+                  // TODO Log this error.
+                  if (!context.mounted) return;
+
                   final messenger = ScaffoldMessenger.of(context);
                   messenger.removeCurrentSnackBar();
-                  messenger.showSnackBar(SnackBar(content: Text(name)));
+                  messenger.showSnackBar(SnackBar(
+                      content: Text(
+                          "Failed to register \"$name\" at signal.brongan.com.")));
                 } // Register
               },
             ),
