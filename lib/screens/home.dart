@@ -30,7 +30,7 @@ enum SelectedDestination {
 
 class _HomeState extends State<Home> {
   SelectedDestination destination = SelectedDestination.chats;
-  String? name = "Brennan";
+  String? name;
   late ClientChannel _channel;
   late BrongnalClient _stub;
 
