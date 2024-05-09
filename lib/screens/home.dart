@@ -2,6 +2,7 @@ import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/screens/conversations.dart';
+import 'package:brongnal_app/screens/register.dart';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 
@@ -29,11 +30,15 @@ enum SelectedDestination {
 
 class _HomeState extends State<Home> {
   SelectedDestination destination = SelectedDestination.chats;
-  String name = "Brennan";
-  String username = "brongan.69";
-  bool registered = false;
+  String? name = "Brennan";
   late ClientChannel _channel;
   late BrongnalClient _stub;
+
+  void _onRegisterSuccess(String name) {
+    setState(() {
+      this.name = name;
+    });
+  }
 
   @override
   void initState() {
@@ -44,38 +49,6 @@ class _HomeState extends State<Home> {
             const ChannelOptions(credentials: ChannelCredentials.secure()));
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      TextEditingController usernameInput = TextEditingController();
-      final registrationInfo = await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) => Center(
-          child: AlertDialog(
-            title: const Text('Register'),
-            insetPadding: const EdgeInsets.all(20),
-            backgroundColor: backgroundColor,
-            contentPadding: const EdgeInsets.all(0),
-            content: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: TextField(
-                controller: usernameInput,
-                decoration: const InputDecoration(hintText: "name"),
-              ),
-            ),
-            actions: <Widget>[
-              ElevatedButton(
-                child: const Text('OK', style: conversationNameStyle),
-                onPressed: () {
-                  Navigator.pop(context, usernameInput.text);
-                },
-              ),
-            ],
-          ),
-        ),
-      );
-      _register(registrationInfo);
-    });
   }
 
   @override
@@ -86,6 +59,10 @@ class _HomeState extends State<Home> {
       body = const Conversations();
     } else {
       body = Text("TODO", style: theme.textTheme.bodyMedium);
+    }
+
+    if (name == null) {
+      return Register(onRegisterSuccess: _onRegisterSuccess, stub: _stub);
     }
 
     return Scaffold(
@@ -134,24 +111,6 @@ class _HomeState extends State<Home> {
         ));
   }
 
-  void _register(String name) async {
-    if (registered) {
-      return;
-    }
-    try {
-      final _ = await _stub.registerPreKeyBundle(
-          RegisterPreKeyBundleRequest(identity: name),
-          options: CallOptions(timeout: const Duration(seconds: 5)));
-    } catch (e) {
-      print('Caught error: $e');
-    }
-    setState(() {
-      registered = true;
-      name = name;
-      username = "${name.toLowerCase()}.69";
-    });
-  }
-
   Drawer getHomeDrawer(BuildContext context) {
     final theme = DrawerTheme.of(context);
     return Drawer(
@@ -174,8 +133,8 @@ class _HomeState extends State<Home> {
                   backgroundColor: AppBarTheme.of(context).foregroundColor,
                   child: const Text('BR', style: TextStyle(fontSize: 24)),
                 ),
-                name: name,
-                username: username,
+                name: name!,
+                username: "${name!.toLowerCase()}.69",
               )
             ]),
           ),
@@ -317,35 +276,71 @@ class AccountInfo extends StatelessWidget {
   }
 }
 
+class BrongnalFloatingActionButton extends StatelessWidget {
+  final IconData icon;
+  final Color backgroundColor;
+  final String name;
+
+  const BrongnalFloatingActionButton({
+    super.key,
+    required this.icon,
+    required this.backgroundColor,
+    required this.name,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: FloatingActionButton.large(
+        backgroundColor: backgroundColor,
+        onPressed: () {
+          final messenger = ScaffoldMessenger.of(context);
+          messenger.removeCurrentSnackBar();
+          messenger.showSnackBar(SnackBar(content: Text("Todo: $name")));
+        },
+        heroTag: name,
+        child: Icon(icon, color: textColor, size: 40),
+      ),
+    );
+  }
+}
+
 class BrongnalFloatingActionButtons extends StatelessWidget {
   final SelectedDestination destination;
   const BrongnalFloatingActionButtons({super.key, required this.destination});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: FloatingActionButton.large(
-            backgroundColor: const Color.fromRGBO(47, 49, 51, 1.0),
-            onPressed: () {},
-            heroTag: "btn1",
-            child: const Icon(Icons.photo_camera_outlined,
-                color: textColor, size: 40),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: FloatingActionButton.large(
-              backgroundColor: const Color.fromRGBO(70, 75, 92, 1.0),
-              onPressed: () {},
-              heroTag: "btn2",
-              child: const Icon(Icons.create_outlined,
-                  color: textColor, size: 40)),
-        ),
-      ],
-    );
+    switch (destination) {
+      case SelectedDestination.chats:
+        return const Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            BrongnalFloatingActionButton(
+              icon: Icons.photo_camera_outlined,
+              backgroundColor: Color.fromRGBO(47, 49, 51, 1.0),
+              name: "Take a Photo",
+            ),
+            BrongnalFloatingActionButton(
+              icon: Icons.create_outlined,
+              backgroundColor: Color.fromRGBO(70, 75, 92, 1.0),
+              name: "Create a Message",
+            ),
+          ],
+        );
+      case SelectedDestination.calls:
+        return const BrongnalFloatingActionButton(
+          icon: Icons.add_ic_call_outlined,
+          backgroundColor: Color.fromRGBO(47, 49, 51, 1.0),
+          name: "Call",
+        );
+      case SelectedDestination.stories:
+        return const BrongnalFloatingActionButton(
+          icon: Icons.photo_camera_outlined,
+          backgroundColor: Color.fromRGBO(47, 49, 51, 1.0),
+          name: "Take a Photo",
+        );
+    }
   }
 }
