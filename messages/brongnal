@@ -1,0 +1,14 @@
+syntax = "proto3";
+package brongnal;
+
+message Register {
+	optional string name = 1;
+}
+
+// [RINF:DART-SIGNAL]
+message BrongalAction {
+	oneof action {
+		Register register = 1;
+	}
+}
+
