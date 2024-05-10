@@ -1,8 +1,10 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:flutter/material.dart';
+import './messages/generated.dart';
 
-void main() {
+void main() async {
+  await initializeRust();
   runApp(const BrongnalApp());
 }
 
