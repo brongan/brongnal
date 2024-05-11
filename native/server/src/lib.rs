@@ -1,4 +1,3 @@
-#![feature(map_try_insert)]
 use ed25519_dalek::{Signature, VerifyingKey};
 use proto::{
     brongnal_server::Brongnal, PreKeyBundle as PreKeyBundleProto, RegisterPreKeyBundleRequest,
@@ -264,7 +263,9 @@ impl Brongnal for MemoryServer {
         ))?;
 
         let mut messages = self.messages.lock().unwrap();
-        let _ = messages.try_insert(recipient_identity.clone(), Vec::new());
+        if !messages.contains_key(&recipient_identity) {
+            messages.insert(recipient_identity.clone(), Vec::new());
+        }
         messages
             .get_mut(&recipient_identity)
             .unwrap()
