@@ -1,6 +1,7 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
+import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:brongnal_app/screens/conversations.dart';
 import 'package:brongnal_app/screens/register.dart';
 import 'package:flutter/material.dart';
@@ -34,12 +35,6 @@ class _HomeState extends State<Home> {
   late ClientChannel _channel;
   late BrongnalClient _stub;
 
-  void _onRegisterSuccess(String name) {
-    setState(() {
-      this.name = name;
-    });
-  }
-
   @override
   void initState() {
     super.initState();
@@ -49,6 +44,17 @@ class _HomeState extends State<Home> {
             const ChannelOptions(credentials: ChannelCredentials.secure()));
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
+    listenForRegister();
+  }
+
+  void listenForRegister() async {
+    final stream = BrongnalResult.rustSignalStream;
+    await for (final rustSignal in stream) {
+      BrongnalResult message = rustSignal.message;
+      setState(() {
+        name = message.registeredName;
+      });
+    }
   }
 
   @override
@@ -62,7 +68,7 @@ class _HomeState extends State<Home> {
     }
 
     if (name == null) {
-      return Register(onRegisterSuccess: _onRegisterSuccess, stub: _stub);
+      return Register(stub: _stub);
     }
 
     return Scaffold(

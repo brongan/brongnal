@@ -1,3 +1,5 @@
+use client::BrongnalUser;
+use messages::brongnal::{brongnal_action::Action, BrongnalAction, BrongnalResult};
 // TODO replace with tokio;
 use tokio_with_wasm::tokio;
 
@@ -5,6 +7,24 @@ mod messages;
 
 rinf::write_interface!();
 
+async fn actions() {
+    let mut user = BrongnalUser::memory_user().await.unwrap();
+    let mut receiver = BrongnalAction::get_dart_signal_receiver();
+    while let Some(dart_signal) = receiver.recv().await {
+        let message: BrongnalAction = dart_signal.message;
+        match message.action.unwrap() {
+            Action::Register(register) => {
+                user.register(register.name()).await.unwrap();
+                BrongnalResult {
+                    registered_name: Some(register.name().to_owned()),
+                }
+                .send_signal_to_dart();
+            }
+        }
+    }
+}
+
 async fn main() {
-    // TODO tokio::spawn that processes messages from Dart.
+    tokio::spawn(actions());
+    a
 }
