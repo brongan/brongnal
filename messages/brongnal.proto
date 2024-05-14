@@ -1,0 +1,18 @@
+syntax = "proto3";
+package brongnal;
+
+message RegisterAction {
+	optional string name = 1;
+}
+
+// [RINF:DART-SIGNAL]
+message BrongnalAction {
+	oneof action {
+		RegisterAction register = 1;
+	}
+}
+
+// [RINF:RUST-SIGNAL]
+message BrongnalResult {
+	optional string registered_name = 1;
+}

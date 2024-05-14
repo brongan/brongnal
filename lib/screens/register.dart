@@ -1,16 +1,14 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
+import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:flutter/material.dart';
-import 'package:grpc/grpc.dart';
 
 class Register extends StatelessWidget {
   const Register({
     super.key,
-    required this.onRegisterSuccess,
     required this.stub,
   });
 
-  final void Function(String) onRegisterSuccess;
   final BrongnalClient stub;
 
   @override
@@ -34,23 +32,9 @@ class Register extends StatelessWidget {
             ElevatedButton(
               child: const Text('Register', style: conversationNameStyle),
               onPressed: () async {
-                final name = usernameInput.text;
-                try {
-                  final _ = await stub.registerPreKeyBundle(
-                      RegisterPreKeyBundleRequest(identity: name),
-                      options:
-                          CallOptions(timeout: const Duration(seconds: 5)));
-                  onRegisterSuccess(name);
-                } catch (e) {
-                  // TODO Log this error.
-                  if (!context.mounted) return;
-
-                  final messenger = ScaffoldMessenger.of(context);
-                  messenger.removeCurrentSnackBar();
-                  messenger.showSnackBar(SnackBar(
-                      content: Text(
-                          "Failed to register \"$name\" at signal.brongan.com.")));
-                } // Register
+                BrongnalAction(
+                        register: RegisterAction(name: usernameInput.text))
+                    .sendSignalToRust();
               },
             ),
           ],

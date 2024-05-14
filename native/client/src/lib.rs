@@ -112,7 +112,7 @@ impl X3DHClient for MemoryClient {
 
 pub struct BrongnalUser {
     stub: BrongnalClient<Channel>,
-    x3dh_client: Box<dyn X3DHClient>,
+    x3dh_client: MemoryClient,
     name: Option<String>,
 }
 
@@ -120,7 +120,7 @@ impl BrongnalUser {
     pub async fn memory_user() -> Result<Self> {
         Ok(BrongnalUser {
             stub: BrongnalClient::connect("https://signal.brongan.com:443").await?,
-            x3dh_client: Box::new(MemoryClient::new()),
+            x3dh_client: MemoryClient::new(),
             name: None,
         })
     }
