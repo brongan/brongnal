@@ -32,8 +32,7 @@ class Register extends StatelessWidget {
             ElevatedButton(
               child: const Text('Register', style: conversationNameStyle),
               onPressed: () async {
-                BrongnalAction(
-                        register: RegisterAction(name: usernameInput.text))
+                BrongnalAction(registerName: usernameInput.text)
                     .sendSignalToRust();
               },
             ),

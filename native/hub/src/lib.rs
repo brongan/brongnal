@@ -13,10 +13,10 @@ async fn actions() {
     while let Some(dart_signal) = receiver.recv().await {
         let message: BrongnalAction = dart_signal.message;
         match message.action.unwrap() {
-            Action::Register(register) => {
-                user.register(register.name()).await.unwrap();
+            Action::RegisterName(name) => {
+                user.register(&name).await.unwrap();
                 BrongnalResult {
-                    registered_name: Some(register.name().to_owned()),
+                    registered_name: Some(name),
                 }
                 .send_signal_to_dart();
             }
@@ -26,5 +26,4 @@ async fn actions() {
 
 async fn main() {
     tokio::spawn(actions());
-    a
 }

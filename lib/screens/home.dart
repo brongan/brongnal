@@ -274,7 +274,7 @@ class AccountInfo extends StatelessWidget {
           ),
           const Padding(
             padding: EdgeInsets.all(8.0),
-            child: Icon(Icons.qr_code),
+            child: StubIconButton(icon: Icons.qr_code, name: "Show QR code."),
           ),
         ],
       ),
