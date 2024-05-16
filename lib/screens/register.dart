@@ -21,16 +21,28 @@ class Register extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Connect with Brongnal', style: theme.textTheme.displayMedium),
             Padding(
               padding: const EdgeInsets.all(20.0),
-              child: TextField(
-                controller: usernameInput,
-                decoration: const InputDecoration(hintText: "name"),
+              child: Text('Connect with Brongnal',
+                  style: theme.textTheme.displayLarge),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(40.0),
+              child: SizedBox(
+                width: 550,
+                child: TextField(
+                  controller: usernameInput,
+                  decoration: const InputDecoration(
+                    labelText: "Username",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               ),
             ),
             ElevatedButton(
-              child: const Text('Register', style: conversationNameStyle),
+              child: const Text('Register',
+                  style: TextStyle(
+                      color: Colors.white, fontSize: 36, fontFamily: 'Roboto')),
               onPressed: () async {
                 BrongnalAction(registerName: usernameInput.text)
                     .sendSignalToRust();
