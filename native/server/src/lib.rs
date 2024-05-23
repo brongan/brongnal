@@ -1,5 +1,4 @@
 use ed25519_dalek::{Signature, VerifyingKey};
-use futures::channel::mpsc::Receiver;
 use proto::{
     brongnal_server::Brongnal, PreKeyBundle as PreKeyBundleProto, RegisterPreKeyBundleRequest,
     RegisterPreKeyBundleResponse, RequestPreKeysRequest, RetrieveMessagesRequest,
@@ -27,7 +26,7 @@ pub struct MemoryServer {
     current_pre_key: Arc<Mutex<HashMap<String, SignedPreKey>>>,
     one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
     messages: Arc<Mutex<HashMap<String, Vec<Message>>>>,
-    receivers: Arc<Mutex<HashMap<String, Receiver<MessageProto>>>>,
+    receivers: Arc<Mutex<HashMap<String, mpsc::Sender<Result<MessageProto, Status>>>>>,
 }
 
 impl Default for MemoryServer {
@@ -262,9 +261,24 @@ impl Brongnal for MemoryServer {
         let recipient_identity = request.recipient_identity.ok_or(Status::invalid_argument(
             "SendMessageRequest missing recipient_identity",
         ))?;
-        let message = request.message.ok_or(Status::invalid_argument(
-            "SendMessageRequest missing message.",
-        ))?;
+        let message: MessageProto = request
+            .message
+            .ok_or(Status::invalid_argument(
+                "SendMessageRequest missing message.",
+            ))?
+            .into();
+
+        let tx = self
+            .receivers
+            .lock()
+            .unwrap()
+            .get(&recipient_identity)
+            .map(|tx| tx.to_owned());
+        if let Some(tx) = tx {
+            if let Ok(()) = tx.send(Ok(message.clone())).await {
+                return Ok(Response::new(SendMessageResponse {}));
+            }
+        }
 
         let mut messages = self.messages.lock().unwrap();
         if !messages.contains_key(&recipient_identity) {
@@ -274,8 +288,7 @@ impl Brongnal for MemoryServer {
             .get_mut(&recipient_identity)
             .unwrap()
             .push(message.try_into()?);
-        let reply = SendMessageResponse {};
-        Ok(Response::new(reply))
+        Ok(Response::new(SendMessageResponse {}))
     }
 
     type RetrieveMessagesStream = ReceiverStream<Result<MessageProto, Status>>;
@@ -301,6 +314,7 @@ impl Brongnal for MemoryServer {
             // TODO handle result.
             let _ = tx.send(Ok(message.into())).await;
         }
+        self.receivers.lock().unwrap().insert(identity, tx);
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }
