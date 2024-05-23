@@ -1,75 +1,100 @@
 use anyhow::Result;
-use client::BrongnalUser;
-use nom::branch::alt;
+use client::{listen, message, register, MemoryClient};
 use nom::bytes::complete::tag;
 use nom::character::complete::{alphanumeric1, multispace1};
-use nom::combinator::map;
 use nom::sequence::preceded;
 use nom::IResult;
-use std::io::{stdin, BufRead, BufReader};
+use server::proto::brongnal_client::BrongnalClient;
+use std::io::stdin;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::sync::Arc;
+use std::{env, thread};
+use tokio::sync::{mpsc, Mutex};
 
 #[derive(Debug)]
-enum Command {
-    Register(String),
-    Message(String, String),
-    GetMessages,
-}
-
-fn parse_name(input: &str) -> IResult<&str, &str> {
-    alphanumeric1(input)
-}
-
-fn parse_register_command(input: &str) -> IResult<&str, Command> {
-    let (input, _) = preceded(tag("register"), multispace1)(input)?;
-    map(parse_name, |name| Command::Register(name.to_owned()))(input)
-}
-
-fn parse_message_command(input: &str) -> IResult<&str, Command> {
-    eprintln!("Parsing: {input}");
-    let (input, _) = preceded(tag("message"), multispace1)(input)?;
-    let (input, name) = parse_name(input)?;
-    let (message, _) = multispace1(input)?;
-    Ok((&"", Command::Message(name.to_owned(), message.to_owned())))
-}
-
-fn parse_get_messages_command(input: &str) -> IResult<&str, Command> {
-    map(tag("get_messages"), |_| Command::GetMessages)(input)
+struct Command {
+    to: String,
+    msg: String,
 }
 
 fn parse_command(input: &str) -> IResult<&str, Command> {
-    alt((
-        parse_register_command,
-        parse_message_command,
-        parse_get_messages_command,
-    ))(input)
+    let (input, _) = preceded(tag("message"), multispace1)(input)?;
+    let (input, name) = alphanumeric1(input)?;
+    let (message, _spaces) = multispace1(input)?;
+    Ok((
+        &"",
+        Command {
+            to: name.to_owned(),
+            msg: message.to_owned(),
+        },
+    ))
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut user = BrongnalUser::memory_user().await?;
+    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443").await?;
+    let name = env::args()
+        .collect::<Vec<String>>()
+        .get(1)
+        .unwrap()
+        .to_owned();
+    let client = Arc::new(Mutex::new(MemoryClient::new()));
 
-    println!(
-        r#"Commands:
-        register NAME
-        message NAME MESSAGE
-        get_messages
-        Type Control-D (on Unix) or Control-Z (on Windows)
-        to close the connection."#
-    );
+    register(&mut stub, client.clone(), name.clone()).await?;
 
-    let mut command_lines = BufReader::new(stdin()).lines();
-    while let Some(command) = command_lines.next() {
-        let command = command?;
-        let (_, command) = parse_command(&command).map_err(|e| e.to_owned())?;
-        let result: Result<()> = match &command {
-            Command::Register(name) => user.register(name).await,
-            Command::Message(name, message) => user.message(name, message).await,
-            Command::GetMessages => user.get_messages().await,
-        };
-        if let Err(e) = result {
-            eprintln!("Command {command:?} failed: {e}");
+    println!("message NAME MESSAGE");
+
+    let (tx, mut rx) = mpsc::channel(100);
+    let (cli_tx, mut cli_rx) = mpsc::unbounded_channel::<Command>();
+
+    thread::spawn(move || {
+        let mut lines = BufReader::new(stdin()).lines();
+        while let Some(line) = lines.next() {
+            let line = line.unwrap();
+            match parse_command(&line).map_err(|e| e.to_owned()) {
+                Ok((_, command)) => {
+                    if let Err(_) = cli_tx.send(command) {
+                        return;
+                    }
+                }
+                Err(e) => eprintln!("Invalid Command: {e}"),
+            }
         }
+    });
+
+    {
+        let stub = stub.clone();
+        let client = client.clone();
+        tokio::spawn(async move { listen(stub, client, name, tx) });
     }
 
-    Ok(())
+    loop {
+        tokio::select! {
+        command = cli_rx.recv() => {
+            match command {
+                Some(command) => {
+                    message(&mut stub, client.clone(), &command.to, &command.msg)
+                        .await
+                        .unwrap();
+                },
+                None => {
+                    eprintln!("Closing...");
+                    return Ok(());
+                }
+            }
+
+        },
+        msg = rx.recv() => {
+            match msg {
+                Some(msg) => {
+                    println!("{}", String::from_utf8(msg).unwrap());
+                },
+                None =>  {
+                    eprintln!("Server terminated connection."); return Ok(())
+                },
+            }
+        }
+            }
+    }
 }

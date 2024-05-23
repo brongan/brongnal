@@ -1449,6 +1449,7 @@ dependencies = [
  "protocol",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-build",
  "tonic-reflection",
