@@ -1,15 +1,17 @@
 use ed25519_dalek::{Signature, VerifyingKey};
+use futures::channel::mpsc::Receiver;
 use proto::{
     brongnal_server::Brongnal, PreKeyBundle as PreKeyBundleProto, RegisterPreKeyBundleRequest,
     RegisterPreKeyBundleResponse, RequestPreKeysRequest, RetrieveMessagesRequest,
-    RetrieveMessagesResponse, SendMessageRequest, SendMessageResponse,
-    SignedPreKey as SignedPreKeyProto, SignedPreKeys as SignedPreKeysProto,
-    X3dhMessage as MessageProto,
+    SendMessageRequest, SendMessageResponse, SignedPreKey as SignedPreKeyProto,
+    SignedPreKeys as SignedPreKeysProto, X3dhMessage as MessageProto,
 };
 use protocol::bundle::verify_bundle;
 use protocol::x3dh::{Message, PreKeyBundle, SignedPreKey, SignedPreKeys};
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
@@ -25,6 +27,7 @@ pub struct MemoryServer {
     current_pre_key: Arc<Mutex<HashMap<String, SignedPreKey>>>,
     one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
     messages: Arc<Mutex<HashMap<String, Vec<Message>>>>,
+    receivers: Arc<Mutex<HashMap<String, Receiver<MessageProto>>>>,
 }
 
 impl Default for MemoryServer {
@@ -40,6 +43,7 @@ impl MemoryServer {
             current_pre_key: Arc::new(Mutex::new(HashMap::new())),
             one_time_pre_keys: Arc::new(Mutex::new(HashMap::new())),
             messages: Arc::new(Mutex::new(HashMap::new())),
+            receivers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -274,24 +278,30 @@ impl Brongnal for MemoryServer {
         Ok(Response::new(reply))
     }
 
+    type RetrieveMessagesStream = ReceiverStream<Result<MessageProto, Status>>;
     async fn retrieve_messages(
         &self,
         request: Request<RetrieveMessagesRequest>,
-    ) -> Result<Response<RetrieveMessagesResponse>, Status> {
+    ) -> Result<Response<Self::RetrieveMessagesStream>, Status> {
         let request = request.into_inner();
         println!("Retrieving {}'s messages.", request.identity());
         let identity = request
             .identity
             .ok_or(Status::invalid_argument("request missing identity"))?;
+        let (tx, rx) = mpsc::channel(4);
+
         let messages = self
             .messages
             .lock()
             .unwrap()
             .remove(&identity)
             .unwrap_or(Vec::new());
-        let reply = RetrieveMessagesResponse {
-            messages: messages.into_iter().map(|msg| msg.into()).collect(),
-        };
-        Ok(Response::new(reply))
+
+        for message in messages {
+            // TODO handle result.
+            let _ = tx.send(Ok(message.into())).await;
+        }
+
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 }
