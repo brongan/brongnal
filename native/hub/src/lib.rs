@@ -1,4 +1,4 @@
-use messages::brongnal::{brongnal_action::Action, BrongnalAction, BrongnalResult};
+use messages::brongnal::brongnal_request::Request;
 // TODO replace with tokio;
 use tokio_with_wasm::tokio;
 
