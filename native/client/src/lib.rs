@@ -128,7 +128,6 @@ pub async fn listen(
         .await?
         .into_inner();
     get_messages(stream, x3dh_client, tx).await?;
-    println!("Streaming messages from server.");
     Ok(())
 }
 
@@ -137,7 +136,7 @@ pub async fn register(
     x3dh_client: Arc<Mutex<MemoryClient>>,
     name: String,
 ) -> Result<()> {
-    println!("Registering {name}!");
+    eprintln!("Registering {name}!");
     let request = {
         let mut x3dh_client = x3dh_client.lock().await;
         let ik = x3dh_client
@@ -155,7 +154,7 @@ pub async fn register(
         })
     };
     stub.register_pre_key_bundle(request).await?;
-    println!("Registered: {}!", name);
+    eprintln!("Registered: {}!", name);
     Ok(())
 }
 
@@ -166,7 +165,6 @@ pub async fn message(
     message: &str,
 ) -> Result<()> {
     let message = message.as_bytes();
-    println!("Messaging {name}.");
     let request = tonic::Request::new(RequestPreKeysRequest {
         identity: Some(name.to_owned()),
     });
@@ -181,7 +179,6 @@ pub async fn message(
         message: Some(message.into()),
     });
     stub.send_message(request).await?;
-    println!("Message Sent!");
     Ok(())
 }
 
@@ -214,5 +211,6 @@ pub async fn get_messages(
         )?;
         tx.send(message).await?;
     }
+    eprintln!("Server terminated message stream.");
     Ok(())
 }

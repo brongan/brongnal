@@ -219,7 +219,7 @@ impl Brongnal for MemoryServer {
         request: Request<RequestPreKeysRequest>,
     ) -> Result<Response<PreKeyBundleProto>, Status> {
         let request = request.into_inner();
-        println!("Requesting Pre Key Bundle for {}", request.identity());
+        println!("RequestingPreKey Bundle for {}", request.identity());
         let identity_key = *self
             .identity_key
             .lock()
