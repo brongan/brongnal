@@ -128,6 +128,7 @@ pub async fn listen(
         .await?
         .into_inner();
     get_messages(stream, x3dh_client, tx).await?;
+    println!("Streaming messages from server.");
     Ok(())
 }
 
@@ -184,7 +185,7 @@ pub async fn message(
     Ok(())
 }
 
-// TODO Replace with stream of decrypted messages and maybe make not member function?
+// TODO Replace with stream of decrypted messages.
 pub async fn get_messages(
     mut stream: Streaming<X3dhMessage>,
     x3dh_client: Arc<Mutex<MemoryClient>>,

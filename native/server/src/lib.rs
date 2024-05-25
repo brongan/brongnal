@@ -277,6 +277,9 @@ impl Brongnal for MemoryServer {
         if let Some(tx) = tx {
             if let Ok(()) = tx.send(Ok(message.clone())).await {
                 return Ok(Response::new(SendMessageResponse {}));
+            } else {
+                // Idk what can really be done about this race condition.
+                self.receivers.lock().unwrap().remove(&recipient_identity);
             }
         }
 

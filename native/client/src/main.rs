@@ -33,12 +33,16 @@ fn parse_command(input: &str) -> IResult<&str, Command> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443").await?;
-    let name = env::args()
-        .collect::<Vec<String>>()
-        .get(1)
-        .unwrap()
-        .to_owned();
+    let args = env::args().collect::<Vec<String>>();
+    let name = args.get(1).unwrap().to_owned();
+    let addr: String = args
+        .get(2)
+        .map(|addr| addr.to_owned())
+        .unwrap_or("https://signal.brongan.com:443".to_owned());
+
+    eprintln!("Registering {name} at {addr}");
+
+    let mut stub = BrongnalClient::connect(addr).await?;
     let client = Arc::new(Mutex::new(MemoryClient::new()));
 
     register(&mut stub, client.clone(), name.clone()).await?;
@@ -63,9 +67,11 @@ async fn main() -> Result<()> {
         }
     });
 
+    eprintln!("???");
     {
         let stub = stub.clone();
         let client = client.clone();
+        eprintln!("Spawning task to listen to messages.");
         tokio::spawn(async move { listen(stub, client, name, tx) });
     }
 
@@ -77,7 +83,7 @@ async fn main() -> Result<()> {
                     message(&mut stub, client.clone(), &command.to, &command.msg)
                         .await
                         .unwrap();
-                },
+                    },
                 None => {
                     eprintln!("Closing...");
                     return Ok(());
@@ -95,6 +101,6 @@ async fn main() -> Result<()> {
                 },
             }
         }
-            }
+        }
     }
 }
