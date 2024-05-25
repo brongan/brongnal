@@ -67,12 +67,10 @@ async fn main() -> Result<()> {
         }
     });
 
-    eprintln!("???");
     {
         let stub = stub.clone();
         let client = client.clone();
-        eprintln!("Spawning task to listen to messages.");
-        tokio::spawn(async move { listen(stub, client, name, tx) });
+        tokio::spawn(async move { listen(stub, client, name, tx).await });
     }
 
     loop {
