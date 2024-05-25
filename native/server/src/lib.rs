@@ -16,6 +16,7 @@ use x25519_dalek::PublicKey as X25519PublicKey;
 
 pub mod proto {
     tonic::include_proto!("service");
+    tonic::include_proto!("gossamer");
     pub const FILE_DESCRIPTOR_SET: &[u8] =
         tonic::include_file_descriptor_set!("service_descriptor");
 }
