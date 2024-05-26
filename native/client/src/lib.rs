@@ -2,15 +2,13 @@ use anyhow::{Context, Result};
 use chacha20poly1305::aead::OsRng;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use ed25519_dalek::SigningKey;
+use proto::service::brongnal_client::BrongnalClient;
+use proto::service::{
+    RegisterPreKeyBundleRequest, RequestPreKeysRequest, RetrieveMessagesRequest, SendMessageRequest,
+};
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
-use protocol::x3dh::{
-    x3dh_initiate_recv, x3dh_initiate_send, Message, SignedPreKey, SignedPreKeys,
-};
-use server::proto::brongnal_client::BrongnalClient;
-use server::proto::{
-    RegisterPreKeyBundleRequest, RequestPreKeysRequest, RetrieveMessagesRequest,
-    SendMessageRequest, X3dhMessage,
-};
+use protocol::x3dh;
+use server::proto;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
@@ -18,6 +16,7 @@ use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tonic::Streaming;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
+use x3dh::{initiate_recv, initiate_send, SignedPreKey, SignedPreKeys};
 
 pub trait X3DHClient {
     fn fetch_wipe_one_time_secret_key(
@@ -169,7 +168,7 @@ pub async fn message(
         identity: Some(name.to_owned()),
     });
     let response = stub.request_pre_keys(request).await?;
-    let (_sk, message) = x3dh_initiate_send(
+    let (_sk, message) = initiate_send(
         response.into_inner().try_into()?,
         &x3dh_client.lock().await.get_identity_key()?,
         message,
@@ -184,12 +183,12 @@ pub async fn message(
 
 // TODO Replace with stream of decrypted messages.
 pub async fn get_messages(
-    mut stream: Streaming<X3dhMessage>,
+    mut stream: Streaming<proto::service::Message>,
     x3dh_client: Arc<Mutex<MemoryClient>>,
     tx: Sender<Vec<u8>>,
 ) -> Result<()> {
     while let Some(message) = stream.message().await? {
-        let Message {
+        let x3dh::Message {
             sender_identity_key,
             ephemeral_key,
             otk,
@@ -201,7 +200,7 @@ pub async fn get_messages(
         } else {
             None
         };
-        let (_sk, message) = x3dh_initiate_recv(
+        let (_sk, message) = initiate_recv(
             &x3dh_client.get_identity_key()?,
             &x3dh_client.get_pre_key()?,
             &sender_identity_key,

@@ -721,6 +721,7 @@ dependencies = [
  "client",
  "prost",
  "rinf",
+ "server",
  "tokio_with_wasm",
  "wasm-bindgen",
 ]

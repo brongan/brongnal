@@ -5,7 +5,7 @@ service Brongnal {
 	rpc RegisterPreKeyBundle (RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
 	rpc RequestPreKeys (RequestPreKeysRequest) returns (PreKeyBundle);
 	rpc SendMessage (SendMessageRequest) returns (SendMessageResponse);
-	rpc RetrieveMessages (RetrieveMessagesRequest) returns (stream X3DHMessage);
+	rpc RetrieveMessages (RetrieveMessagesRequest) returns (stream Message);
 }
 
 message SignedPreKey {
@@ -38,7 +38,7 @@ message PreKeyBundle {
 	optional SignedPreKey spk = 3;
 }
 
-message X3DHMessage {
+message Message {
 	optional bytes sender_ik = 1;
 	optional bytes ephemeral_key = 2;
 	optional bytes otk = 3;
@@ -47,7 +47,7 @@ message X3DHMessage {
 
 message SendMessageRequest {
 	optional string recipient_identity = 1;
-	optional X3DHMessage message = 2;
+	optional Message message = 2;
 }
 
 message SendMessageResponse {}

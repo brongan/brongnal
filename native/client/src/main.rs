@@ -4,7 +4,7 @@ use nom::bytes::complete::tag;
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::sequence::preceded;
 use nom::IResult;
-use server::proto::brongnal_client::BrongnalClient;
+use server::proto::service::brongnal_client::BrongnalClient;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
