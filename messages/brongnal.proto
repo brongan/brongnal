@@ -12,3 +12,8 @@ message BrongnalAction {
 message BrongnalResult {
 	optional string registered_name = 1;
 }
+
+// [RINF:RUST-SIGNAL]
+message ReceivedMessage {
+	optional string message = 1;
+}

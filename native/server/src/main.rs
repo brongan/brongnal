@@ -1,7 +1,8 @@
 use crate::brongnal::InMemoryBrongnal;
 use crate::gossamer::InMemoryGossamer;
-use server::proto::gossamer_server::GossamerServer;
-use server::proto::{brongnal_server::BrongnalServer, FILE_DESCRIPTOR_SET};
+use server::proto::gossamer::gossamer_server::GossamerServer;
+use server::proto::service::brongnal_server::BrongnalServer;
+use server::proto::FILE_DESCRIPTOR_SET;
 use std::net::{IpAddr, Ipv4Addr};
 use tonic::transport::Server;
 use tonic_reflection::server::Builder;

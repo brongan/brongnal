@@ -4,7 +4,9 @@ use std::{
 };
 
 use ed25519_dalek::VerifyingKey;
-use server::proto::{gossamer_server::Gossamer, ActionRequest, ActionResponse, SignedMessage};
+use server::proto::gossamer::{
+    gossamer_server::Gossamer, ActionRequest, ActionResponse, SignedMessage,
+};
 use tonic::{Request, Response, Status};
 
 pub struct InMemoryGossamer {

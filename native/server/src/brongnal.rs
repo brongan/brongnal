@@ -1,15 +1,12 @@
 use ed25519_dalek::VerifyingKey;
+use proto::service::brongnal_server::Brongnal;
 use protocol::bundle::verify_bundle;
-use protocol::x3dh::{Message, SignedPreKey};
 use server::parse_verifying_key;
-use server::proto::{
-    brongnal_server::Brongnal, PreKeyBundle as PreKeyBundleProto, RegisterPreKeyBundleRequest,
-    RegisterPreKeyBundleResponse, RequestPreKeysRequest, RetrieveMessagesRequest,
-    SendMessageRequest, SendMessageResponse, X3dhMessage as MessageProto,
-};
+use server::proto;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -17,10 +14,10 @@ use x25519_dalek::PublicKey as X25519PublicKey;
 #[derive(Clone, Debug)]
 pub struct InMemoryBrongnal {
     identity_key: Arc<Mutex<HashMap<String, VerifyingKey>>>,
-    current_pre_key: Arc<Mutex<HashMap<String, SignedPreKey>>>,
+    current_pre_key: Arc<Mutex<HashMap<String, protocol::x3dh::SignedPreKey>>>,
     one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
-    messages: Arc<Mutex<HashMap<String, Vec<Message>>>>,
-    receivers: Arc<Mutex<HashMap<String, mpsc::Sender<Result<MessageProto, Status>>>>>,
+    messages: Arc<Mutex<HashMap<String, Vec<protocol::x3dh::Message>>>>,
+    receivers: Arc<Mutex<HashMap<String, Sender<Result<proto::service::Message, Status>>>>>,
 }
 
 impl Default for InMemoryBrongnal {
@@ -45,8 +42,8 @@ impl InMemoryBrongnal {
 impl Brongnal for InMemoryBrongnal {
     async fn register_pre_key_bundle(
         &self,
-        request: Request<RegisterPreKeyBundleRequest>,
-    ) -> Result<Response<RegisterPreKeyBundleResponse>, Status> {
+        request: Request<proto::service::RegisterPreKeyBundleRequest>,
+    ) -> Result<Response<proto::service::RegisterPreKeyBundleResponse>, Status> {
         let request = request.into_inner();
         println!("Registering PreKeyBundle for {}", request.identity());
         let identity = request
@@ -56,7 +53,7 @@ impl Brongnal for InMemoryBrongnal {
             .ik
             .ok_or(Status::invalid_argument("request missing ik"))?;
         let ik = parse_verifying_key(ik)?;
-        let spk = SignedPreKey::try_from(
+        let spk = protocol::x3dh::SignedPreKey::try_from(
             request
                 .spk
                 .ok_or(Status::invalid_argument("Request Missing SPK."))?,
@@ -69,13 +66,15 @@ impl Brongnal for InMemoryBrongnal {
             .insert(identity.clone(), ik);
         self.current_pre_key.lock().unwrap().insert(identity, spk);
         self.one_time_pre_keys.lock().unwrap().clear();
-        Ok(Response::new(RegisterPreKeyBundleResponse {}))
+        Ok(Response::new(
+            proto::service::RegisterPreKeyBundleResponse {},
+        ))
     }
 
     async fn request_pre_keys(
         &self,
-        request: Request<RequestPreKeysRequest>,
-    ) -> Result<Response<PreKeyBundleProto>, Status> {
+        request: Request<proto::service::RequestPreKeysRequest>,
+    ) -> Result<Response<proto::service::PreKeyBundle>, Status> {
         let request = request.into_inner();
         println!("RequestingPreKey Bundle for {}", request.identity());
         let identity_key = *self
@@ -102,7 +101,7 @@ impl Brongnal for InMemoryBrongnal {
             None
         };
 
-        let reply = PreKeyBundleProto {
+        let reply = proto::service::PreKeyBundle {
             identity_key: Some(identity_key.as_bytes().into()),
             otk: otk.map(|otk| otk.as_bytes().into()),
             spk: Some(spk.into()),
@@ -112,14 +111,14 @@ impl Brongnal for InMemoryBrongnal {
 
     async fn send_message(
         &self,
-        request: Request<SendMessageRequest>,
-    ) -> Result<Response<SendMessageResponse>, Status> {
+        request: Request<proto::service::SendMessageRequest>,
+    ) -> Result<Response<proto::service::SendMessageResponse>, Status> {
         let request = request.into_inner();
         println!("Sending a message to: {}", request.recipient_identity());
         let recipient_identity = request.recipient_identity.ok_or(Status::invalid_argument(
             "SendMessageRequest missing recipient_identity",
         ))?;
-        let message: MessageProto = request
+        let message: proto::service::Message = request
             .message
             .ok_or(Status::invalid_argument(
                 "SendMessageRequest missing message.",
@@ -134,7 +133,7 @@ impl Brongnal for InMemoryBrongnal {
             .map(|tx| tx.to_owned());
         if let Some(tx) = tx {
             if let Ok(()) = tx.send(Ok(message.clone())).await {
-                return Ok(Response::new(SendMessageResponse {}));
+                return Ok(Response::new(proto::service::SendMessageResponse {}));
             } else {
                 // Idk what can really be done about this race condition.
                 self.receivers.lock().unwrap().remove(&recipient_identity);
@@ -149,13 +148,13 @@ impl Brongnal for InMemoryBrongnal {
             .get_mut(&recipient_identity)
             .unwrap()
             .push(message.try_into()?);
-        Ok(Response::new(SendMessageResponse {}))
+        Ok(Response::new(proto::service::SendMessageResponse {}))
     }
 
-    type RetrieveMessagesStream = ReceiverStream<Result<MessageProto, Status>>;
+    type RetrieveMessagesStream = ReceiverStream<Result<proto::service::Message, Status>>;
     async fn retrieve_messages(
         &self,
-        request: Request<RetrieveMessagesRequest>,
+        request: Request<proto::service::RetrieveMessagesRequest>,
     ) -> Result<Response<Self::RetrieveMessagesStream>, Status> {
         let request = request.into_inner();
         println!("Retrieving {}'s messages.", request.identity());

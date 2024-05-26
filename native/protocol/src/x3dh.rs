@@ -13,6 +13,7 @@ use x25519_dalek::{
     PublicKey as X25519PublicKey, ReusableSecret as X25519ReusableSecret,
     StaticSecret as X25519StaticSecret,
 };
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKey {
     pub pre_key: X25519PublicKey,
@@ -75,7 +76,7 @@ pub enum X3DHError {
 //If the bundle does contain a one-time prekey, the calculation is modified to include an additional DH:
 //    DH4 = DH(EKA, OPKB)
 //    SK = KDF(DH1 || DH2 || DH3 || DH4)
-fn x3dh_initiate_send_get_sk(
+fn initiate_send_get_sk(
     identity_key: VerifyingKey,
     signed_pre_key: SignedPreKey,
     one_time_key: Option<X25519PublicKey>,
@@ -122,7 +123,7 @@ fn x3dh_initiate_send_get_sk(
 //    Alice's ephemeral key EKA
 //    Identifiers stating which of Bob's prekeys Alice used
 //    An initial ciphertext encrypted with some AEAD encryption scheme [4] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
-pub fn x3dh_initiate_send(
+pub fn initiate_send(
     bundle: PreKeyBundle,
     sender_key: &SigningKey,
     message: &[u8],
@@ -130,7 +131,7 @@ pub fn x3dh_initiate_send(
     let X3DHSendKeyAgreement {
         ephemeral_key,
         secret_key,
-    } = x3dh_initiate_send_get_sk(bundle.identity_key, bundle.spk, bundle.otk, sender_key)?;
+    } = initiate_send_get_sk(bundle.identity_key, bundle.spk, bundle.otk, sender_key)?;
     // Alice then calculates an "associated data" byte sequence AD that contains identity information for both parties:
     //   AD = Encode(IKA) || Encode(IKB)
     // Alice may optionally append additional information to AD, such as Alice and Bob's usernames, certificates, or other identifying information.
@@ -161,7 +162,7 @@ pub fn x3dh_initiate_send(
     ))
 }
 
-fn x3dh_initiate_recv_get_sk(
+fn initiate_recv_get_sk(
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
     otk: Option<X25519StaticSecret>,
@@ -192,7 +193,7 @@ fn x3dh_initiate_recv_get_sk(
 
 // Caller must delete sk on error.
 // otk must be wiped.
-pub fn x3dh_initiate_recv(
+pub fn initiate_recv(
     recv_identity_key: &SigningKey,
     recv_pre_key: &X25519StaticSecret,
     sender_identity_key: &VerifyingKey,
@@ -203,7 +204,7 @@ pub fn x3dh_initiate_recv(
     // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message.
     // Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
     // Using these keys, Bob repeats the DH and KDF calculations from the previous section to derive SK, and then deletes the DH values.
-    let secret_key = x3dh_initiate_recv_get_sk(
+    let secret_key = initiate_recv_get_sk(
         sender_identity_key,
         ephemeral_key,
         otk,
@@ -232,8 +233,8 @@ pub fn x3dh_initiate_recv(
 mod tests {
     use super::PreKeyBundle;
     use super::{
-        create_prekey_bundle, x3dh_initiate_recv, x3dh_initiate_recv_get_sk, x3dh_initiate_send,
-        x3dh_initiate_send_get_sk, SignedPreKey, X3DHSendKeyAgreement,
+        create_prekey_bundle, initiate_recv, initiate_recv_get_sk, initiate_send,
+        initiate_send_get_sk, SignedPreKey, X3DHSendKeyAgreement,
     };
     use anyhow::Result;
     use chacha20poly1305::aead::OsRng;
@@ -260,9 +261,9 @@ mod tests {
         let X3DHSendKeyAgreement {
             ephemeral_key,
             secret_key,
-        } = x3dh_initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, Some(otk_pub), &alice_ik)?;
+        } = initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, Some(otk_pub), &alice_ik)?;
 
-        let recv_sk = x3dh_initiate_recv_get_sk(
+        let recv_sk = initiate_recv_get_sk(
             &alice_ik.verifying_key(),
             ephemeral_key,
             Some(otk),
@@ -287,9 +288,9 @@ mod tests {
         let X3DHSendKeyAgreement {
             ephemeral_key,
             secret_key,
-        } = x3dh_initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, None, &alice_ik)?;
+        } = initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, None, &alice_ik)?;
 
-        let recv_sk = x3dh_initiate_recv_get_sk(
+        let recv_sk = initiate_recv_get_sk(
             &alice_ik.verifying_key(),
             ephemeral_key,
             None,
@@ -323,10 +324,10 @@ mod tests {
             otk: Some(bob_otk_pub),
             spk: bob_spk.clone(),
         };
-        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, plaintext.as_bytes())?;
+        let (send_sk, message) = initiate_send(bundle, &alice_ik, plaintext.as_bytes())?;
 
         // 3. Bob receives and processes Alice's initial message.
-        let (recv_sk, decrypted) = x3dh_initiate_recv(
+        let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
             &message.sender_identity_key,
@@ -358,10 +359,10 @@ mod tests {
             otk: None,
             spk: bob_spk.clone(),
         };
-        let (send_sk, message) = x3dh_initiate_send(bundle, &alice_ik, b"Hello Bob!")?;
+        let (send_sk, message) = initiate_send(bundle, &alice_ik, b"Hello Bob!")?;
 
         // 3. Bob receives and processes Alice's initial message.
-        let (recv_sk, decrypted) = x3dh_initiate_recv(
+        let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
             &message.sender_identity_key,
