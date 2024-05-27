@@ -50,12 +50,12 @@ impl Brongnal for InMemoryBrongnal {
             .identity
             .ok_or(Status::invalid_argument("request missing identity"))?;
         let ik = request
-            .ik
+            .identity_key
             .ok_or(Status::invalid_argument("request missing ik"))?;
         let ik = parse_verifying_key(ik)?;
         let spk = protocol::x3dh::SignedPreKey::try_from(
             request
-                .spk
+                .signed_pre_key
                 .ok_or(Status::invalid_argument("Request Missing SPK."))?,
         )?;
         verify_bundle(&ik, &[spk.pre_key], &spk.signature)
@@ -103,8 +103,8 @@ impl Brongnal for InMemoryBrongnal {
 
         let reply = proto::service::PreKeyBundle {
             identity_key: Some(identity_key.as_bytes().into()),
-            otk: otk.map(|otk| otk.as_bytes().into()),
-            spk: Some(spk.into()),
+            one_time_key: otk.map(|otk| otk.as_bytes().into()),
+            signed_pre_key: Some(spk.into()),
         };
         Ok(Response::new(reply))
     }

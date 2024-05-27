@@ -1,5 +1,5 @@
 use anyhow::Result;
-use client::{listen, message, register, MemoryClient};
+use client::{listen, message, register, DecryptedMessage, MemoryClient};
 use nom::bytes::complete::tag;
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::sequence::preceded;
@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
     {
         let stub = stub.clone();
         let client = client.clone();
-        tokio::spawn(listen(stub, client, name, tx));
+        tokio::spawn(listen(stub, client, name.clone(), tx));
     }
 
     loop {
@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
         command = cli_rx.recv() => {
             match command {
                 Some(command) => {
-                    message(&mut stub, client.clone(), &command.to, &command.msg)
+                    message(&mut stub, client.clone(), name.clone(), &command.to, &command.msg)
                         .await
                         .unwrap();
                     },
@@ -91,11 +91,12 @@ async fn main() -> Result<()> {
         },
         msg = rx.recv() => {
             match msg {
-                Some(msg) => {
-                    println!("{}", String::from_utf8(msg).unwrap());
+                Some(DecryptedMessage { sender_identity, message }) => {
+                    println!("{sender_identity} {}", String::from_utf8(message).unwrap());
                 },
                 None =>  {
-                    eprintln!("Server terminated connection."); return Ok(())
+                    eprintln!("Server terminated connection.");
+                    return Ok(())
                 },
             }
         }

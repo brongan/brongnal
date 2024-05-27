@@ -15,5 +15,6 @@ message BrongnalResult {
 
 // [RINF:RUST-SIGNAL]
 message ReceivedMessage {
-	optional string message = 1;
+	optional string sender = 1;
+	optional string message = 2;
 }
