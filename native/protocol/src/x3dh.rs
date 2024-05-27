@@ -33,17 +33,18 @@ pub struct X3DHSendKeyAgreement {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
+    pub sender_identity: String,
     pub sender_identity_key: VerifyingKey,
     pub ephemeral_key: X25519PublicKey,
-    pub otk: Option<X25519PublicKey>,
+    pub one_time_key: Option<X25519PublicKey>,
     pub ciphertext: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PreKeyBundle {
     pub identity_key: VerifyingKey,
-    pub otk: Option<X25519PublicKey>,
-    pub spk: SignedPreKey,
+    pub one_time_key: Option<X25519PublicKey>,
+    pub signed_pre_key: SignedPreKey,
 }
 
 // KDF(KM) represents 32 bytes of output from the HKDF algorithm [3] with inputs:
@@ -125,13 +126,19 @@ fn initiate_send_get_sk(
 //    An initial ciphertext encrypted with some AEAD encryption scheme [4] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
 pub fn initiate_send(
     bundle: PreKeyBundle,
+    sender_identity: String,
     sender_key: &SigningKey,
     message: &[u8],
 ) -> Result<([u8; 32], Message), X3DHError> {
     let X3DHSendKeyAgreement {
         ephemeral_key,
         secret_key,
-    } = initiate_send_get_sk(bundle.identity_key, bundle.spk, bundle.otk, sender_key)?;
+    } = initiate_send_get_sk(
+        bundle.identity_key,
+        bundle.signed_pre_key,
+        bundle.one_time_key,
+        sender_key,
+    )?;
     // Alice then calculates an "associated data" byte sequence AD that contains identity information for both parties:
     //   AD = Encode(IKA) || Encode(IKB)
     // Alice may optionally append additional information to AD, such as Alice and Bob's usernames, certificates, or other identifying information.
@@ -154,9 +161,10 @@ pub fn initiate_send(
     Ok((
         secret_key,
         Message {
+            sender_identity,
             sender_identity_key: sender_key.verifying_key(),
             ephemeral_key,
-            otk: bundle.otk,
+            one_time_key: bundle.one_time_key,
             ciphertext,
         },
     ))
@@ -321,10 +329,11 @@ mod tests {
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
         let bundle = PreKeyBundle {
             identity_key: bob_ik.verifying_key(),
-            otk: Some(bob_otk_pub),
-            spk: bob_spk.clone(),
+            one_time_key: Some(bob_otk_pub),
+            signed_pre_key: bob_spk.clone(),
         };
-        let (send_sk, message) = initiate_send(bundle, &alice_ik, plaintext.as_bytes())?;
+        let (send_sk, message) =
+            initiate_send(bundle, "alice".to_owned(), &alice_ik, plaintext.as_bytes())?;
 
         // 3. Bob receives and processes Alice's initial message.
         let (recv_sk, decrypted) = initiate_recv(
@@ -356,10 +365,11 @@ mod tests {
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
         let bundle = PreKeyBundle {
             identity_key: bob_ik.verifying_key(),
-            otk: None,
-            spk: bob_spk.clone(),
+            one_time_key: None,
+            signed_pre_key: bob_spk.clone(),
         };
-        let (send_sk, message) = initiate_send(bundle, &alice_ik, b"Hello Bob!")?;
+        let (send_sk, message) =
+            initiate_send(bundle, "alice".to_owned(), &alice_ik, b"Hello Bob!")?;
 
         // 3. Bob receives and processes Alice's initial message.
         let (recv_sk, decrypted) = initiate_recv(

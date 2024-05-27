@@ -20,9 +20,9 @@ message SignedPreKeys {
 
 message RegisterPreKeyBundleRequest {
 	optional string identity = 1;
-	optional bytes ik = 2;
-	optional SignedPreKey spk = 3;
-	optional SignedPreKeys otk_bundle = 4;
+	optional bytes identity_key = 2;
+	optional SignedPreKey signed_pre_key = 3;
+	optional SignedPreKeys one_time_key_bundle = 4;
 }
 
 message RegisterPreKeyBundleResponse {}
@@ -34,15 +34,16 @@ message RequestPreKeysRequest {
 
 message PreKeyBundle {
 	optional bytes identity_key = 1;
-	optional bytes otk = 2;
-	optional SignedPreKey spk = 3;
+	optional bytes one_time_key = 2;
+	optional SignedPreKey signed_pre_key = 3;
 }
 
 message Message {
-	optional bytes sender_ik = 1;
-	optional bytes ephemeral_key = 2;
-	optional bytes otk = 3;
-	optional bytes ciphertext = 4;
+	optional string sender_identity = 1;
+	optional bytes sender_identity_key = 2;
+	optional bytes ephemeral_key = 3;
+	optional bytes one_time_key = 4;
+	optional bytes ciphertext = 5;
 }
 
 message SendMessageRequest {

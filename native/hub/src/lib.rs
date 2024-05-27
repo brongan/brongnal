@@ -1,4 +1,4 @@
-use client::{listen, register, MemoryClient};
+use client::{listen, register, DecryptedMessage, MemoryClient};
 use messages::brongnal::{
     brongnal_action::Action, BrongnalAction, BrongnalResult, ReceivedMessage,
 };
@@ -18,7 +18,7 @@ mod messages;
 
 rinf::write_interface!();
 
-async fn register_user(tx: Sender<Vec<u8>>) {
+async fn register_user(tx: Sender<DecryptedMessage>) {
     let mut stub = BrongnalClient::connect("https://signal.brongan.com:443")
         .await
         .unwrap();
@@ -59,11 +59,18 @@ async fn main() {
 
     tokio::spawn(async move {
         while let Some(decrypted) = rx.recv().await {
-            let message = String::from_utf8(decrypted).ok();
+            let message = String::from_utf8(decrypted.message).ok();
             if let Some(message) = &message {
-                debug_print!("Received Brongnal message: {message}");
+                debug_print!(
+                    "[Received Message] {}: {message}",
+                    decrypted.sender_identity
+                );
             }
-            ReceivedMessage { message }.send_signal_to_dart();
+            ReceivedMessage {
+                sender: Some(decrypted.sender_identity),
+                message,
+            }
+            .send_signal_to_dart();
         }
     });
 }

@@ -74,7 +74,8 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
     type Error = tonic::Status;
 
     fn try_from(value: proto::service::Message) -> Result<Self, Self::Error> {
-        let sender_identity_key = parse_verifying_key(value.sender_ik.ok_or(
+        let sender_identity = value.sender_identity.unwrap_or("".to_owned());
+        let sender_identity_key = parse_verifying_key(value.sender_identity_key.ok_or(
             Status::invalid_argument("request missing sender_identity_key"),
         )?)?;
 
@@ -84,7 +85,7 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
                 .ok_or(Status::invalid_argument("request missing ephemeral_key"))?,
         )?;
 
-        let otk = if let Some(otk) = value.otk {
+        let one_time_key = if let Some(otk) = value.one_time_key {
             Some(parse_x25519_public_key(otk)?)
         } else {
             None
@@ -99,9 +100,10 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
         .map_err(|_| Status::invalid_argument("Invalid ciphertext."))?;
 
         Ok(protocol::x3dh::Message {
+            sender_identity,
             sender_identity_key,
             ephemeral_key,
-            otk,
+            one_time_key,
             ciphertext,
         })
     }
@@ -110,9 +112,10 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
 impl Into<proto::service::Message> for protocol::x3dh::Message {
     fn into(self) -> proto::service::Message {
         proto::service::Message {
-            sender_ik: Some(self.sender_identity_key.to_bytes().to_vec()),
+            sender_identity: Some(self.sender_identity),
+            sender_identity_key: Some(self.sender_identity_key.to_bytes().to_vec()),
             ephemeral_key: Some(self.ephemeral_key.to_bytes().to_vec()),
-            otk: self.otk.map(|otk| otk.to_bytes().to_vec()),
+            one_time_key: self.one_time_key.map(|otk| otk.to_bytes().to_vec()),
             ciphertext: Some(self.ciphertext.as_bytes().to_vec()),
         }
     }
@@ -127,25 +130,26 @@ impl TryInto<protocol::x3dh::PreKeyBundle> for proto::service::PreKeyBundle {
                 .ok_or(Status::invalid_argument("PreKeyBundle missing ik."))?,
         )?;
 
-        let otk = if let Some(otk) = self.otk {
+        let one_time_key = if let Some(otk) = self.one_time_key {
             Some(parse_x25519_public_key(otk)?)
         } else {
             None
         };
 
-        let spk = self
-            .spk
+        let signed_pre_key = self
+            .signed_pre_key
             .ok_or(Status::invalid_argument("PreKeyBundle missing spk."))?
             .try_into()?;
 
         Ok(protocol::x3dh::PreKeyBundle {
             identity_key,
-            otk,
-            spk,
+            one_time_key,
+            signed_pre_key,
         })
     }
 }
 
+#[allow(dead_code)]
 struct SignedMessage {
     message: proto::gossamer::Message,
     signature: Signature,
