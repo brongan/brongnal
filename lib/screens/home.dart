@@ -45,6 +45,7 @@ class _HomeState extends State<Home> {
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
     listenForRegister();
+    listenForMessage();
   }
 
   void listenForRegister() async {
@@ -54,6 +55,16 @@ class _HomeState extends State<Home> {
       setState(() {
         name = message.registeredName;
       });
+    }
+  }
+
+  void listenForMessage() async {
+    final stream = ReceivedMessage.rustSignalStream;
+    await for (final rustSignal in stream) {
+      ReceivedMessage message = rustSignal.message;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.removeCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text("$message")));
     }
   }
 

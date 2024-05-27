@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
     {
         let stub = stub.clone();
         let client = client.clone();
-        tokio::spawn(async move { listen(stub, client, name, tx).await });
+        tokio::spawn(listen(stub, client, name, tx));
     }
 
     loop {
