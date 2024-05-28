@@ -46,13 +46,12 @@ impl Brongnal for InMemoryBrongnal {
     ) -> Result<Response<proto::service::RegisterPreKeyBundleResponse>, Status> {
         let request = request.into_inner();
         println!("Registering PreKeyBundle for {}", request.identity());
-        let identity = request
+        let identity: String = request
             .identity
+            .clone()
             .ok_or(Status::invalid_argument("request missing identity"))?;
-        let ik = request
-            .identity_key
-            .ok_or(Status::invalid_argument("request missing ik"))?;
-        let ik = parse_verifying_key(ik)?;
+        let ik = parse_verifying_key(&request.identity_key())
+            .map_err(|_| Status::invalid_argument("PreKeyBundle invalid identity_key"))?;
         let spk = protocol::x3dh::SignedPreKey::try_from(
             request
                 .signed_pre_key
