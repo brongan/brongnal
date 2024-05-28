@@ -1,8 +1,6 @@
 use anyhow::Result;
 use client::{listen, message, register, DecryptedMessage, MemoryClient};
-use nom::bytes::complete::tag;
 use nom::character::complete::{alphanumeric1, multispace1};
-use nom::sequence::preceded;
 use nom::IResult;
 use server::proto::service::brongnal_client::BrongnalClient;
 use std::io::stdin;
@@ -19,7 +17,6 @@ struct Command {
 }
 
 fn parse_command(input: &str) -> IResult<&str, Command> {
-    let (input, _) = preceded(tag("message"), multispace1)(input)?;
     let (input, name) = alphanumeric1(input)?;
     let (message, _spaces) = multispace1(input)?;
     Ok((
@@ -47,7 +44,7 @@ async fn main() -> Result<()> {
 
     register(&mut stub, client.clone(), name.clone()).await?;
 
-    println!("message NAME MESSAGE");
+    println!("NAME MESSAGE");
 
     let (tx, mut rx) = mpsc::channel(100);
     let (cli_tx, mut cli_rx) = mpsc::unbounded_channel::<Command>();

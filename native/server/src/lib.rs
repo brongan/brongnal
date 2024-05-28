@@ -1,5 +1,6 @@
 use ed25519_dalek::{Signature, VerifyingKey};
 use prost::Message;
+use thiserror::Error;
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
@@ -14,18 +15,21 @@ pub mod proto {
         tonic::include_file_descriptor_set!("service_descriptor");
 }
 
-pub fn parse_verifying_key(key: Vec<u8>) -> Result<VerifyingKey, Status> {
-    VerifyingKey::from_bytes(
-        &key.try_into()
-            .map_err(|_| Status::invalid_argument("Key is invalid size."))?,
-    )
-    .map_err(|_| Status::invalid_argument("ED25519 key was invalid."))
+#[derive(Error, Debug)]
+pub enum ClientError {
+    #[error("Key was not a valid ED25519 point.")]
+    InvalidEd25519Key,
+    #[error("Key was not a valid X25519 point.")]
+    InvalidX25519Key,
 }
 
-pub fn parse_x25519_public_key(key: Vec<u8>) -> Result<X25519PublicKey, Status> {
-    let key: [u8; 32] = key
-        .try_into()
-        .map_err(|_| Status::invalid_argument("X25519PublicKey was invalid."))?;
+pub fn parse_verifying_key(key: &[u8]) -> Result<VerifyingKey, ClientError> {
+    VerifyingKey::from_bytes(&key.try_into().map_err(|_| ClientError::InvalidEd25519Key)?)
+        .map_err(|_| ClientError::InvalidEd25519Key)
+}
+
+pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, ClientError> {
+    let key: [u8; 32] = key.try_into().map_err(|_| ClientError::InvalidX25519Key)?;
     Ok(X25519PublicKey::from(key))
 }
 
@@ -55,15 +59,10 @@ impl TryFrom<proto::service::SignedPreKey> for protocol::x3dh::SignedPreKey {
     type Error = tonic::Status;
 
     fn try_from(value: proto::service::SignedPreKey) -> Result<Self, Self::Error> {
-        let signature = value
-            .signature
-            .ok_or(Status::invalid_argument("request missing signature"))?;
+        let signature = value.signature();
 
-        let pre_key = parse_x25519_public_key(
-            value
-                .pre_key
-                .ok_or(Status::invalid_argument("request issing pre key"))?,
-        )?;
+        let pre_key = parse_x25519_public_key(value.pre_key())
+            .map_err(|e| Status::invalid_argument(format!("Invalid SignedPreKey: {e}")))?;
         let signature = Signature::from_slice(&signature)
             .map_err(|_| Status::invalid_argument("Pre Key has an invalid X25519 Signature"))?;
         Ok(protocol::x3dh::SignedPreKey { pre_key, signature })
@@ -74,19 +73,18 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
     type Error = tonic::Status;
 
     fn try_from(value: proto::service::Message) -> Result<Self, Self::Error> {
-        let sender_identity = value.sender_identity.unwrap_or("".to_owned());
-        let sender_identity_key = parse_verifying_key(value.sender_identity_key.ok_or(
-            Status::invalid_argument("request missing sender_identity_key"),
-        )?)?;
+        let sender_identity = value.sender_identity().to_owned();
+        let sender_identity_key = parse_verifying_key(value.sender_identity_key())
+            .map_err(|e| Status::invalid_argument(format!("Invalid sender_identity_key: {e}")))?;
 
-        let ephemeral_key = parse_x25519_public_key(
-            value
-                .ephemeral_key
-                .ok_or(Status::invalid_argument("request missing ephemeral_key"))?,
-        )?;
+        let ephemeral_key = parse_x25519_public_key(&value.ephemeral_key())
+            .map_err(|e| Status::invalid_argument(format!("Invalid ephemeral_key: {e}")))?;
 
         let one_time_key = if let Some(otk) = value.one_time_key {
-            Some(parse_x25519_public_key(otk)?)
+            Some(
+                parse_x25519_public_key(&otk)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid one_time_key: {e}")))?,
+            )
         } else {
             None
         };
@@ -125,13 +123,14 @@ impl TryInto<protocol::x3dh::PreKeyBundle> for proto::service::PreKeyBundle {
     type Error = tonic::Status;
 
     fn try_into(self) -> Result<protocol::x3dh::PreKeyBundle, Self::Error> {
-        let identity_key = parse_verifying_key(
-            self.identity_key
-                .ok_or(Status::invalid_argument("PreKeyBundle missing ik."))?,
-        )?;
+        let identity_key = parse_verifying_key(self.identity_key())
+            .map_err(|_| Status::invalid_argument("PreKeyBundle invalid identity_key"))?;
 
         let one_time_key = if let Some(otk) = self.one_time_key {
-            Some(parse_x25519_public_key(otk)?)
+            Some(
+                parse_x25519_public_key(&otk)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid one_time_key: {e}")))?,
+            )
         } else {
             None
         };
@@ -160,14 +159,15 @@ struct SignedMessage {
 impl TryInto<SignedMessage> for proto::gossamer::SignedMessage {
     type Error = tonic::Status;
     fn try_into(self) -> Result<SignedMessage, Self::Error> {
-        let signature = Signature::from_slice(self.signature())
-            .map_err(|_| Status::invalid_argument("Pre Key has an invalid X25519 Signature"))?;
-        let public_key = parse_verifying_key(self.public_key.ok_or(Status::invalid_argument(
-            "request missing sender_identity_key",
-        ))?)?;
-        let contents = self
-            .contents
-            .ok_or(Status::invalid_argument("Missing contents."))?;
+        let signature = Signature::from_slice(self.signature()).map_err(|_| {
+            Status::invalid_argument("SignedMessage has an invalid X25519 Signature")
+        })?;
+        let public_key = parse_verifying_key(&self.public_key()).map_err(|e| {
+            Status::invalid_argument(format!(
+                "SignedMessage has invalid sender_identity_key: {e}"
+            ))
+        })?;
+        let contents = self.contents();
         public_key
             .verify_strict(&contents, &signature)
             .map_err(|_| Status::unauthenticated("SignedMessage signature invalid."))?;
