@@ -72,31 +72,32 @@ async fn main() -> Result<()> {
 
     loop {
         tokio::select! {
-        command = cli_rx.recv() => {
-            match command {
-                Some(command) => {
-                    message(&mut stub, client.clone(), name.clone(), &command.to, &command.msg)
-                        .await
-                        .unwrap();
+            command = cli_rx.recv() => {
+                match command {
+                    Some(command) => {
+                        if let Err(e) = message(&mut stub, client.clone(), name.clone(), &command.to, &command.msg)
+                            .await {
+                                eprintln!("Failed to send message: {e}");
+                        }
                     },
-                None => {
-                    eprintln!("Closing...");
-                    return Ok(());
+                    None => {
+                        eprintln!("Closing...");
+                        return Ok(());
+                    }
+                }
+
+            },
+            msg = rx.recv() => {
+                match msg {
+                    Some(DecryptedMessage { sender_identity, message }) => {
+                        println!("{sender_identity} {}", String::from_utf8(message).unwrap());
+                    },
+                    None =>  {
+                        eprintln!("Server terminated connection.");
+                        return Ok(())
+                    },
                 }
             }
-
-        },
-        msg = rx.recv() => {
-            match msg {
-                Some(DecryptedMessage { sender_identity, message }) => {
-                    println!("{sender_identity} {}", String::from_utf8(message).unwrap());
-                },
-                None =>  {
-                    eprintln!("Server terminated connection.");
-                    return Ok(())
-                },
-            }
-        }
         }
     }
 }
