@@ -1,39 +1,29 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/screens/chat.dart';
-import 'package:random_name_generator/random_name_generator.dart';
 import 'package:flutter/material.dart';
-
-const String loremIpsum =
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
-
-enum MessageState {
-  sending,
-  sent,
-  read,
-}
 
 class Conversations extends StatelessWidget {
   const Conversations({
     super.key,
+    required this.conversations,
   });
+  final Map<String, List<MessageModel>> conversations;
 
   @override
   Widget build(BuildContext context) {
-    final randomNames = RandomNames(Zone.us);
-    return ListView.builder(itemBuilder: (context, index) {
-      final name = randomNames.fullName();
-      return Conversation(
-        avatar: CircleAvatar(
-          backgroundColor: Colors.primaries[index % Colors.primaries.length],
-          radius: 36,
-          child: Text(name.substring(0, 2)),
-        ),
-        name: name,
-        lastMessage: loremIpsum,
-        lastMessageTime: DateTime.utc(2024, 4, 30),
-        messageState: MessageState.sent,
-      );
-    });
+    return ListView.builder(
+        itemCount: conversations.length,
+        itemBuilder: (context, i) {
+          final peer = conversations.keys.elementAt(i);
+          return Conversation(
+            avatar: CircleAvatar(
+                backgroundColor: Colors.primaries[i % Colors.primaries.length],
+                radius: 36,
+                child: Text(peer.substring(0, 2))),
+            peer: peer,
+            messages: conversations.values.elementAt(i),
+          );
+        });
   }
 }
 
@@ -50,26 +40,23 @@ IconData getIcon(MessageState messageState) {
 
 class Conversation extends StatelessWidget {
   final CircleAvatar avatar;
-  final String name;
-  final String lastMessage;
-  final DateTime lastMessageTime;
-  final MessageState messageState;
+  final String peer;
+  final List<MessageModel> messages;
   const Conversation({
     super.key,
     required this.avatar,
-    required this.name,
-    required this.lastMessage,
-    required this.lastMessageTime,
-    required this.messageState,
+    required this.peer,
+    required this.messages,
   });
 
   @override
   Widget build(BuildContext context) {
-    final delta = DateTime.now().difference(lastMessageTime).inHours;
+    final lastMessage = messages.last;
+    final delta = DateTime.now().difference(lastMessage.time).inHours;
     final theme = Theme.of(context);
 
     var readIcon = Icon(
-      getIcon(messageState),
+      getIcon(lastMessage.state),
       color: textColor,
       size: 18,
     );
@@ -77,7 +64,7 @@ class Conversation extends StatelessWidget {
       onPressed: () {
         Navigator.push(context, MaterialPageRoute<void>(
           builder: (BuildContext context) {
-            return Chat(name: name, lastMessage: lastMessage);
+            return Chat(name: peer, messages: messages);
           },
         ));
       },
@@ -97,12 +84,12 @@ class Conversation extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      name,
+                      peer,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium,
                     ),
                     Text(
-                      lastMessage,
+                      lastMessage.message,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall,
                       maxLines: 2,

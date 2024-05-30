@@ -1,44 +1,61 @@
-import 'dart:math' as math;
 import 'package:brongnal_app/common/util.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+enum MessageState {
+  sending,
+  sent,
+  read,
+}
 
 enum Sender {
   other,
   self,
 }
 
+class MessageModel {
+  const MessageModel({
+    required this.message,
+    required this.time,
+    required this.sender,
+    required this.state,
+  });
+  final String message;
+  final DateTime time;
+  final String sender;
+  final MessageState state;
+}
+
 class Chat extends StatelessWidget {
   const Chat({
     super.key,
     required this.name,
-    required this.lastMessage,
+    required this.messages,
   });
 
   final String name;
-  final String lastMessage;
+  final List<MessageModel> messages;
 
   @override
   Widget build(BuildContext context) {
-    final random = math.Random();
     return Scaffold(
       appBar: getConversationAppBar(context, name),
       body: Column(
         children: [
           Expanded(
             child: ListView.builder(
-              itemBuilder: (context, index) {
-                final start = random.nextInt(lastMessage.length);
-                final end = random.nextInt(lastMessage.length - start) + start;
-                return Message(
-                  message: lastMessage.substring(start, end),
-                  time: DateTime.now(),
-                  sender: random.nextBool() ? Sender.other : Sender.self,
+              itemCount: messages.length,
+              itemBuilder: (context, i) {
+                return MessageWidget(
+                  message: messages[i].message,
+                  time: messages[i].time,
+                  sender:
+                      messages[i].sender == name ? Sender.other : Sender.self,
                 );
               },
             ),
           ),
-          const SendMessageWidget()
+          const SendMessageWidget(),
         ],
       ),
     );
@@ -79,8 +96,8 @@ class SendMessageWidget extends StatelessWidget {
   }
 }
 
-class Message extends StatelessWidget {
-  const Message({
+class MessageWidget extends StatelessWidget {
+  const MessageWidget({
     super.key,
     required this.message,
     required this.time,

@@ -2,6 +2,7 @@ import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/messages/brongnal.pb.dart';
+import 'package:brongnal_app/screens/chat.dart';
 import 'package:brongnal_app/screens/conversations.dart';
 import 'package:brongnal_app/screens/register.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +35,7 @@ class _HomeState extends State<Home> {
   String? name;
   late ClientChannel _channel;
   late BrongnalClient _stub;
+  Map<String, List<MessageModel>> conversations = {};
 
   @override
   void initState() {
@@ -45,7 +47,7 @@ class _HomeState extends State<Home> {
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
     listenForRegister();
-    listenForMessage();
+    listenForMessages();
   }
 
   void listenForRegister() async {
@@ -58,13 +60,18 @@ class _HomeState extends State<Home> {
     }
   }
 
-  void listenForMessage() async {
+  void listenForMessages() async {
     final stream = ReceivedMessage.rustSignalStream;
     await for (final rustSignal in stream) {
       ReceivedMessage message = rustSignal.message;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.removeCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text("$message")));
+      setState(() {
+        conversations.putIfAbsent(message.sender, () => []);
+        conversations[message.sender]!.add(MessageModel(
+            message: message.message,
+            sender: message.sender,
+            time: DateTime.now(),
+            state: MessageState.sent));
+      });
     }
   }
 
@@ -73,7 +80,9 @@ class _HomeState extends State<Home> {
     final theme = Theme.of(context);
     final Widget body;
     if (destination == SelectedDestination.chats) {
-      body = const Conversations();
+      body = Conversations(
+        conversations: conversations,
+      );
     } else {
       body = Text("TODO", style: theme.textTheme.bodyMedium);
     }
