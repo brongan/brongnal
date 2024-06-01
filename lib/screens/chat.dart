@@ -1,4 +1,5 @@
 import 'package:brongnal_app/common/util.dart';
+import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:brongnal_app/models/message.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -11,17 +12,19 @@ enum Sender {
 class ChatScreen extends StatelessWidget {
   const ChatScreen({
     super.key,
-    required this.name,
+    required this.self,
+    required this.peer,
     required this.messages,
   });
 
-  final String name;
+  final String self;
+  final String peer;
   final List<MessageModel> messages;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: getConversationAppBar(context, name),
+      appBar: getConversationAppBar(context, peer),
       body: Column(
         children: [
           Expanded(
@@ -32,12 +35,12 @@ class ChatScreen extends StatelessWidget {
                   message: messages[i].message,
                   time: messages[i].time,
                   sender:
-                      messages[i].sender == name ? Sender.other : Sender.self,
+                      messages[i].sender == self ? Sender.self : Sender.other,
                 );
               },
             ),
           ),
-          const SendMessageWidget(),
+          SendMessageWidget(self: self, peer: peer),
         ],
       ),
     );
@@ -47,7 +50,11 @@ class ChatScreen extends StatelessWidget {
 class SendMessageWidget extends StatelessWidget {
   const SendMessageWidget({
     super.key,
+    required this.self,
+    required this.peer,
   });
+  final String self;
+  final String peer;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +75,15 @@ class SendMessageWidget extends StatelessWidget {
                   name: "Send a picture.",
                 ),
               ),
+              textInputAction: TextInputAction.send,
+              onSubmitted: (value) {
+                SendMessage(
+                        sender: self,
+                        receiver: peer,
+                        message: messageInput.text)
+                    .sendSignalToRust();
+                messageInput.clear();
+              },
             ),
           ),
         ),

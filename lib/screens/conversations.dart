@@ -8,8 +8,10 @@ import 'package:provider/provider.dart';
 class ConversationsScreen extends StatelessWidget {
   const ConversationsScreen({
     super.key,
+    required this.self,
     required this.conversations,
   });
+  final String self;
   final ConversationModel conversations;
 
   @override
@@ -25,6 +27,7 @@ class ConversationsScreen extends StatelessWidget {
                 radius: 36,
                 child: Text(peer.substring(0, 2))),
             lastMessage: items.values.elementAt(i).last,
+            self: self,
             peer: peer,
           );
         });
@@ -45,11 +48,13 @@ IconData getIcon(MessageState messageState) {
 class Conversation extends StatelessWidget {
   final CircleAvatar avatar;
   final MessageModel lastMessage;
+  final String self;
   final String peer;
   const Conversation({
     super.key,
     required this.avatar,
     required this.lastMessage,
+    required this.self,
     required this.peer,
   });
 
@@ -71,7 +76,8 @@ class Conversation extends StatelessWidget {
             builder: (context) => Consumer<ConversationModel>(
               builder: (context, conversationModel, child) {
                 return ChatScreen(
-                  name: peer,
+                  self: self,
+                  peer: peer,
                   messages: conversationModel.items[peer]!,
                 );
               },

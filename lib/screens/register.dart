@@ -44,7 +44,7 @@ class Register extends StatelessWidget {
                   style: TextStyle(
                       color: Colors.white, fontSize: 36, fontFamily: 'Roboto')),
               onPressed: () async {
-                BrongnalAction(registerName: usernameInput.text)
+                RegisterUserRequest(username: usernameInput.text)
                     .sendSignalToRust();
               },
             ),

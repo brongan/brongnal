@@ -723,6 +723,7 @@ dependencies = [
  "rinf",
  "server",
  "tokio_with_wasm",
+ "tonic",
  "wasm-bindgen",
 ]
 

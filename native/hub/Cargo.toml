@@ -16,4 +16,5 @@ wasm-bindgen = "0.2.91"
 tokio_with_wasm = "0.4.3"
 client = { path = "../client" }
 server = { path = "../server" }
+tonic = "0.11.0"
 
