@@ -1,6 +1,6 @@
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/messages/brongnal.pb.dart';
-import 'package:brongnal_app/models/message.dart';
+import 'package:brongnal_app/models/conversations.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -14,15 +14,16 @@ class ChatScreen extends StatelessWidget {
     super.key,
     required this.self,
     required this.peer,
-    required this.messages,
+    required this.conversationModel,
   });
 
   final String self;
   final String peer;
-  final List<MessageModel> messages;
+  final ConversationModel conversationModel;
 
   @override
   Widget build(BuildContext context) {
+    final messages = conversationModel.items[peer]!;
     return Scaffold(
       appBar: getConversationAppBar(context, peer),
       body: Column(
@@ -40,7 +41,11 @@ class ChatScreen extends StatelessWidget {
               },
             ),
           ),
-          SendMessageWidget(self: self, peer: peer),
+          SendMessageWidget(
+            self: self,
+            peer: peer,
+            conversationModel: conversationModel,
+          ),
         ],
       ),
     );
@@ -52,9 +57,11 @@ class SendMessageWidget extends StatelessWidget {
     super.key,
     required this.self,
     required this.peer,
+    required this.conversationModel,
   });
   final String self;
   final String peer;
+  final ConversationModel conversationModel;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +89,7 @@ class SendMessageWidget extends StatelessWidget {
                         receiver: peer,
                         message: messageInput.text)
                     .sendSignalToRust();
+                conversationModel.addSentMessage(messageInput.text, self, peer);
                 messageInput.clear();
               },
             ),
