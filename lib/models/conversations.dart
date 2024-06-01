@@ -18,4 +18,14 @@ class ConversationModel extends ChangeNotifier {
         state: MessageState.sent));
     notifyListeners();
   }
+
+  void addSentMessage(String message, String sender, String receiver) {
+    _conversations.putIfAbsent(sender, () => []);
+    _conversations[receiver]!.add(MessageModel(
+        message: message,
+        sender: sender,
+        time: DateTime.now(),
+        state: MessageState.sending));
+    notifyListeners();
+  }
 }

@@ -78,7 +78,7 @@ class Conversation extends StatelessWidget {
                 return ChatScreen(
                   self: self,
                   peer: peer,
-                  messages: conversationModel.items[peer]!,
+                  conversationModel: conversationModel,
                 );
               },
             ),
