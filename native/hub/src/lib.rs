@@ -1,17 +1,16 @@
 use client::{listen, message, register, DecryptedMessage, MemoryClient};
 use messages::brongnal::{ReceivedMessage, RegisterUserRequest};
+use rinf::debug_print;
 use server::proto::service::brongnal_client::BrongnalClient;
 use std::sync::Arc;
-use tonic::transport::Channel;
-// TODO replace with tokio;
-use rinf::debug_print;
-use tokio_with_wasm::tokio::{
+use tokio::{
     self,
     sync::{
         mpsc::{self, Sender},
         Mutex,
     },
 };
+use tonic::transport::Channel;
 
 use crate::messages::brongnal::{RegisterUserResponse, SendMessage};
 
@@ -77,7 +76,7 @@ async fn handle_send_message(mut stub: BrongnalClient<Channel>, client: Arc<Mute
 }
 
 async fn main() {
-    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443")
+    let stub = BrongnalClient::connect("https://signal.brongan.com:443")
         .await
         .unwrap();
     let client = Arc::new(Mutex::new(MemoryClient::new()));
