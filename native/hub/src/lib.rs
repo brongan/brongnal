@@ -1,9 +1,8 @@
-use client::{listen, register, DecryptedMessage, MemoryClient};
-use messages::brongnal::{
-    brongnal_action::Action, BrongnalAction, BrongnalResult, ReceivedMessage,
-};
+use client::{listen, message, register, DecryptedMessage, MemoryClient};
+use messages::brongnal::{ReceivedMessage, RegisterUserRequest};
 use server::proto::service::brongnal_client::BrongnalClient;
 use std::sync::Arc;
+use tonic::transport::Channel;
 // TODO replace with tokio;
 use rinf::debug_print;
 use tokio_with_wasm::tokio::{
@@ -14,21 +13,22 @@ use tokio_with_wasm::tokio::{
     },
 };
 
+use crate::messages::brongnal::{RegisterUserResponse, SendMessage};
+
 mod messages;
 
 rinf::write_interface!();
 
-async fn register_user(tx: Sender<DecryptedMessage>) {
-    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443")
-        .await
-        .unwrap();
-    let client = Arc::new(Mutex::new(MemoryClient::new()));
-
-    let mut receiver = BrongnalAction::get_dart_signal_receiver();
+async fn handle_register_user(
+    mut stub: BrongnalClient<Channel>,
+    client: Arc<Mutex<MemoryClient>>,
+    tx: Sender<DecryptedMessage>,
+) {
+    let mut receiver = RegisterUserRequest::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
-        let message: BrongnalAction = dart_signal.message;
-        match message.action.unwrap() {
-            Action::RegisterName(name) => {
+        let message: RegisterUserRequest = dart_signal.message;
+        match message.username {
+            Some(name) => {
                 debug_print!("Received request to register {name}");
                 match register(&mut stub, client.clone(), name.clone()).await {
                     Ok(_) => {
@@ -43,19 +43,48 @@ async fn register_user(tx: Sender<DecryptedMessage>) {
                 let listen_name = name.clone();
                 let tx = tx.clone();
                 tokio::spawn(listen(stub, client, listen_name, tx));
-                BrongnalResult {
-                    registered_name: Some(name),
+                RegisterUserResponse {
+                    username: Some(name),
                 }
                 .send_signal_to_dart();
+            }
+            None => {
+                debug_print!("Received empty register request.");
+            }
+        }
+    }
+}
+
+async fn handle_send_message(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<MemoryClient>>) {
+    let mut receiver = SendMessage::get_dart_signal_receiver();
+    while let Some(dart_signal) = receiver.recv().await {
+        let req: SendMessage = dart_signal.message;
+        match message(
+            &mut stub,
+            client.clone(),
+            req.sender().to_owned(),
+            req.receiver(),
+            req.message(),
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                debug_print!("Failed to message: {e}");
             }
         }
     }
 }
 
 async fn main() {
-    let (tx, mut rx) = mpsc::channel(100);
+    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443")
+        .await
+        .unwrap();
+    let client = Arc::new(Mutex::new(MemoryClient::new()));
 
-    tokio::spawn(register_user(tx));
+    let (tx, mut rx) = mpsc::channel(100);
+    tokio::spawn(handle_register_user(stub.clone(), client.clone(), tx));
+    tokio::spawn(handle_send_message(stub.clone(), client.clone()));
 
     tokio::spawn(async move {
         while let Some(decrypted) = rx.recv().await {

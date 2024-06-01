@@ -53,11 +53,11 @@ class _HomeState extends State<Home> {
   }
 
   void listenForRegister() async {
-    final stream = BrongnalResult.rustSignalStream;
+    final stream = RegisterUserResponse.rustSignalStream;
     await for (final rustSignal in stream) {
-      BrongnalResult message = rustSignal.message;
+      RegisterUserResponse message = rustSignal.message;
       setState(() {
-        _name = message.registeredName;
+        _name = message.username;
       });
     }
   }
@@ -73,14 +73,16 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final Widget body;
-    if (_destination == SelectedDestination.chats) {
-      body = ConversationsScreen(conversations: widget.conversations);
-    } else {
-      body = Text("TODO", style: theme.textTheme.bodyMedium);
-    }
 
     if (_name == null) {
       return Register(stub: _stub);
+    }
+
+    if (_destination == SelectedDestination.chats) {
+      body = ConversationsScreen(
+          self: _name!, conversations: widget.conversations);
+    } else {
+      body = Text("TODO", style: theme.textTheme.bodyMedium);
     }
 
     return Scaffold(
