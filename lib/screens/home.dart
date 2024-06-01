@@ -2,11 +2,12 @@ import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/messages/brongnal.pb.dart';
-import 'package:brongnal_app/screens/chat.dart';
+import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/conversations.dart';
 import 'package:brongnal_app/screens/register.dart';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
+import 'package:provider/provider.dart';
 
 enum HomepagePopupItem {
   newGroup,
@@ -16,8 +17,10 @@ enum HomepagePopupItem {
 }
 
 class Home extends StatefulWidget {
+  final ConversationModel conversations;
   const Home({
     super.key,
+    required this.conversations,
   });
 
   @override
@@ -31,11 +34,10 @@ enum SelectedDestination {
 }
 
 class _HomeState extends State<Home> {
-  SelectedDestination destination = SelectedDestination.chats;
-  String? name;
+  SelectedDestination _destination = SelectedDestination.chats;
+  String? _name;
   late ClientChannel _channel;
   late BrongnalClient _stub;
-  Map<String, List<MessageModel>> conversations = {};
 
   @override
   void initState() {
@@ -55,7 +57,7 @@ class _HomeState extends State<Home> {
     await for (final rustSignal in stream) {
       BrongnalResult message = rustSignal.message;
       setState(() {
-        name = message.registeredName;
+        _name = message.registeredName;
       });
     }
   }
@@ -63,15 +65,7 @@ class _HomeState extends State<Home> {
   void listenForMessages() async {
     final stream = ReceivedMessage.rustSignalStream;
     await for (final rustSignal in stream) {
-      ReceivedMessage message = rustSignal.message;
-      setState(() {
-        conversations.putIfAbsent(message.sender, () => []);
-        conversations[message.sender]!.add(MessageModel(
-            message: message.message,
-            sender: message.sender,
-            time: DateTime.now(),
-            state: MessageState.sent));
-      });
+      widget.conversations.add(rustSignal.message);
     }
   }
 
@@ -79,15 +73,13 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final Widget body;
-    if (destination == SelectedDestination.chats) {
-      body = Conversations(
-        conversations: conversations,
-      );
+    if (_destination == SelectedDestination.chats) {
+      body = ConversationsScreen(conversations: widget.conversations);
     } else {
       body = Text("TODO", style: theme.textTheme.bodyMedium);
     }
 
-    if (name == null) {
+    if (_name == null) {
       return Register(stub: _stub);
     }
 
@@ -97,7 +89,7 @@ class _HomeState extends State<Home> {
         backgroundColor: theme.colorScheme.background,
         body: body,
         floatingActionButton:
-            BrongnalFloatingActionButtons(destination: destination),
+            BrongnalFloatingActionButtons(destination: _destination),
         bottomNavigationBar: NavigationBar(
           backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
           indicatorColor: theme.navigationBarTheme.indicatorColor,
@@ -122,15 +114,15 @@ class _HomeState extends State<Home> {
               label: 'Stories',
             ),
           ],
-          selectedIndex: destination.index,
+          selectedIndex: _destination.index,
           onDestinationSelected: (int index) {
             setState(() {
               if (index == 1) {
-                destination = SelectedDestination.calls;
+                _destination = SelectedDestination.calls;
               } else if (index == 2) {
-                destination = SelectedDestination.stories;
+                _destination = SelectedDestination.stories;
               } else {
-                destination = SelectedDestination.chats;
+                _destination = SelectedDestination.chats;
               }
             });
           },
@@ -159,8 +151,8 @@ class _HomeState extends State<Home> {
                   backgroundColor: AppBarTheme.of(context).foregroundColor,
                   child: const Text('BR', style: TextStyle(fontSize: 24)),
                 ),
-                name: name!,
-                username: "${name!.toLowerCase()}.69",
+                name: _name!,
+                username: "${_name!.toLowerCase()}.69",
               )
             ]),
           ),

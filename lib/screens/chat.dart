@@ -1,33 +1,15 @@
 import 'package:brongnal_app/common/util.dart';
+import 'package:brongnal_app/models/message.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-enum MessageState {
-  sending,
-  sent,
-  read,
-}
 
 enum Sender {
   other,
   self,
 }
 
-class MessageModel {
-  const MessageModel({
-    required this.message,
-    required this.time,
-    required this.sender,
-    required this.state,
-  });
-  final String message;
-  final DateTime time;
-  final String sender;
-  final MessageState state;
-}
-
-class Chat extends StatelessWidget {
-  const Chat({
+class ChatScreen extends StatelessWidget {
+  const ChatScreen({
     super.key,
     required this.name,
     required this.messages,

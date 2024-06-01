@@ -1,27 +1,31 @@
 import 'package:brongnal_app/common/theme.dart';
+import 'package:brongnal_app/models/conversations.dart';
+import 'package:brongnal_app/models/message.dart';
 import 'package:brongnal_app/screens/chat.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-class Conversations extends StatelessWidget {
-  const Conversations({
+class ConversationsScreen extends StatelessWidget {
+  const ConversationsScreen({
     super.key,
     required this.conversations,
   });
-  final Map<String, List<MessageModel>> conversations;
+  final ConversationModel conversations;
 
   @override
   Widget build(BuildContext context) {
+    final items = conversations.items;
     return ListView.builder(
-        itemCount: conversations.length,
+        itemCount: items.length,
         itemBuilder: (context, i) {
-          final peer = conversations.keys.elementAt(i);
+          final peer = items.keys.elementAt(i);
           return Conversation(
             avatar: CircleAvatar(
                 backgroundColor: Colors.primaries[i % Colors.primaries.length],
                 radius: 36,
                 child: Text(peer.substring(0, 2))),
+            lastMessage: items.values.elementAt(i).last,
             peer: peer,
-            messages: conversations.values.elementAt(i),
           );
         });
   }
@@ -40,18 +44,17 @@ IconData getIcon(MessageState messageState) {
 
 class Conversation extends StatelessWidget {
   final CircleAvatar avatar;
+  final MessageModel lastMessage;
   final String peer;
-  final List<MessageModel> messages;
   const Conversation({
     super.key,
     required this.avatar,
+    required this.lastMessage,
     required this.peer,
-    required this.messages,
   });
 
   @override
   Widget build(BuildContext context) {
-    final lastMessage = messages.last;
     final delta = DateTime.now().difference(lastMessage.time).inHours;
     final theme = Theme.of(context);
 
@@ -62,11 +65,19 @@ class Conversation extends StatelessWidget {
     );
     return TextButton(
       onPressed: () {
-        Navigator.push(context, MaterialPageRoute<void>(
-          builder: (BuildContext context) {
-            return Chat(name: peer, messages: messages);
-          },
-        ));
+        Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (context) => Consumer<ConversationModel>(
+              builder: (context, conversationModel, child) {
+                return ChatScreen(
+                  name: peer,
+                  messages: conversationModel.items[peer]!,
+                );
+              },
+            ),
+          ),
+        );
       },
       onLongPress: null,
       child: SizedBox(
