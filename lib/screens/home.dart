@@ -90,8 +90,8 @@ class _HomeState extends State<Home> {
         drawer: getHomeDrawer(context),
         backgroundColor: theme.colorScheme.background,
         body: body,
-        floatingActionButton:
-            BrongnalFloatingActionButtons(destination: _destination),
+        floatingActionButton: BrongnalFloatingActionButtons(
+            self: _name!, destination: _destination),
         bottomNavigationBar: NavigationBar(
           backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
           indicatorColor: theme.navigationBarTheme.indicatorColor,
@@ -328,7 +328,9 @@ class BrongnalFloatingActionButton extends StatelessWidget {
 
 class BrongnalFloatingActionButtons extends StatelessWidget {
   final SelectedDestination destination;
-  const BrongnalFloatingActionButtons({super.key, required this.destination});
+  const BrongnalFloatingActionButtons(
+      {super.key, required this.destination, required this.self});
+  final String self;
 
   @override
   Widget build(BuildContext context) {
@@ -349,7 +351,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(context, MaterialPageRoute<void>(
                     builder: (BuildContext context) {
-                      return const ComposeMessage();
+                      return ComposeMessage(self: self);
                     },
                   ));
                 },
