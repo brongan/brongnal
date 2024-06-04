@@ -5,9 +5,9 @@ import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/conversations.dart';
 import 'package:brongnal_app/screens/register.dart';
+import 'package:brongnal_app/screens/compose.dart';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
-import 'package:provider/provider.dart';
 
 enum HomepagePopupItem {
   newGroup,
@@ -334,19 +334,30 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (destination) {
       case SelectedDestination.chats:
-        return const Column(
+        return Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            BrongnalFloatingActionButton(
+            const BrongnalFloatingActionButton(
               icon: Icons.photo_camera_outlined,
               backgroundColor: Color.fromRGBO(47, 49, 51, 1.0),
               name: "Take a Photo",
             ),
-            BrongnalFloatingActionButton(
-              icon: Icons.create_outlined,
-              backgroundColor: Color.fromRGBO(70, 75, 92, 1.0),
-              name: "Create a Message",
-            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: FloatingActionButton.large(
+                backgroundColor: backgroundColor,
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute<void>(
+                    builder: (BuildContext context) {
+                      return const ComposeMessage();
+                    },
+                  ));
+                },
+                heroTag: "Send a message.",
+                child: const Icon(Icons.create_outlined,
+                    color: textColor, size: 40),
+              ),
+            )
           ],
         );
       case SelectedDestination.calls:
