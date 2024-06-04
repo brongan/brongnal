@@ -1,9 +1,12 @@
 import 'package:brongnal_app/models/conversations.dart';
+import 'package:brongnal_app/screens/chat.dart';
+import 'package:brongnal_app/screens/conversations.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class ComposeMessage extends StatelessWidget {
-  const ComposeMessage({super.key});
+  const ComposeMessage({super.key, required this.self});
+  final String self;
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +14,6 @@ class ComposeMessage extends StatelessWidget {
     TextEditingController usernameInput = TextEditingController();
     return Consumer<ConversationModel>(
         builder: (context, conversationModel, child) {
-      final items = conversationModel.items;
       return Scaffold(
         appBar: AppBar(
           title: Row(
@@ -24,22 +26,43 @@ class ComposeMessage extends StatelessWidget {
                   color: Colors.white,
                 ),
               ),
-              ListView.builder(itemBuilder: (context, i) {
-                return const Text("TODO");
-              })
             ],
           ),
         ),
-        body: TextField(
-          controller: usernameInput,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-            hintText: "Find by username",
-          ),
-          textInputAction: TextInputAction.send,
-          onSubmitted: (value) {
-            // TODO Navigator.push conversation screen with replace.
-          },
+        body: Column(
+          children: [
+            TextField(
+              controller: usernameInput,
+              decoration: InputDecoration(
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
+                hintText: "Find by username",
+              ),
+              textInputAction: TextInputAction.send,
+              onSubmitted: (value) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (context) => Consumer<ConversationModel>(
+                      builder: (context, conversationModel, child) {
+                        final peer = usernameInput.value.text;
+                        conversationModel.compose(peer);
+                        return ChatScreen(
+                          self: self,
+                          peer: peer,
+                          conversationModel: conversationModel,
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+            Expanded(
+              child: ConversationsScreen(
+                  self: self, conversations: conversationModel),
+            ),
+          ],
         ),
       );
     });
