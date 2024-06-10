@@ -19,12 +19,8 @@ class ConversationModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void compose(String peer) {
-    _conversations.putIfAbsent(peer, () => []);
-  }
-
   void addSentMessage(String message, String sender, String receiver) {
-    _conversations.putIfAbsent(sender, () => []);
+    _conversations.putIfAbsent(receiver, () => []);
     _conversations[receiver]!.add(MessageModel(
         message: message,
         sender: sender,

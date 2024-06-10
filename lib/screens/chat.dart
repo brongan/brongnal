@@ -23,7 +23,7 @@ class ChatScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final messages = conversationModel.items[peer]!;
+    final messages = conversationModel.items[peer] ?? [];
     return Scaffold(
       appBar: getConversationAppBar(context, peer),
       body: Column(
