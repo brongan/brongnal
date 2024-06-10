@@ -85,20 +85,18 @@ async fn main() {
     tokio::spawn(handle_register_user(stub.clone(), client.clone(), tx));
     tokio::spawn(handle_send_message(stub.clone(), client.clone()));
 
-    tokio::spawn(async move {
-        while let Some(decrypted) = rx.recv().await {
-            let message = String::from_utf8(decrypted.message).ok();
-            if let Some(message) = &message {
-                debug_print!(
-                    "[Received Message] {}: {message}",
-                    decrypted.sender_identity
-                );
-            }
-            ReceivedMessage {
-                sender: Some(decrypted.sender_identity),
-                message,
-            }
-            .send_signal_to_dart();
+    while let Some(decrypted) = rx.recv().await {
+        let message = String::from_utf8(decrypted.message).ok();
+        if let Some(message) = &message {
+            debug_print!(
+                "[Received Message] {}: {message}",
+                decrypted.sender_identity
+            );
         }
-    });
+        ReceivedMessage {
+            sender: Some(decrypted.sender_identity),
+            message,
+        }
+        .send_signal_to_dart();
+    }
 }
