@@ -31,32 +31,34 @@ class ComposeMessage extends StatelessWidget {
         ),
         body: Column(
           children: [
-            TextField(
-              controller: usernameInput,
-              decoration: InputDecoration(
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-                hintText: "Find by username",
-              ),
-              textInputAction: TextInputAction.send,
-              onSubmitted: (value) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (context) => Consumer<ConversationModel>(
-                      builder: (context, conversationModel, child) {
-                        final peer = usernameInput.value.text;
-                        conversationModel.compose(peer);
-                        return ChatScreen(
-                          self: self,
-                          peer: peer,
-                          conversationModel: conversationModel,
-                        );
-                      },
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: TextField(
+                controller: usernameInput,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  hintText: "Find by username",
+                ),
+                textInputAction: TextInputAction.send,
+                onSubmitted: (value) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (context) => Consumer<ConversationModel>(
+                        builder: (context, conversationModel, child) {
+                          final peer = usernameInput.value.text;
+                          return ChatScreen(
+                            self: self,
+                            peer: peer,
+                            conversationModel: conversationModel,
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
             Expanded(
               child: ConversationsScreen(
