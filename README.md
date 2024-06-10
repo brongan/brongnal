@@ -1,45 +1,38 @@
-# brongnal_app
+# Brongnal
 
-A new Flutter project.
+I took [Going Bark: A Furry’s Guide to End-to-End Encryption](https://soatok.blog/2020/11/14/going-bark-a-furrys-guide-to-end-to-end-encryption/) as a great idea for a project.
 
-## Getting Started
+X3DH and Double-Ratchet are implemented in Rust in the [protocol](./native/protocol/) directory.
 
-This project is a starting point for a Flutter application.
+## Warning
+DO NOT USE THIS.
 
-A few resources to get you started if this is your first Flutter project:
+ASSUME IT IS INSECURE.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+USE [Signal](https://signal.org/) instead.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+This is for fun and learning :)
 
-## Using Rust Inside Flutter
+## Instructions
 
-This project leverages Flutter for GUI and Rust for the backend logic,
-utilizing the capabilities of the
-[Rinf](https://pub.dev/packages/rinf) framework.
+### App
 
-To run and build this app, you need to have
-[Flutter SDK](https://docs.flutter.dev/get-started/install)
-and [Rust toolchain](https://www.rust-lang.org/tools/install)
-installed on your system.
+To run and build this app, you need to have installed:
+* [Rust toolchain](https://www.rust-lang.org/tools/install)
+* [Flutter SDK](https://docs.flutter.dev/get-started/install)
+* [rinf](https://rinf.cunarist.com/)
+* [protoc](https://grpc.io/docs/protoc-installation/)
+
 You can check that your system is ready with the commands below.
 Note that all the Flutter subcomponents should be installed.
 
 ```bash
 rustc --version
 flutter doctor
-```
-
-You also need to have the CLI tool for Rinf ready.
-
-```bash
 cargo install rinf
 ```
 
-Messages sent between Dart and Rust are implemented using Protobuf.
+Generated schema for messages between Dart and Rust are not commited and must be recreated.
 If you have newly cloned the project repository
 or made changes to the `.proto` files in the `./messages` directory,
 run the following command:
@@ -54,6 +47,40 @@ Now you can run and build this app just like any other Flutter projects.
 flutter run
 ```
 
-For detailed instructions on writing Rust and Flutter together,
-please refer to Rinf's [documentation](https://rinf.cunarist.com).
+### Backend
+
+To run and build the backend, you need to have installed:
+* [Rust toolchain](https://www.rust-lang.org/tools/install)
+* [protoc](https://grpc.io/docs/protoc-installation/)
+
+```bash
+cargo r -p server
+```
+
+### Client
+
+```bash
+cargo r -p client $USER localhost:8080
+```
+
+### Server Release
+
+For me to install the server,
+* [flyctl](https://fly.io/docs/hands-on/install-flyctl/)
+* [just](https://github.com/casey/just)
+* [nix](https://nixos.org/download/) 
+
+I use [Justfile](./Justfile) for hard to remember commands.
+
+```bash
+just deploy
+```
+
+Deploys the server to signal.brongan.com
+
+
+[grpcurl](https://github.com/fullstorydev/grpcurl) is a cool way to see the exposed rpcs from the [proto directory](./native/server/proto/].
+```bash
+grpcurl signal.brongan.com:443 describe
+```
 
