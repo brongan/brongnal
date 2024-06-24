@@ -1,4 +1,3 @@
-import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:flutter/material.dart';

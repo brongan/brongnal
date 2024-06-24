@@ -1,3 +1,4 @@
+use crate::messages::brongnal::{RegisterUserResponse, SendMessage};
 use client::{listen, message, register, DecryptedMessage, MemoryClient};
 use messages::brongnal::{ReceivedMessage, RegisterUserRequest};
 use rinf::debug_print;
@@ -11,8 +12,6 @@ use tokio::{
     },
 };
 use tonic::transport::Channel;
-
-use crate::messages::brongnal::{RegisterUserResponse, SendMessage};
 
 mod messages;
 
