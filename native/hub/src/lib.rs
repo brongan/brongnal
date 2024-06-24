@@ -1,5 +1,5 @@
 use crate::messages::brongnal::{RegisterUserResponse, SendMessage};
-use client::{listen, message, register, DecryptedMessage, MemoryClient};
+use client::{listen, memory_client::MemoryClient, message, register, DecryptedMessage};
 use messages::brongnal::{ReceivedMessage, RegisterUserRequest};
 use rinf::debug_print;
 use server::proto::service::brongnal_client::BrongnalClient;
