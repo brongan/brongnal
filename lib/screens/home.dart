@@ -1,13 +1,10 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
-import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/conversations.dart';
-import 'package:brongnal_app/screens/register.dart';
 import 'package:brongnal_app/screens/compose.dart';
 import 'package:flutter/material.dart';
-import 'package:grpc/grpc.dart';
 
 enum HomepagePopupItem {
   newGroup,
@@ -21,7 +18,9 @@ class Home extends StatefulWidget {
   const Home({
     super.key,
     required this.conversations,
+    required this.username,
   });
+  final String username;
 
   @override
   State<Home> createState() => _HomeState();
@@ -35,37 +34,19 @@ enum SelectedDestination {
 
 class _HomeState extends State<Home> {
   SelectedDestination _destination = SelectedDestination.chats;
-  String? _name;
-  late ClientChannel _channel;
-  late BrongnalClient _stub;
+  late String username;
 
   @override
   void initState() {
     super.initState();
-    _channel = ClientChannel('signal.brongan.com',
-        port: 443,
-        options:
-            const ChannelOptions(credentials: ChannelCredentials.secure()));
-    _stub = BrongnalClient(_channel,
-        options: CallOptions(timeout: const Duration(seconds: 30)));
-    listenForRegister();
+    username = widget.username;
     listenForMessages();
-  }
-
-  void listenForRegister() async {
-    final stream = RegisterUserResponse.rustSignalStream;
-    await for (final rustSignal in stream) {
-      RegisterUserResponse message = rustSignal.message;
-      setState(() {
-        _name = message.username;
-      });
-    }
   }
 
   void listenForMessages() async {
     final stream = ReceivedMessage.rustSignalStream;
     await for (final rustSignal in stream) {
-      widget.conversations.add(rustSignal.message);
+      widget.conversations.add(username, rustSignal.message);
     }
   }
 
@@ -74,13 +55,9 @@ class _HomeState extends State<Home> {
     final theme = Theme.of(context);
     final Widget body;
 
-    if (_name == null) {
-      return Register(stub: _stub);
-    }
-
     if (_destination == SelectedDestination.chats) {
       body = ConversationsScreen(
-          self: _name!, conversations: widget.conversations);
+          self: username, conversations: widget.conversations);
     } else {
       body = Text("TODO", style: theme.textTheme.bodyMedium);
     }
@@ -91,7 +68,7 @@ class _HomeState extends State<Home> {
         backgroundColor: theme.colorScheme.background,
         body: body,
         floatingActionButton: BrongnalFloatingActionButtons(
-            self: _name!, destination: _destination),
+            self: username, destination: _destination),
         bottomNavigationBar: NavigationBar(
           backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
           indicatorColor: theme.navigationBarTheme.indicatorColor,
@@ -153,8 +130,8 @@ class _HomeState extends State<Home> {
                   backgroundColor: AppBarTheme.of(context).foregroundColor,
                   child: const Text('BR', style: TextStyle(fontSize: 24)),
                 ),
-                name: _name!,
-                username: "${_name!.toLowerCase()}.69",
+                name: username,
+                username: "${username.toLowerCase()}.69",
               )
             ]),
           ),

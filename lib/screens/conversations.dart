@@ -1,9 +1,9 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/models/conversations.dart';
-import 'package:brongnal_app/models/message.dart';
 import 'package:brongnal_app/screens/chat.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:brongnal_app/database.dart';
 
 class ConversationsScreen extends StatelessWidget {
   const ConversationsScreen({
