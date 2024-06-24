@@ -1,31 +1,39 @@
 import 'dart:collection';
 
+import 'package:brongnal_app/database.dart';
 import 'package:brongnal_app/messages/brongnal.pb.dart';
-import 'package:brongnal_app/models/message.dart';
 import 'package:flutter/material.dart';
 
 class ConversationModel extends ChangeNotifier {
-  final Map<String, List<MessageModel>> _conversations = {};
+  ConversationModel({required this.database, required this.conversations});
+  final AppDatabase database;
+  final Map<String, List<MessageModel>> conversations;
   UnmodifiableMapView<String, List<MessageModel>> get items =>
-      UnmodifiableMapView(_conversations);
+      UnmodifiableMapView(conversations);
 
-  void add(ReceivedMessage message) {
-    _conversations.putIfAbsent(message.sender, () => []);
-    _conversations[message.sender]!.add(MessageModel(
-        message: message.message,
-        sender: message.sender,
-        time: DateTime.now(),
-        state: MessageState.sent));
+  void add(String self, ReceivedMessage message) async {
+    final messageModel = await database.into(database.messages).insertReturning(
+        MessagesCompanion.insert(
+            sender: message.sender,
+            receiver: self,
+            message: message.message,
+            time: DateTime.now(),
+            state: MessageState.read));
+    conversations.putIfAbsent(message.sender, () => []);
+    conversations[message.sender]!.add(messageModel);
     notifyListeners();
   }
 
-  void addSentMessage(String message, String sender, String receiver) {
-    _conversations.putIfAbsent(receiver, () => []);
-    _conversations[receiver]!.add(MessageModel(
-        message: message,
-        sender: sender,
-        time: DateTime.now(),
-        state: MessageState.sending));
+  void addSentMessage(String message, String self, String receiver) async {
+    final messageModel = await database.into(database.messages).insertReturning(
+        MessagesCompanion.insert(
+            sender: self,
+            receiver: receiver,
+            message: message,
+            time: DateTime.now(),
+            state: MessageState.sending));
+    conversations.putIfAbsent(receiver, () => []);
+    conversations[receiver]!.add(messageModel);
     notifyListeners();
   }
 }
