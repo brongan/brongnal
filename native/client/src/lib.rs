@@ -1,12 +1,10 @@
 use anyhow::{Context, Result};
-use chacha20poly1305::aead::OsRng;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use ed25519_dalek::SigningKey;
 use proto::service::brongnal_client::BrongnalClient;
 use proto::service::{
     RegisterPreKeyBundleRequest, RequestPreKeysRequest, RetrieveMessagesRequest, SendMessageRequest,
 };
-use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
 use server::proto;
 use std::collections::HashMap;
@@ -17,6 +15,8 @@ use tonic::transport::Channel;
 use tonic::Streaming;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use x3dh::{initiate_recv, initiate_send, SignedPreKey, SignedPreKeys};
+
+pub mod memory_client;
 
 pub trait X3DHClient {
     fn fetch_wipe_one_time_secret_key(
@@ -53,69 +53,6 @@ impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
     }
 }
 
-pub struct MemoryClient {
-    identity_key: SigningKey,
-    pre_key: X25519StaticSecret,
-    one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
-}
-
-impl Default for MemoryClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MemoryClient {
-    pub fn new() -> Self {
-        Self {
-            identity_key: SigningKey::generate(&mut OsRng),
-            pre_key: X25519StaticSecret::random_from_rng(OsRng),
-            one_time_pre_keys: HashMap::new(),
-        }
-    }
-}
-
-impl X3DHClient for MemoryClient {
-    fn fetch_wipe_one_time_secret_key(
-        &mut self,
-        one_time_key: &X25519PublicKey,
-    ) -> Result<X25519StaticSecret> {
-        self.one_time_pre_keys
-            .remove(one_time_key)
-            .context("Client failed to find pre key.")
-    }
-
-    fn get_identity_key(&self) -> Result<SigningKey> {
-        Ok(self.identity_key.clone())
-    }
-
-    fn get_pre_key(&mut self) -> Result<X25519StaticSecret> {
-        Ok(self.pre_key.clone())
-    }
-
-    fn get_spk(&self) -> Result<SignedPreKey> {
-        Ok(SignedPreKey {
-            pre_key: X25519PublicKey::from(&self.pre_key),
-            signature: sign_bundle(
-                &self.identity_key,
-                &[(self.pre_key.clone(), X25519PublicKey::from(&self.pre_key))],
-            ),
-        })
-    }
-
-    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
-        let otks = create_prekey_bundle(&self.identity_key, num_keys);
-        let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
-        for otk in otks.bundle {
-            self.one_time_pre_keys.insert(otk.1, otk.0);
-        }
-        SignedPreKeys {
-            pre_keys,
-            signature: otks.signature,
-        }
-    }
-}
-
 pub struct DecryptedMessage {
     pub sender_identity: String,
     pub message: Vec<u8>,
@@ -123,7 +60,7 @@ pub struct DecryptedMessage {
 
 pub async fn listen(
     mut stub: BrongnalClient<Channel>,
-    x3dh_client: Arc<Mutex<MemoryClient>>,
+    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     name: String,
     tx: Sender<DecryptedMessage>,
 ) -> Result<()> {
@@ -139,7 +76,7 @@ pub async fn listen(
 
 pub async fn register(
     stub: &mut BrongnalClient<Channel>,
-    x3dh_client: Arc<Mutex<MemoryClient>>,
+    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     name: String,
 ) -> Result<()> {
     eprintln!("Registering {name}!");
@@ -164,7 +101,7 @@ pub async fn register(
 
 pub async fn message(
     stub: &mut BrongnalClient<Channel>,
-    x3dh_client: Arc<Mutex<MemoryClient>>,
+    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     sender_identity: String,
     recipient_identity: &str,
     message: &str,
@@ -191,7 +128,7 @@ pub async fn message(
 // TODO Replace with stream of decrypted messages.
 pub async fn get_messages(
     mut stream: Streaming<proto::service::Message>,
-    x3dh_client: Arc<Mutex<MemoryClient>>,
+    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     tx: Sender<DecryptedMessage>,
 ) -> Result<()> {
     while let Some(message) = stream.message().await? {
@@ -216,7 +153,11 @@ pub async fn get_messages(
             otk,
             &ciphertext,
         )?;
-        tx.send(DecryptedMessage{sender_identity, message}).await?;
+        tx.send(DecryptedMessage {
+            sender_identity,
+            message,
+        })
+        .await?;
     }
     eprintln!("Server terminated message stream.");
     Ok(())

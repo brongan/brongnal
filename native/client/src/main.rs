@@ -1,5 +1,6 @@
 use anyhow::Result;
-use client::{listen, message, register, DecryptedMessage, MemoryClient};
+use client::memory_client::MemoryClient;
+use client::{listen, message, register, DecryptedMessage};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use server::proto::service::brongnal_client::BrongnalClient;
