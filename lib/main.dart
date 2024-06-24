@@ -6,12 +6,12 @@ import 'package:brongnal_app/database.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import './messages/generated.dart';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, Directory;
 import 'package:flutter/foundation.dart' show kIsWeb;
-
 import 'messages/brongnal.pb.dart';
 
 void main() async {
@@ -32,12 +32,15 @@ void main() async {
     conversations.putIfAbsent(peer, () => []);
     conversations[peer]!.add(messageModel);
   }
+  final directory = await getApplicationSupportDirectory();
 
   runApp(
     ChangeNotifierProvider(
-      create: (context) =>
-          ConversationModel(database: database, conversations: conversations),
-      child: BrongnalApp(username: username),
+      create: (context) => ConversationModel(
+        database: database,
+        conversations: conversations,
+      ),
+      child: BrongnalApp(username: username, directory: directory),
     ),
   );
 }
@@ -49,8 +52,10 @@ void setupWindow() {
 }
 
 class BrongnalApp extends StatefulWidget {
-  const BrongnalApp({super.key, required this.username});
+  const BrongnalApp(
+      {super.key, required this.username, required this.directory});
   final String? username;
+  final Directory directory;
 
   @override
   State<BrongnalApp> createState() => _BrongnalAppState();

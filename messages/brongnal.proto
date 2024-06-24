@@ -3,7 +3,10 @@ package brongnal;
 
 // [RINF:DART-SIGNAL]
 message RegisterUserRequest {
+	// optional
 	optional string username = 1;
+
+	optional string db_path = 2;
 }
 
 // [RINF:RUST-SIGNAL]

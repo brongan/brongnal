@@ -5,7 +5,10 @@ import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:flutter/material.dart';
 
 class ConversationModel extends ChangeNotifier {
-  ConversationModel({required this.database, required this.conversations});
+  ConversationModel({
+    required this.database,
+    required this.conversations,
+  });
   final AppDatabase database;
   final Map<String, List<MessageModel>> conversations;
   UnmodifiableMapView<String, List<MessageModel>> get items =>
