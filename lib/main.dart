@@ -8,6 +8,7 @@ import 'package:brongnal_app/screens/home.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:rinf/rinf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import './messages/generated.dart';
 import 'dart:io' show Platform, Directory;
@@ -16,7 +17,7 @@ import 'messages/brongnal.pb.dart';
 
 void main() async {
   setupWindow();
-  await initializeRust();
+  await initializeRust(assignRustSignal);
 
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final username = prefs.getString("username");

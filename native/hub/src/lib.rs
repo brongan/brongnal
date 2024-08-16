@@ -22,7 +22,7 @@ async fn handle_register_user(
     client: Arc<Mutex<MemoryClient>>,
     tx: Sender<DecryptedMessage>,
 ) {
-    let mut receiver = RegisterUserRequest::get_dart_signal_receiver();
+    let mut receiver = RegisterUserRequest::get_dart_signal_receiver().unwrap();
     while let Some(dart_signal) = receiver.recv().await {
         let message: RegisterUserRequest = dart_signal.message;
         match message.username {
@@ -54,7 +54,7 @@ async fn handle_register_user(
 }
 
 async fn handle_send_message(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<MemoryClient>>) {
-    let mut receiver = SendMessage::get_dart_signal_receiver();
+    let mut receiver = SendMessage::get_dart_signal_receiver().unwrap();
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
         match message(
