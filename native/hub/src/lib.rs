@@ -1,5 +1,5 @@
 use crate::messages::brongnal::{RegisterUserResponse, SendMessage};
-use client::{listen, memory_client::MemoryClient, message, register, DecryptedMessage};
+use client::{listen, message, register, sqlite_client::SqliteClient, DecryptedMessage};
 use messages::brongnal::{ReceivedMessage, RegisterUserRequest};
 use rinf::debug_print;
 use server::proto::service::brongnal_client::BrongnalClient;
@@ -19,7 +19,7 @@ rinf::write_interface!();
 
 async fn handle_register_user(
     mut stub: BrongnalClient<Channel>,
-    client: Arc<Mutex<MemoryClient>>,
+    client: Arc<Mutex<SqliteClient>>,
     tx: Sender<DecryptedMessage>,
 ) {
     let mut receiver = RegisterUserRequest::get_dart_signal_receiver().unwrap();
@@ -53,7 +53,7 @@ async fn handle_register_user(
     }
 }
 
-async fn handle_send_message(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<MemoryClient>>) {
+async fn handle_send_message(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<SqliteClient>>) {
     let mut receiver = SendMessage::get_dart_signal_receiver().unwrap();
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
@@ -78,7 +78,13 @@ async fn main() {
     let stub = BrongnalClient::connect("https://signal.brongan.com:443")
         .await
         .unwrap();
-    let client = Arc::new(Mutex::new(MemoryClient::new()));
+
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal").unwrap();
+    let identity_key_path = xdg_dirs.place_data_file("identity_key").unwrap();
+    let db_path = xdg_dirs.place_data_file("keys.sqlite").unwrap();
+    let client = Arc::new(Mutex::new(
+        SqliteClient::new(&identity_key_path, &db_path).unwrap(),
+    ));
 
     let (tx, mut rx) = mpsc::channel(100);
     tokio::spawn(handle_register_user(stub.clone(), client.clone(), tx));

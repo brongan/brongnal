@@ -1,5 +1,5 @@
 use anyhow::Result;
-use client::memory_client::MemoryClient;
+use client::sqlite_client::SqliteClient;
 use client::{listen, message, register, DecryptedMessage};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
@@ -41,7 +41,10 @@ async fn main() -> Result<()> {
     eprintln!("Registering {name} at {addr}");
 
     let mut stub = BrongnalClient::connect(addr).await?;
-    let client = Arc::new(Mutex::new(MemoryClient::new()));
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
+    let identity_key_path = xdg_dirs.place_data_file("identity_key")?;
+    let db_path = xdg_dirs.place_data_file("keys.sqlite")?;
+    let client = Arc::new(Mutex::new(SqliteClient::new(&identity_key_path, &db_path)?));
 
     register(&mut stub, client.clone(), name.clone()).await?;
 

@@ -17,6 +17,7 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSec
 use x3dh::{initiate_recv, initiate_send, SignedPreKey, SignedPreKeys};
 
 pub mod memory_client;
+pub mod sqlite_client;
 
 pub trait X3DHClient {
     fn fetch_wipe_one_time_secret_key(
@@ -24,9 +25,9 @@ pub trait X3DHClient {
         one_time_key: &X25519PublicKey,
     ) -> Result<X25519StaticSecret, anyhow::Error>;
     fn get_identity_key(&self) -> Result<SigningKey, anyhow::Error>;
-    fn get_pre_key(&mut self) -> Result<X25519StaticSecret, anyhow::Error>;
+    fn get_pre_key(&self) -> Result<X25519StaticSecret, anyhow::Error>;
     fn get_spk(&self) -> Result<SignedPreKey, anyhow::Error>;
-    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys;
+    fn add_one_time_keys(&mut self, num_keys: u32) -> Result<SignedPreKeys>;
 }
 
 #[allow(dead_code)]
@@ -91,7 +92,7 @@ pub async fn register(
             identity_key: Some(ik),
             identity: Some(name.clone()),
             signed_pre_key: Some(x3dh_client.get_spk()?.into()),
-            one_time_key_bundle: Some(x3dh_client.add_one_time_keys(100).into()),
+            one_time_key_bundle: Some(x3dh_client.add_one_time_keys(100)?.into()),
         })
     };
     stub.register_pre_key_bundle(request).await?;
