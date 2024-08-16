@@ -44,7 +44,7 @@ impl X3DHClient for MemoryClient {
         Ok(self.identity_key.clone())
     }
 
-    fn get_pre_key(&mut self) -> Result<X25519StaticSecret> {
+    fn get_pre_key(&self) -> Result<X25519StaticSecret> {
         Ok(self.pre_key.clone())
     }
 
@@ -58,15 +58,15 @@ impl X3DHClient for MemoryClient {
         })
     }
 
-    fn add_one_time_keys(&mut self, num_keys: u32) -> SignedPreKeys {
+    fn add_one_time_keys(&mut self, num_keys: u32) -> Result<SignedPreKeys> {
         let otks = create_prekey_bundle(&self.identity_key, num_keys);
         let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
         for otk in otks.bundle {
             self.one_time_pre_keys.insert(otk.1, otk.0);
         }
-        SignedPreKeys {
+        Ok(SignedPreKeys {
             pre_keys,
             signature: otks.signature,
-        }
+        })
     }
 }
