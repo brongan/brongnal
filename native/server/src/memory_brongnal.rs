@@ -12,7 +12,7 @@ use tonic::{Request, Response, Status};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 #[derive(Clone, Debug)]
-pub struct InMemoryBrongnal {
+pub struct MemoryBrongnal {
     identity_key: Arc<Mutex<HashMap<String, VerifyingKey>>>,
     current_pre_key: Arc<Mutex<HashMap<String, protocol::x3dh::SignedPreKey>>>,
     one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
@@ -20,15 +20,15 @@ pub struct InMemoryBrongnal {
     receivers: Arc<Mutex<HashMap<String, Sender<Result<proto::service::Message, Status>>>>>,
 }
 
-impl Default for InMemoryBrongnal {
+impl Default for MemoryBrongnal {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl InMemoryBrongnal {
+impl MemoryBrongnal {
     pub fn new() -> Self {
-        InMemoryBrongnal {
+        MemoryBrongnal {
             identity_key: Arc::new(Mutex::new(HashMap::new())),
             current_pre_key: Arc::new(Mutex::new(HashMap::new())),
             one_time_pre_keys: Arc::new(Mutex::new(HashMap::new())),
@@ -39,7 +39,7 @@ impl InMemoryBrongnal {
 }
 
 #[tonic::async_trait]
-impl Brongnal for InMemoryBrongnal {
+impl Brongnal for MemoryBrongnal {
     async fn register_pre_key_bundle(
         &self,
         request: Request<proto::service::RegisterPreKeyBundleRequest>,
