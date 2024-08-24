@@ -68,9 +68,11 @@ pub async fn listen(
         .retrieve_messages(RetrieveMessagesRequest {
             identity: Some(name),
         })
-        .await?
-        .into_inner();
-    if let Err(e) = get_messages(stream, x3dh_client, tx).await {
+        .await;
+    if let Err(e) = &stream {
+        eprintln!("Failed to retrieve messages: {e}");
+    }
+    if let Err(e) = get_messages(stream?.into_inner(), x3dh_client, tx).await {
         eprintln!("get_messages terminated with: {e}");
         return Err(e);
     }
