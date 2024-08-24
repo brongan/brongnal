@@ -14,7 +14,6 @@ client = { path = "../client" }
 prost = "0.12.3"
 proto = { path = "../proto" }
 rinf = "6.8.0"
-server = { path = "../server" }
 tokio = { version = "1.38.0", features = ["full"] }
 tonic = { version = "0.11.0", features = ["tls-webpki-roots"] }
 wasm-bindgen = "0.2.91"

@@ -3,12 +3,12 @@ kill_signal = "SIGINT"
 kill_timeout = 5
 primary_region = "sea"
 
-# [mounts]
-# source = "catscii_db"
-# destination = "/db"
+[mounts]
+source = "brongnal_db"
+destination = "/db"
 
 [env]
-DB = "TODO"
+DB = "/db"
 
 [[services]]
   protocol = "tcp"
