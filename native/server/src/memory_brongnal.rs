@@ -35,15 +35,6 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
-    fn clear_one_time_keys(&self, identity: &str) -> tonic::Result<()> {
-        self.one_time_pre_keys
-            .lock()
-            .unwrap()
-            .get_mut(identity)
-            .map(|keys| keys.clear());
-        Ok(())
-    }
-
     fn update_pre_key(
         &self,
         identity: &str,

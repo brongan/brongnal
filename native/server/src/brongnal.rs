@@ -24,9 +24,6 @@ pub trait Storage: std::fmt::Debug {
         signed_pre_key: proto::service::SignedPreKey,
     ) -> Result<()>;
 
-    /// Clears all unburnt one time pre keys for a given identity.
-    fn clear_one_time_keys(&self, identity: &str) -> Result<()>;
-
     /// Replaces the signed pre key for a given identity.
     // TODO(#27) -  Implement signed pre key rotation.
     #[allow(dead_code)]
@@ -111,8 +108,6 @@ impl Brongnal for BrongnalController {
 
         self.storage
             .add_user(identity.clone(), identity_key, signed_pre_key_proto)?;
-        // TODO(#25) - Figure about a better way to handle repeated registration.
-        self.storage.clear_one_time_keys(&identity)?;
         self.storage.add_one_time_keys(&identity, pre_keys)?;
 
         Ok(Response::new(RegisterPreKeyBundleResponse {}))
