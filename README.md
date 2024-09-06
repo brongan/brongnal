@@ -60,7 +60,7 @@ cargo r -p server
 ### Client
 
 ```bash
-cargo r -p client $USER localhost:8080
+cargo r -p client $USER http://localhost:8080
 ```
 
 ### Server Release
