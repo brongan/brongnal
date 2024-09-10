@@ -96,13 +96,13 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
                 .to_vec(),
         )
         .map_err(|_| Status::invalid_argument("Invalid ciphertext."))?;
-
+    
         Ok(protocol::x3dh::Message {
             sender_identity,
             sender_identity_key,
             ephemeral_key,
             one_time_key,
-            ciphertext,
+            ciphertext: ciphertext.into_bytes(),
         })
     }
 }
@@ -114,7 +114,7 @@ impl Into<proto::service::Message> for protocol::x3dh::Message {
             sender_identity_key: Some(self.sender_identity_key.to_bytes().to_vec()),
             ephemeral_key: Some(self.ephemeral_key.to_bytes().to_vec()),
             one_time_key: self.one_time_key.map(|otk| otk.to_bytes().to_vec()),
-            ciphertext: Some(self.ciphertext.as_bytes().to_vec()),
+            ciphertext: Some(self.ciphertext),
         }
     }
 }

@@ -37,7 +37,7 @@ pub struct Message {
     pub sender_identity_key: VerifyingKey,
     pub ephemeral_key: X25519PublicKey,
     pub one_time_key: Option<X25519PublicKey>,
-    pub ciphertext: String,
+    pub ciphertext: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -207,7 +207,7 @@ pub fn initiate_recv(
     sender_identity_key: &VerifyingKey,
     ephemeral_key: X25519PublicKey,
     otk: Option<X25519StaticSecret>,
-    ciphertext: &str,
+    ciphertext: Vec<u8>,
 ) -> Result<([u8; 32], Vec<u8>), X3DHError> {
     // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message.
     // Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
@@ -233,12 +233,14 @@ pub fn initiate_recv(
     let cipher = ChaCha20Poly1305::new_from_slice(&secret_key).unwrap();
     Ok((
         secret_key,
-        decrypt_data(ciphertext, &associated_data, &cipher)?,
+        decrypt_data(&ciphertext, &associated_data, &cipher)?,
     ))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use super::PreKeyBundle;
     use super::{
         create_prekey_bundle, initiate_recv, initiate_recv_get_sk, initiate_send,
@@ -342,7 +344,7 @@ mod tests {
             &message.sender_identity_key,
             message.ephemeral_key,
             Some(bob_otk_priv),
-            &message.ciphertext,
+            message.ciphertext,
         )?;
         assert_eq!(send_sk, recv_sk);
         assert_eq!("Hello Bob!", String::from_utf8(decrypted)?);
@@ -378,7 +380,7 @@ mod tests {
             &message.sender_identity_key,
             message.ephemeral_key,
             None,
-            &message.ciphertext,
+            message.ciphertext,
         )?;
         assert_eq!(send_sk, recv_sk);
         assert_eq!("Hello Bob!", String::from_utf8(decrypted)?);

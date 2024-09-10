@@ -152,7 +152,7 @@ pub async fn get_messages(
             &sender_identity_key,
             ephemeral_key,
             otk,
-            &ciphertext,
+            ciphertext,
         )?;
         tx.send(DecryptedMessage {
             sender_identity,
