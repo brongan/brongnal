@@ -47,6 +47,10 @@ impl SqliteClient {
         };
 
         let connection = Connection::open(db_path).context("Failed to open db_path.")?;
+        connection.pragma_update(None, "journal_mode", "WAL")?;
+        connection.pragma_update(None, "synchronous", "normal")?;
+        connection.pragma_update(None, "foreign_keys", "on")?;
+
         connection
             .execute(
                 "create table if not exists keys (
