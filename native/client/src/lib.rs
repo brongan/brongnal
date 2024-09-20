@@ -126,7 +126,8 @@ pub async fn message(
     Ok(())
 }
 
-// TODO Replace with stream of decrypted messages.
+// TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.
+// TODO(https://github.com/brongan/brongnal/issues/24) - Avoid blocking sqlite calls from async.
 pub async fn get_messages(
     mut stream: Streaming<proto::service::Message>,
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
