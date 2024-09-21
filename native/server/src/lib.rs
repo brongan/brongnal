@@ -88,21 +88,14 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
         } else {
             None
         };
-
-        let ciphertext = String::from_utf8(
-            value
-                .ciphertext
-                .ok_or(Status::invalid_argument("request missing ciphertext"))?
-                .to_vec(),
-        )
-        .map_err(|_| Status::invalid_argument("Invalid ciphertext."))?;
-    
         Ok(protocol::x3dh::Message {
             sender_identity,
             sender_identity_key,
             ephemeral_key,
             one_time_key,
-            ciphertext: ciphertext.into_bytes(),
+            ciphertext: value.ciphertext
+            .ok_or(Status::invalid_argument("request missing ciphertext"))?
+            .to_vec(),
         })
     }
 }

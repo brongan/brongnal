@@ -4,9 +4,9 @@ use std::{
 };
 
 use ed25519_dalek::VerifyingKey;
-use server::proto::gossamer::{
+use server::proto::{gossamer::{
     gossamer_server::Gossamer, ActionRequest, ActionResponse, SignedMessage,
-};
+}, service::Message};
 use tonic::{Request, Response, Status};
 
 pub struct InMemoryGossamer {
@@ -32,8 +32,10 @@ impl Gossamer for InMemoryGossamer {
         if let Some(message) = request.into_inner().message {
             // TODO verify signature and parse contents.
             self.messages.lock().unwrap().push(message);
+            println!("Pushed message");
             Ok(Response::new(ActionResponse {}))
         } else {
+            eprintln!("Empty Gossamer Action.");
             Err(Status::invalid_argument("Empty Gossamer Action."))
         }
     }

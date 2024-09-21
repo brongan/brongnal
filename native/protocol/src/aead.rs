@@ -6,16 +6,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const NONCE_LEN: usize = 12;
-const CURR_VERSION: u8 = 1;
+const VERSION_TAG: u8 = 1;
 
 #[derive(Error, Debug, Serialize, Deserialize)]
 pub enum AeadError {
     #[error("Encryption Failed.")]
     Encrypt,
     #[error("Unexpected tag: `{0}`")]
-    Tag(String),
-    #[error("Ciphertext was not hex encoded.")]
-    Encoding,
+    Tag(u8),
 }
 
 pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Vec<u8>, AeadError> {
@@ -23,15 +21,8 @@ pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Vec<u
     let ciphertext = cipher
         .encrypt(&nonce, payload)
         .map_err(|_| AeadError::Encrypt)?;
-    let mut vec: Vec<u8> = Vec::new();
-    vec.push(CURR_VERSION);
-    for nonce_val in nonce {
-        vec.push(nonce_val)
-    }
-    for cipher_val in ciphertext {
-        vec.push(cipher_val)
-    }
-    Ok(vec)
+    
+    return Ok([vec![VERSION_TAG], nonce.to_vec(), ciphertext].concat());
 }
 
 pub fn decrypt_data(
@@ -39,12 +30,11 @@ pub fn decrypt_data(
     aad: &[u8],
     cipher: &ChaCha20Poly1305,
 ) -> Result<Vec<u8>, AeadError> {
-    // This will limit the version number to 255
-    if ciphertext[0] != CURR_VERSION {
-        return Err(AeadError::Tag(ciphertext[0].to_string().to_owned()));
+    if ciphertext[0] != VERSION_TAG {
+        return Err(AeadError::Tag(ciphertext[0]));
     }
-    let nonce_bytes = &ciphertext[1..(NONCE_LEN+1)];
-    let msg = &ciphertext[(NONCE_LEN+1)..];
+    let nonce_bytes = &ciphertext[1..(NONCE_LEN + 1)];
+    let msg = &ciphertext[(NONCE_LEN + 1)..];
     cipher
         .decrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
         .map_err(|_| AeadError::Encrypt)
