@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
     println!("NAME MESSAGE");
 
     let (tx, mut rx) = mpsc::channel(100);
-    let (cli_tx, mut cli_rx) = mpsc::unbounded_channel::<Command>();
+    let (cli_tx, mut cli_rx) = mpsc::unbounded_channel();
 
     thread::spawn(move || {
         let mut lines = BufReader::new(stdin()).lines();
@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
             msg = rx.recv() => {
                 match msg {
                     Some(DecryptedMessage { sender_identity, message }) => {
-                        println!("{sender_identity} {}", String::from_utf8(message).unwrap());
+                        println!("Received message from {sender_identity}: \"{}\"", String::from_utf8(message).unwrap());
                     },
                     None =>  {
                         eprintln!("Server terminated connection.");
