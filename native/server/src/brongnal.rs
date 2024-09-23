@@ -88,32 +88,37 @@ impl Brongnal for BrongnalController {
             .identity
             .clone()
             .ok_or(Status::invalid_argument("request missing identity"))?;
-        let ik = parse_verifying_key(&request.identity_key())
+        let identity_key = parse_verifying_key(&request.identity_key())
             .map_err(|_| Status::invalid_argument("request has invalid identity_key"))?;
-        let spk_proto = request
+        let signed_pre_key_proto = request
             .signed_pre_key
             .ok_or(Status::invalid_argument("request is missing signed prekey"))?;
-        let spk = protocol::x3dh::SignedPreKey::try_from(spk_proto.clone())?;
-        verify_bundle(&ik, &[spk.pre_key], &spk.signature)
-            .map_err(|_| Status::unauthenticated("failed to validate signed prekey signature"))?;
+        let signed_pre_key = protocol::x3dh::SignedPreKey::try_from(signed_pre_key_proto.clone())?;
+        verify_bundle(
+            &identity_key,
+            &[signed_pre_key.pre_key],
+            &signed_pre_key.signature,
+        )
+        .map_err(|_| Status::unauthenticated("failed to validate signed prekey signature"))?;
 
-        let otks = request.one_time_key_bundle.ok_or(Status::invalid_argument(
+        let one_time_keys = request.one_time_key_bundle.ok_or(Status::invalid_argument(
             "request missing one_time_key_bundle",
         ))?;
-        let pre_keys: Vec<X25519PublicKey> = otks
+        let pre_keys: Vec<X25519PublicKey> = one_time_keys
             .pre_keys
             .iter()
             .map(|key| parse_x25519_public_key(&key))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| Status::invalid_argument("invalid prekey bundle"))?;
-        let signature = Signature::from_slice(otks.signature()).map_err(|_e| {
+        let signature = Signature::from_slice(one_time_keys.signature()).map_err(|_e| {
             Status::invalid_argument("one time prekey bundle signature is invalid")
         })?;
-        verify_bundle(&ik, &pre_keys, &signature).map_err(|_| {
+        verify_bundle(&identity_key, &pre_keys, &signature).map_err(|_| {
             Status::unauthenticated("failed to validate one time prekey bundle signature")
         })?;
 
-        self.storage.add_user(identity.clone(), ik, spk_proto)?;
+        self.storage
+            .add_user(identity.clone(), identity_key, signed_pre_key_proto)?;
         // TODO(#25) - Figure about a better way to handle repeated registration.
         self.storage.clear_one_time_keys(&identity)?;
         self.storage.add_one_time_keys(&identity, pre_keys)?;
@@ -130,11 +135,11 @@ impl Brongnal for BrongnalController {
 
         let (identity_key, signed_pre_key) = self.storage.get_current_keys(request.identity())?;
         // TODO(#26) - Prevent one time key pop abuse.
-        let otk = self.storage.pop_one_time_key(request.identity())?;
+        let one_time_key = self.storage.pop_one_time_key(request.identity())?;
 
         let reply = PreKeyBundle {
             identity_key: Some(identity_key.as_bytes().into()),
-            one_time_key: otk.map(|otk| otk.as_bytes().into()),
+            one_time_key: one_time_key.map(|otk| otk.as_bytes().into()),
             signed_pre_key: Some(signed_pre_key.into()),
         };
         Ok(Response::new(reply))
@@ -146,7 +151,7 @@ impl Brongnal for BrongnalController {
     ) -> Result<Response<SendMessageResponse>> {
         let request = request.into_inner();
         println!(
-            "Sending a message to: \"{}\".",
+            "Received request to send message to: \"{}\".",
             request.recipient_identity()
         );
 
