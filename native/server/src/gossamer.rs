@@ -32,10 +32,8 @@ impl Gossamer for InMemoryGossamer {
         if let Some(message) = request.into_inner().message {
             // TODO verify signature and parse contents.
             self.messages.lock().unwrap().push(message);
-            println!("Pushed message");
             Ok(Response::new(ActionResponse {}))
         } else {
-            eprintln!("Empty Gossamer Action.");
             Err(Status::invalid_argument("Empty Gossamer Action."))
         }
     }

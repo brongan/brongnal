@@ -132,15 +132,12 @@ impl Brongnal for MemoryBrongnal {
             .map(|tx| tx.to_owned());
         if let Some(tx) = tx {
             if let Ok(()) = tx.send(Ok(message.clone())).await {
-                println!("Sent a message");
                 return Ok(Response::new(proto::service::SendMessageResponse {}));
             } else {
-                eprintln!("Hit a race condition");
                 // Idk what can really be done about this race condition.
                 self.receivers.lock().unwrap().remove(&recipient_identity);
             }
         }
-        println!("Response okayed");
         let mut messages = self.messages.lock().unwrap();
         if !messages.contains_key(&recipient_identity) {
             println!("Did not find recipient_identity, adding their message under new key");
@@ -150,7 +147,6 @@ impl Brongnal for MemoryBrongnal {
             .get_mut(&recipient_identity)
             .unwrap()
             .push(message.try_into()?);
-        print!("No issues with messages lock, sending okay response");
         Ok(Response::new(proto::service::SendMessageResponse {}))
     }
 
