@@ -140,7 +140,6 @@ impl Brongnal for MemoryBrongnal {
         }
         let mut messages = self.messages.lock().unwrap();
         if !messages.contains_key(&recipient_identity) {
-            println!("Did not find recipient_identity, adding their message under new key");
             messages.insert(recipient_identity.clone(), Vec::new());
         }
         messages
