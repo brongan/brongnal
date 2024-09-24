@@ -5,6 +5,7 @@ mod aead;
 pub mod bundle;
 pub mod x3dh;
 
+// TODO(https://github.com/brongan/brongnal/issues/7) - Implement ratcheting.
 fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     let mut hasher = Blake2b512::new();
     hasher.update(key);
@@ -15,3 +16,4 @@ fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     r.clone_from_slice(&blake2b_mac[32..]);
     (l, r)
 }
+
