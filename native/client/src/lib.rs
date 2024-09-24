@@ -6,7 +6,6 @@ use proto::service::{
     RegisterPreKeyBundleRequest, RequestPreKeysRequest, RetrieveMessagesRequest, SendMessageRequest,
 };
 use protocol::x3dh;
-use server::proto;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;

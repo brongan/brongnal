@@ -1,6 +1,5 @@
 use crate::brongnal::Storage;
 use ed25519_dalek::VerifyingKey;
-use server::proto;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 use tonic::Status;

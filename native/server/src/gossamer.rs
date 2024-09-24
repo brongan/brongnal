@@ -1,12 +1,8 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-
 use ed25519_dalek::VerifyingKey;
-use server::proto::{gossamer::{
-    gossamer_server::Gossamer, ActionRequest, ActionResponse, SignedMessage,
-}, service::Message};
+use proto::gossamer::gossamer_server::Gossamer;
+use proto::gossamer::{ActionRequest, ActionResponse, SignedMessage};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tonic::{Request, Response, Status};
 
 pub struct InMemoryGossamer {

@@ -293,10 +293,10 @@ dependencies = [
  "ed25519-dalek",
  "futures",
  "nom",
+ "proto",
  "protocol",
  "rusqlite",
  "rustls 0.23.13",
- "server",
  "strum",
  "strum_macros",
  "tokio",
@@ -753,6 +753,7 @@ version = "0.1.0"
 dependencies = [
  "client",
  "prost",
+ "proto",
  "rinf",
  "server",
  "tokio",
@@ -1177,6 +1178,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "proto"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "prost",
+ "protocol",
+ "thiserror",
+ "tonic",
+ "tonic-build",
+ "tonic-reflection",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "protoc-prebuilt"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1501,12 +1516,12 @@ dependencies = [
  "ed25519-dalek",
  "futures",
  "prost",
+ "proto",
  "protocol",
  "thiserror",
  "tokio",
  "tokio-stream",
  "tonic",
- "tonic-build",
  "tonic-reflection",
  "x25519-dalek",
 ]
