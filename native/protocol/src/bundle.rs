@@ -43,3 +43,40 @@ pub fn create_prekey_bundle(signing_key: &SigningKey, num_keys: u32) -> X3DHPreK
     let signature = sign_bundle(signing_key, &bundle);
     X3DHPreKeyBundle { signature, bundle }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::bundle::*;
+    use anyhow::Result;
+    use chacha20poly1305::aead::OsRng;
+
+    #[test]
+    fn create_verify_bundle_success() -> Result<()> {
+        let key = SigningKey::generate(&mut OsRng);
+        for bundle_size in [0, 1, 4] {
+            let signed_bundle = create_prekey_bundle(&key, bundle_size);
+            let bundle_keys: Vec<X25519PublicKey> = signed_bundle
+                .bundle
+                .into_iter()
+                .map(|pair| pair.1)
+                .collect();
+            assert_eq!(
+                verify_bundle(
+                    &VerifyingKey::from(&key),
+                    &bundle_keys,
+                    &signed_bundle.signature
+                )?,
+                ()
+            );
+
+            let other_key = SigningKey::generate(&mut OsRng);
+            assert!(verify_bundle(
+                &VerifyingKey::from(&other_key),
+                &bundle_keys,
+                &signed_bundle.signature,
+            )
+            .is_err());
+        }
+        Ok(())
+    }
+}
