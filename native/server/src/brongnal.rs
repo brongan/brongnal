@@ -1,24 +1,16 @@
-use ed25519_dalek::Signature;
-use ed25519_dalek::VerifyingKey;
+use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_server::Brongnal;
+use proto::service::{
+    PreKeyBundle, RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RequestPreKeysRequest,
+    RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
+};
+use proto::{parse_verifying_key, parse_x25519_public_key};
 use protocol::bundle::verify_bundle;
-use server::parse_verifying_key;
-use server::parse_x25519_public_key;
-use server::proto;
-use server::proto::service::PreKeyBundle;
-use server::proto::service::RequestPreKeysRequest;
-use server::proto::service::RetrieveMessagesRequest;
-use server::proto::service::SendMessageRequest;
-use server::proto::service::SendMessageResponse;
-use server::proto::service::{RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse};
-use std::sync::Mutex;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::Result;
-use tonic::Status;
-use tonic::{Request, Response};
+use tonic::{Request, Response, Result, Status};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 pub trait Storage: std::fmt::Debug {
@@ -63,7 +55,7 @@ pub trait Storage: std::fmt::Debug {
 #[derive(Debug)]
 pub struct BrongnalController {
     storage: Box<dyn Storage + Send + Sync>,
-    receivers: Arc<Mutex<HashMap<String, Sender<Result<proto::service::Message>>>>>,
+    receivers: Arc<Mutex<HashMap<String, mpsc::Sender<Result<proto::service::Message>>>>>,
 }
 
 impl BrongnalController {

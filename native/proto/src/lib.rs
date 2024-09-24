@@ -4,17 +4,6 @@ use thiserror::Error;
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
-pub mod proto {
-    pub mod gossamer {
-        tonic::include_proto!("gossamer");
-    }
-    pub mod service {
-        tonic::include_proto!("service");
-    }
-    pub const FILE_DESCRIPTOR_SET: &[u8] =
-        tonic::include_file_descriptor_set!("service_descriptor");
-}
-
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("Key was not a valid ED25519 point.")]
@@ -32,19 +21,26 @@ pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, ClientErro
     let key: [u8; 32] = key.try_into().map_err(|_| ClientError::InvalidX25519Key)?;
     Ok(X25519PublicKey::from(key))
 }
+pub mod gossamer {
+    tonic::include_proto!("gossamer");
+}
+pub mod service {
+    tonic::include_proto!("service");
+}
+pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("service_descriptor");
 
-impl Into<proto::service::SignedPreKey> for protocol::x3dh::SignedPreKey {
-    fn into(self) -> proto::service::SignedPreKey {
-        proto::service::SignedPreKey {
+impl Into<service::SignedPreKey> for protocol::x3dh::SignedPreKey {
+    fn into(self) -> service::SignedPreKey {
+        service::SignedPreKey {
             pre_key: Some(self.pre_key.to_bytes().to_vec()),
             signature: Some(self.signature.to_vec()),
         }
     }
 }
 
-impl Into<proto::service::SignedPreKeys> for protocol::x3dh::SignedPreKeys {
-    fn into(self) -> proto::service::SignedPreKeys {
-        proto::service::SignedPreKeys {
+impl Into<service::SignedPreKeys> for protocol::x3dh::SignedPreKeys {
+    fn into(self) -> service::SignedPreKeys {
+        service::SignedPreKeys {
             pre_keys: self
                 .pre_keys
                 .into_iter()
@@ -55,10 +51,10 @@ impl Into<proto::service::SignedPreKeys> for protocol::x3dh::SignedPreKeys {
     }
 }
 
-impl TryFrom<proto::service::SignedPreKey> for protocol::x3dh::SignedPreKey {
+impl TryFrom<service::SignedPreKey> for protocol::x3dh::SignedPreKey {
     type Error = tonic::Status;
 
-    fn try_from(value: proto::service::SignedPreKey) -> Result<Self, Self::Error> {
+    fn try_from(value: service::SignedPreKey) -> Result<Self, Self::Error> {
         let signature = value.signature();
 
         let pre_key = parse_x25519_public_key(value.pre_key())
@@ -69,10 +65,10 @@ impl TryFrom<proto::service::SignedPreKey> for protocol::x3dh::SignedPreKey {
     }
 }
 
-impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
+impl TryFrom<service::Message> for protocol::x3dh::Message {
     type Error = tonic::Status;
 
-    fn try_from(value: proto::service::Message) -> Result<Self, Self::Error> {
+    fn try_from(value: service::Message) -> Result<Self, Self::Error> {
         let sender_identity = value.sender_identity().to_owned();
         let sender_identity_key = parse_verifying_key(value.sender_identity_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid sender_identity_key: {e}")))?;
@@ -93,16 +89,17 @@ impl TryFrom<proto::service::Message> for protocol::x3dh::Message {
             sender_identity_key,
             ephemeral_key,
             one_time_key,
-            ciphertext: value.ciphertext
-            .ok_or(Status::invalid_argument("request missing ciphertext"))?
-            .to_vec(),
+            ciphertext: value
+                .ciphertext
+                .ok_or(Status::invalid_argument("request missing ciphertext"))?
+                .to_vec(),
         })
     }
 }
 
-impl Into<proto::service::Message> for protocol::x3dh::Message {
-    fn into(self) -> proto::service::Message {
-        proto::service::Message {
+impl Into<service::Message> for protocol::x3dh::Message {
+    fn into(self) -> service::Message {
+        service::Message {
             sender_identity: Some(self.sender_identity),
             sender_identity_key: Some(self.sender_identity_key.to_bytes().to_vec()),
             ephemeral_key: Some(self.ephemeral_key.to_bytes().to_vec()),
@@ -112,7 +109,7 @@ impl Into<proto::service::Message> for protocol::x3dh::Message {
     }
 }
 
-impl TryInto<protocol::x3dh::PreKeyBundle> for proto::service::PreKeyBundle {
+impl TryInto<protocol::x3dh::PreKeyBundle> for service::PreKeyBundle {
     type Error = tonic::Status;
 
     fn try_into(self) -> Result<protocol::x3dh::PreKeyBundle, Self::Error> {
@@ -143,13 +140,13 @@ impl TryInto<protocol::x3dh::PreKeyBundle> for proto::service::PreKeyBundle {
 
 #[allow(dead_code)]
 struct SignedMessage {
-    message: proto::gossamer::Message,
+    message: gossamer::Message,
     signature: Signature,
     provider: String,
     public_key: VerifyingKey,
 }
 
-impl TryInto<SignedMessage> for proto::gossamer::SignedMessage {
+impl TryInto<SignedMessage> for gossamer::SignedMessage {
     type Error = tonic::Status;
     fn try_into(self) -> Result<SignedMessage, Self::Error> {
         let signature = Signature::from_slice(self.signature()).map_err(|_| {
@@ -165,7 +162,7 @@ impl TryInto<SignedMessage> for proto::gossamer::SignedMessage {
             .verify_strict(&contents, &signature)
             .map_err(|_| Status::unauthenticated("SignedMessage signature invalid."))?;
 
-        let message = proto::gossamer::Message::decode(&*contents)
+        let message = gossamer::Message::decode(&*contents)
             .map_err(|_| Status::invalid_argument("contents are not serialized message."))?;
 
         Ok(SignedMessage {

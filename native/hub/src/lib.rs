@@ -1,8 +1,8 @@
 use crate::messages::brongnal::{RegisterUserResponse, SendMessage};
 use client::{listen, message, register, sqlite_client::SqliteClient, DecryptedMessage};
 use messages::brongnal::{ReceivedMessage, RegisterUserRequest};
+use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
-use server::proto::service::brongnal_client::BrongnalClient;
 use std::sync::Arc;
 use tokio::{
     self,

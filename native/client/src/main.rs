@@ -3,7 +3,7 @@ use client::sqlite_client::SqliteClient;
 use client::{listen, message, register, DecryptedMessage};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
-use server::proto::service::brongnal_client::BrongnalClient;
+use proto::service::brongnal_client::BrongnalClient;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
