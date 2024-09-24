@@ -1,179 +1,132 @@
+use crate::brongnal::Storage;
 use ed25519_dalek::VerifyingKey;
-use proto::service::brongnal_server::Brongnal;
-use protocol::bundle::verify_bundle;
-use server::parse_verifying_key;
 use server::proto;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
-use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Request, Response, Status};
+use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 #[derive(Clone, Debug)]
-pub struct MemoryBrongnal {
+pub struct MemoryStorage {
     identity_key: Arc<Mutex<HashMap<String, VerifyingKey>>>,
-    current_pre_key: Arc<Mutex<HashMap<String, protocol::x3dh::SignedPreKey>>>,
+    current_pre_key: Arc<Mutex<HashMap<String, proto::service::SignedPreKey>>>,
     one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
-    messages: Arc<Mutex<HashMap<String, Vec<protocol::x3dh::Message>>>>,
-    receivers: Arc<Mutex<HashMap<String, Sender<Result<proto::service::Message, Status>>>>>,
+    messages: Arc<Mutex<HashMap<String, Vec<proto::service::Message>>>>,
 }
 
-impl Default for MemoryBrongnal {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MemoryBrongnal {
-    pub fn new() -> Self {
-        MemoryBrongnal {
-            identity_key: Arc::new(Mutex::new(HashMap::new())),
-            current_pre_key: Arc::new(Mutex::new(HashMap::new())),
-            one_time_pre_keys: Arc::new(Mutex::new(HashMap::new())),
-            messages: Arc::new(Mutex::new(HashMap::new())),
-            receivers: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-}
-
-#[tonic::async_trait]
-impl Brongnal for MemoryBrongnal {
-    async fn register_pre_key_bundle(
+impl Storage for MemoryStorage {
+    fn add_user(
         &self,
-        request: Request<proto::service::RegisterPreKeyBundleRequest>,
-    ) -> Result<Response<proto::service::RegisterPreKeyBundleResponse>, Status> {
-        let request = request.into_inner();
-        println!("Registering PreKeyBundle for {}", request.identity());
-        let identity: String = request
-            .identity
-            .clone()
-            .ok_or(Status::invalid_argument("request missing identity"))?;
-        let ik = parse_verifying_key(&request.identity_key())
-            .map_err(|_| Status::invalid_argument("PreKeyBundle invalid identity_key"))?;
-        let spk = protocol::x3dh::SignedPreKey::try_from(
-            request
-                .signed_pre_key
-                .ok_or(Status::invalid_argument("Request Missing SPK."))?,
-        )?;
-        verify_bundle(&ik, &[spk.pre_key], &spk.signature)
-            .map_err(|_| Status::unauthenticated("SPK signature invalid."))?;
+        identity: String,
+        identity_key: VerifyingKey,
+        signed_pre_key: proto::service::SignedPreKey,
+    ) -> tonic::Result<()> {
         self.identity_key
             .lock()
             .unwrap()
-            .insert(identity.clone(), ik);
-        self.current_pre_key.lock().unwrap().insert(identity, spk);
-        self.one_time_pre_keys.lock().unwrap().clear();
-        Ok(Response::new(
-            proto::service::RegisterPreKeyBundleResponse {},
-        ))
+            .insert(identity.clone(), identity_key);
+        self.current_pre_key
+            .lock()
+            .unwrap()
+            .insert(identity.clone(), signed_pre_key);
+        self.one_time_pre_keys
+            .lock()
+            .unwrap()
+            .insert(identity, Vec::new());
+        Ok(())
     }
 
-    async fn request_pre_keys(
+    fn clear_one_time_keys(&self, identity: &str) -> tonic::Result<()> {
+        self.one_time_pre_keys
+            .lock()
+            .unwrap()
+            .get_mut(identity)
+            .map(|keys| keys.clear());
+        Ok(())
+    }
+
+    fn update_pre_key(
         &self,
-        request: Request<proto::service::RequestPreKeysRequest>,
-    ) -> Result<Response<proto::service::PreKeyBundle>, Status> {
-        let request = request.into_inner();
-        println!("RequestingPreKey Bundle for {}", request.identity());
+        identity: &str,
+        mut pre_key: proto::service::SignedPreKey,
+    ) -> tonic::Result<()> {
+        self.current_pre_key
+            .lock()
+            .unwrap()
+            .get_mut(identity)
+            .replace(&mut pre_key);
+        Ok(())
+    }
+
+    fn add_one_time_keys(
+        &self,
+        identity: &str,
+        mut pre_keys: Vec<X25519PublicKey>,
+    ) -> tonic::Result<()> {
+        let mut one_time_pre_keys = self.one_time_pre_keys.lock().unwrap();
+        one_time_pre_keys
+            .get_mut(identity)
+            .ok_or(Status::not_found("User not found."))?
+            .append(&mut pre_keys);
+        Ok(())
+    }
+
+    fn get_current_keys(
+        &self,
+        identity: &str,
+    ) -> tonic::Result<(VerifyingKey, proto::service::SignedPreKey)> {
         let identity_key = *self
             .identity_key
             .lock()
             .unwrap()
-            .get(request.identity())
+            .get(identity)
             .ok_or(Status::not_found("User not found."))?;
-        let spk = self
+        let signed_pre_key = self
             .current_pre_key
             .lock()
             .unwrap()
-            .get(request.identity())
+            .get(identity)
             .ok_or(Status::not_found("User not found."))?
             .to_owned();
-        let otk = if let Some(otks) = self
-            .one_time_pre_keys
-            .lock()
-            .unwrap()
-            .get_mut(request.identity())
-        {
-            otks.pop()
-        } else {
-            None
-        };
-
-        let reply = proto::service::PreKeyBundle {
-            identity_key: Some(identity_key.as_bytes().into()),
-            one_time_key: otk.map(|otk| otk.as_bytes().into()),
-            signed_pre_key: Some(spk.into()),
-        };
-        Ok(Response::new(reply))
+        Ok((identity_key, signed_pre_key))
     }
 
-    async fn send_message(
-        &self,
-        request: Request<proto::service::SendMessageRequest>,
-    ) -> Result<Response<proto::service::SendMessageResponse>, Status> {
-        let request = request.into_inner();
-        println!("Sending a message to: {}", request.recipient_identity());
-        let recipient_identity = request.recipient_identity.ok_or(Status::invalid_argument(
-            "SendMessageRequest missing recipient_identity",
-        ))?;
-        let message: proto::service::Message = request
-            .message
-            .ok_or(Status::invalid_argument(
-                "SendMessageRequest missing message.",
-            ))?
-            .into();
-
-        let tx = self
-            .receivers
-            .lock()
-            .unwrap()
-            .get(&recipient_identity)
-            .map(|tx| tx.to_owned());
-        if let Some(tx) = tx {
-            if let Ok(()) = tx.send(Ok(message.clone())).await {
-                return Ok(Response::new(proto::service::SendMessageResponse {}));
+    fn pop_one_time_key(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
+        let one_time_key =
+            if let Some(one_time_keys) = self.one_time_pre_keys.lock().unwrap().get_mut(identity) {
+                one_time_keys.pop()
             } else {
-                // Idk what can really be done about this race condition.
-                self.receivers.lock().unwrap().remove(&recipient_identity);
-            }
-        }
-        let mut messages = self.messages.lock().unwrap();
-        if !messages.contains_key(&recipient_identity) {
-            messages.insert(recipient_identity.clone(), Vec::new());
-        }
-        messages
-            .get_mut(&recipient_identity)
-            .unwrap()
-            .push(message.try_into()?);
-        Ok(Response::new(proto::service::SendMessageResponse {}))
+                None
+            };
+        Ok(one_time_key)
     }
 
-    type RetrieveMessagesStream = ReceiverStream<Result<proto::service::Message, Status>>;
-    async fn retrieve_messages(
-        &self,
-        request: Request<proto::service::RetrieveMessagesRequest>,
-    ) -> Result<Response<Self::RetrieveMessagesStream>, Status> {
-        let request = request.into_inner();
-        println!("Retrieving {}'s messages.", request.identity());
-        let identity = request
-            .identity
-            .ok_or(Status::invalid_argument("request missing identity"))?;
-        let (tx, rx) = mpsc::channel(4);
+    fn add_message(&self, recipient: &str, message: proto::service::Message) -> tonic::Result<()> {
+        let mut messages = self.messages.lock().unwrap();
+        if !messages.contains_key(recipient) {
+            messages.insert(recipient.to_string(), Vec::new());
+        }
+        messages.get_mut(recipient).unwrap().push(message);
+        Ok(())
+    }
 
-        let messages = self
+    fn get_messages(&self, identity: &str) -> tonic::Result<Vec<proto::service::Message>> {
+        Ok(self
             .messages
             .lock()
             .unwrap()
-            .remove(&identity)
-            .unwrap_or(Vec::new());
+            .remove(identity)
+            .unwrap_or(Vec::new()))
+    }
+}
 
-        for message in messages {
-            // TODO handle result.
-            let _ = tx.send(Ok(message.into())).await;
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        MemoryStorage {
+            identity_key: Arc::new(Mutex::new(HashMap::new())),
+            current_pre_key: Arc::new(Mutex::new(HashMap::new())),
+            one_time_pre_keys: Arc::new(Mutex::new(HashMap::new())),
+            messages: Arc::new(Mutex::new(HashMap::new())),
         }
-        self.receivers.lock().unwrap().insert(identity, tx);
-
-        Ok(Response::new(ReceiverStream::new(rx)))
     }
 }

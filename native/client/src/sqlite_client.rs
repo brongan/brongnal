@@ -4,15 +4,23 @@ use chacha20poly1305::aead::OsRng;
 use ed25519_dalek::SigningKey;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use x3dh::{SignedPreKey, SignedPreKeys};
 
+#[derive(Clone, Copy, strum_macros::Display)]
+#[repr(u32)]
 enum KeyType {
     PreKey = 1,
     OneTimeKey = 2,
+}
+
+struct PreKey {
+    pub_key: X25519PublicKey,
+    priv_key: X25519StaticSecret,
+    key_type: KeyType,
 }
 
 pub struct SqliteClient {
@@ -47,6 +55,10 @@ impl SqliteClient {
         };
 
         let connection = Connection::open(db_path).context("Failed to open db_path.")?;
+        connection.pragma_update(None, "journal_mode", "WAL")?;
+        connection.pragma_update(None, "synchronous", "normal")?;
+        connection.pragma_update(None, "foreign_keys", "on")?;
+
         connection
             .execute(
                 "create table if not exists keys (
@@ -64,20 +76,26 @@ impl SqliteClient {
             identity_key,
             connection,
         };
-        sqlite_client.insert(pre_key, KeyType::PreKey)?;
+        sqlite_client.insert(&[PreKey {
+            pub_key: X25519PublicKey::from(&pre_key),
+            priv_key: pre_key,
+            key_type: KeyType::PreKey,
+        }])?;
         Ok(sqlite_client)
     }
 
-    fn insert(&self, key: X25519StaticSecret, key_type: KeyType) -> Result<()> {
-        let _ = self.connection.execute(
-            "INSERT INTO keys (public_key, private_key, key_type, creation_time) VALUES (?1, ?2, ?3, ?4)",
-            (
-                X25519PublicKey::from(&key).to_bytes(),
-                key.to_bytes(),
-                key_type as u32,
+    fn insert(&self, keys: &[PreKey]) -> Result<()> {
+        let mut stmt = self.connection.prepare(
+            "INSERT INTO keys (public_key, private_key, key_type, creation_time) VALUES (?1, ?2, ?3, ?4)")?;
+        for key in keys {
+            stmt.execute((
+                key.pub_key.to_bytes(),
+                key.priv_key.to_bytes(),
+                key.key_type as u32,
                 SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
-            ),
-        ).context("Failed to insert key.");
+            ))
+            .context("Failed to insert key.")?;
+        }
         Ok(())
     }
 }
@@ -87,12 +105,11 @@ impl X3DHClient for SqliteClient {
         &mut self,
         one_time_key: &X25519PublicKey,
     ) -> Result<X25519StaticSecret, anyhow::Error> {
-        let serialized = one_time_key.to_bytes();
-        let mut stmt = self
-            .connection
-            .prepare("DELETE from keys WHERE public_key=?1;")?;
-        let key: Vec<u8> = stmt.query_row(serialized, |row| row.get(0))?;
-        let key: [u8; 32] = key.try_into().map_err(|_| anyhow!("oop"))?;
+        let key: [u8; 32] = self.connection.query_row(
+            "DELETE from keys WHERE public_key=?1 RETURNING private_key",
+            params![one_time_key.to_bytes()],
+            |row| Ok(row.get(0)?),
+        )?;
         Ok(X25519StaticSecret::from(key))
     }
 
@@ -103,13 +120,13 @@ impl X3DHClient for SqliteClient {
     fn get_pre_key(&self) -> Result<X25519StaticSecret, anyhow::Error> {
         let mut stmt = self.connection.prepare(
             "SELECT private_key FROM keys WHERE key_type = 1 ORDER BY creation_time DESC LIMIT 1",
-        ).context("Failed to prepare statement.")?;
+        ).context("failed to prepare get_pre_key statement")?;
         let key = stmt
             .query_row([], |row| {
                 let key: Vec<u8> = row.get(0)?;
                 return Ok(key);
             })
-            .context("Failed to find pre_key.")?;
+            .context("failed to find pre_key")?;
         let key: [u8; 32] = key.try_into().map_err(|_| anyhow!("oop"))?;
         Ok(X25519StaticSecret::from(key))
     }
@@ -117,7 +134,7 @@ impl X3DHClient for SqliteClient {
     fn get_spk(&self) -> Result<SignedPreKey, anyhow::Error> {
         let pre_key = self
             .get_pre_key()
-            .context("Failed to get pre_key for spk.")?;
+            .context("failed to get pre_key for spk")?;
         Ok(SignedPreKey {
             pre_key: X25519PublicKey::from(&pre_key),
             signature: sign_bundle(
@@ -130,10 +147,17 @@ impl X3DHClient for SqliteClient {
     fn add_one_time_keys(&mut self, num_keys: u32) -> Result<SignedPreKeys> {
         let otks = create_prekey_bundle(&self.identity_key, num_keys);
         let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
-        for otk in otks.bundle {
-            self.insert(otk.0, KeyType::OneTimeKey)
-                .context("Failed to add one time keys.")?;
-        }
+        let persisted_pre_keys: Vec<PreKey> = otks
+            .bundle
+            .into_iter()
+            .map(|otk| PreKey {
+                priv_key: otk.0,
+                pub_key: otk.1,
+                key_type: KeyType::OneTimeKey,
+            })
+            .collect();
+        self.insert(&persisted_pre_keys)
+            .context("failed to add one time keys")?;
         Ok(SignedPreKeys {
             pre_keys,
             signature: otks.signature,

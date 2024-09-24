@@ -71,7 +71,10 @@ pub async fn listen(
         })
         .await?
         .into_inner();
-    get_messages(stream, x3dh_client, tx).await?;
+    if let Err(e) = get_messages(stream, x3dh_client, tx).await {
+        eprintln!("get_messages terminated with: {e}");
+        return Err(e);
+    }
     Ok(())
 }
 
@@ -126,7 +129,8 @@ pub async fn message(
     Ok(())
 }
 
-// TODO Replace with stream of decrypted messages.
+// TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.
+// TODO(https://github.com/brongan/brongnal/issues/24) - Avoid blocking sqlite calls from async.
 pub async fn get_messages(
     mut stream: Streaming<proto::service::Message>,
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
@@ -142,6 +146,7 @@ pub async fn get_messages(
         } = message.try_into()?;
         let mut x3dh_client = x3dh_client.lock().await;
         let otk = if let Some(otk) = otk {
+            // TODO(#28) - Handle a missing one-time prekey.
             Some(x3dh_client.fetch_wipe_one_time_secret_key(&otk)?)
         } else {
             None
