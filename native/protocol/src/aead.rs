@@ -6,44 +6,35 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const NONCE_LEN: usize = 12;
+const VERSION_TAG: u8 = 1;
 
 #[derive(Error, Debug, Serialize, Deserialize)]
 pub enum AeadError {
     #[error("Encryption Failed.")]
     Encrypt,
     #[error("Unexpected tag: `{0}`")]
-    Tag(String),
-    #[error("Ciphertext was not hex encoded.")]
-    Encoding,
+    Tag(u8),
 }
 
-pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<String, AeadError> {
+pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Vec<u8>, AeadError> {
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
     let ciphertext = cipher
         .encrypt(&nonce, payload)
         .map_err(|_| AeadError::Encrypt)?;
-
-    Ok(format!(
-        "{}{}{}",
-        "v1",
-        hex::encode(nonce),
-        hex::encode(ciphertext)
-    ))
+    
+    return Ok([vec![VERSION_TAG], nonce.to_vec(), ciphertext].concat());
 }
 
 pub fn decrypt_data(
-    ciphertext: &str,
+    ciphertext: &[u8],
     aad: &[u8],
     cipher: &ChaCha20Poly1305,
 ) -> Result<Vec<u8>, AeadError> {
-    let version = &ciphertext[0..2];
-    if version != "v1" {
-        return Err(AeadError::Tag(version.to_owned()));
+    if ciphertext[0] != VERSION_TAG {
+        return Err(AeadError::Tag(ciphertext[0]));
     }
-
-    let nonce_bytes =
-        hex::decode(&ciphertext[2..(NONCE_LEN * 2 + 2)]).map_err(|_| AeadError::Encoding)?;
-    let msg = hex::decode(&ciphertext[(2 + NONCE_LEN * 2)..]).map_err(|_| AeadError::Encoding)?;
+    let nonce_bytes = &ciphertext[1..(NONCE_LEN + 1)];
+    let msg = &ciphertext[(NONCE_LEN + 1)..];
     cipher
         .decrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
         .map_err(|_| AeadError::Encrypt)
@@ -60,7 +51,7 @@ mod tests {
         let key = ChaCha20Poly1305::generate_key(&mut OsRng);
         let text = "Hello I am a string.";
         let cipher = ChaCha20Poly1305::new(&key);
-        let ciphertext: String = encrypt_data(
+        let ciphertext = encrypt_data(
             Payload {
                 msg: text.as_bytes(),
                 aad: &[],
