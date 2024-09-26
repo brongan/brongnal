@@ -21,7 +21,7 @@ pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Vec<u
     let ciphertext = cipher
         .encrypt(&nonce, payload)
         .map_err(|_| AeadError::Encrypt)?;
-    
+
     return Ok([vec![VERSION_TAG], nonce.to_vec(), ciphertext].concat());
 }
 

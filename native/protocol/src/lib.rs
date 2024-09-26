@@ -16,4 +16,3 @@ fn ratchet(key: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     r.clone_from_slice(&blake2b_mac[32..]);
     (l, r)
 }
-
