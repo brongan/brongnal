@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use ed25519_dalek::VerifyingKey;
 use prost::Message;
 use proto::parse_verifying_key;
+use proto::service::SignedPreKey as SignedPreKeyProto;
 use rusqlite::{params, Connection};
 use std::sync::MutexGuard;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -67,7 +68,7 @@ impl Storage for SqliteStorage {
         &self,
         identity: String,
         identity_key: VerifyingKey,
-        signed_pre_key: proto::service::SignedPreKey,
+        signed_pre_key: SignedPreKeyProto,
     ) -> tonic::Result<()> {
         eprintln!("Adding user: {identity}");
 
@@ -98,7 +99,7 @@ impl Storage for SqliteStorage {
     fn update_pre_key(
         &self,
         identity: &str,
-        signed_pre_key: proto::service::SignedPreKey,
+        signed_pre_key: SignedPreKeyProto,
     ) -> tonic::Result<()> {
         eprintln!("Updating pre key for user: {identity}");
 
@@ -141,13 +142,10 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
-    fn get_current_keys(
-        &self,
-        identity: &str,
-    ) -> tonic::Result<(VerifyingKey, proto::service::SignedPreKey)> {
+    fn get_current_keys(&self, identity: &str) -> tonic::Result<(VerifyingKey, SignedPreKeyProto)> {
         eprintln!("Retrieving pre keys for user: {identity}");
 
-        let (ik, spk): (Vec<u8>, Vec<u8>) = self
+        let (identity_key, signed_pre_key): (Vec<u8>, Vec<u8>) = self
             .connection()?
             .query_row(
                 "SELECT key, current_pre_key FROM user WHERE identity = ?1",
@@ -155,8 +153,8 @@ impl Storage for SqliteStorage {
                 |row| Ok((row.get(0).unwrap(), row.get(1).unwrap())),
             )
             .map_err(|_| Status::not_found("user not found"))?;
-        let ik = parse_verifying_key(&ik).unwrap();
-        let spk = proto::service::SignedPreKey::decode(&*spk).unwrap();
+        let ik = parse_verifying_key(&identity_key).unwrap();
+        let spk = SignedPreKeyProto::decode(&*signed_pre_key).unwrap();
         Ok((ik, spk))
     }
 
