@@ -25,8 +25,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Brongnal Server listening at: {server_addr}");
 
-    let mut db_path = PathBuf::from(std::env::var("DB").unwrap_or(String::from("db")));
-    db_path.push("brongnal.db3");
+    let db_dir = std::env::var("DB").unwrap_or(String::from("db"));
+    let db_path: PathBuf = [&db_dir, "brongnal.db3"].iter().collect();
     println!("Database Path: {}", db_path.display());
     let connection = Connection::open(db_path)?;
     let controller = BrongnalController::new(Box::new(SqliteStorage::new(connection)?));
