@@ -1,5 +1,7 @@
 use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_server::Brongnal;
+use proto::service::Message as MessageProto;
+use proto::service::SignedPreKey as SignedPreKeyProto;
 use proto::service::{
     PreKeyBundle, RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
@@ -21,38 +23,35 @@ pub trait Storage: std::fmt::Debug {
         &self,
         identity: String,
         identity_key: VerifyingKey,
-        signed_pre_key: proto::service::SignedPreKey,
+        signed_pre_key: SignedPreKeyProto,
     ) -> Result<()>;
 
     /// Replaces the signed pre key for a given identity.
     // TODO(#27) -  Implement signed pre key rotation.
     #[allow(dead_code)]
-    fn update_pre_key(&self, identity: &str, pre_key: proto::service::SignedPreKey) -> Result<()>;
+    fn update_pre_key(&self, identity: &str, pre_key: SignedPreKeyProto) -> Result<()>;
 
     /// Appends new unburnt one time pre keys for others to message a given identity.
     fn add_one_time_keys(&self, identity: &str, pre_keys: Vec<X25519PublicKey>) -> Result<()>;
 
     /// Retrieves the identity key and signed pre key for a given identity.
     /// A client must first invoke this before messaging a peer.
-    fn get_current_keys(
-        &self,
-        identity: &str,
-    ) -> Result<(VerifyingKey, proto::service::SignedPreKey)>;
+    fn get_current_keys(&self, identity: &str) -> Result<(VerifyingKey, SignedPreKeyProto)>;
 
     /// Retrieve a one time pre key for an identity.
     fn pop_one_time_key(&self, identity: &str) -> Result<Option<X25519PublicKey>>;
 
     /// Enqueue a message for a given recipient.
-    fn add_message(&self, recipient: &str, message: proto::service::Message) -> Result<()>;
+    fn add_message(&self, recipient: &str, message: MessageProto) -> Result<()>;
 
     /// Retrieve enqueued messages for a given identity.
-    fn get_messages(&self, identity: &str) -> Result<Vec<proto::service::Message>>;
+    fn get_messages(&self, identity: &str) -> Result<Vec<MessageProto>>;
 }
 
 #[derive(Debug)]
 pub struct BrongnalController {
     storage: Box<dyn Storage + Send + Sync>,
-    receivers: Arc<Mutex<HashMap<String, mpsc::Sender<Result<proto::service::Message>>>>>,
+    receivers: Arc<Mutex<HashMap<String, mpsc::Sender<Result<MessageProto>>>>>,
 }
 
 impl BrongnalController {
@@ -145,7 +144,7 @@ impl Brongnal for BrongnalController {
         let recipient_identity = request.recipient_identity.ok_or(Status::invalid_argument(
             "request missing recipient_identity",
         ))?;
-        let message_proto: proto::service::Message = request
+        let message_proto: MessageProto = request
             .message
             .ok_or(Status::invalid_argument("request missing message"))?
             .into();
@@ -168,7 +167,7 @@ impl Brongnal for BrongnalController {
         Ok(Response::new(SendMessageResponse {}))
     }
 
-    type RetrieveMessagesStream = ReceiverStream<Result<proto::service::Message>>;
+    type RetrieveMessagesStream = ReceiverStream<Result<MessageProto>>;
     async fn retrieve_messages(
         &self,
         request: Request<RetrieveMessagesRequest>,
