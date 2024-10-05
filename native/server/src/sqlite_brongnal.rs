@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use ed25519_dalek::VerifyingKey;
 use prost::Message;
 use proto::parse_verifying_key;
+use proto::service::Message as MessageProto;
 use proto::service::SignedPreKey as SignedPreKeyProto;
 use rusqlite::{params, Connection};
 use std::sync::MutexGuard;
@@ -159,7 +160,7 @@ impl Storage for SqliteStorage {
         Ok(key.map(|key| X25519PublicKey::from(key)))
     }
 
-    fn add_message(&self, recipient: &str, message: proto::service::Message) -> tonic::Result<()> {
+    fn add_message(&self, recipient: &str, message: MessageProto) -> tonic::Result<()> {
         println!("Enqueueing message for user {recipient} in database.");
 
         let _: u64 = self
@@ -179,7 +180,7 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
-    fn get_messages(&self, identity: &str) -> tonic::Result<Vec<proto::service::Message>> {
+    fn get_messages(&self, identity: &str) -> tonic::Result<Vec<MessageProto>> {
         println!("Retrieving messages for \"{identity}\" from the database.");
 
         let connection = self.connection()?;
@@ -194,7 +195,7 @@ impl Storage for SqliteStorage {
             // TODO wtf is happening here?
             let message: Vec<u8> = message.unwrap();
             ret.push(
-                proto::service::Message::decode(&*message)
+                MessageProto::decode(&*message)
                     .map_err(|_| Status::internal("Failed to deserialize Message proto"))?,
             );
         }
@@ -214,7 +215,7 @@ mod tests {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         let alice = MemoryClient::new();
         let alice_verifying_key = VerifyingKey::from(&alice.get_identity_key().unwrap());
-        let alice_spk: proto::service::SignedPreKey = alice.get_spk().unwrap().into();
+        let alice_spk: SignedPreKeyProto = alice.get_spk().unwrap().into();
         assert_eq!(
             storage.add_user(
                 String::from("alice"),
@@ -268,7 +269,7 @@ mod tests {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         assert_eq!(
             storage
-                .update_pre_key("bob", proto::service::SignedPreKey::default())
+                .update_pre_key("bob", SignedPreKeyProto::default())
                 .err()
                 .map(|e| e.code()),
             Some(Code::NotFound)
@@ -281,7 +282,7 @@ mod tests {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         let mut bob = MemoryClient::new();
         let bob_verifying_key = VerifyingKey::from(&bob.get_identity_key().unwrap());
-        let mut bob_spk: proto::service::SignedPreKey = bob.get_spk().unwrap().into();
+        let mut bob_spk: SignedPreKeyProto = bob.get_spk().unwrap().into();
         storage.add_user(String::from("bob"), bob_verifying_key, bob_spk.clone())?;
 
         bob_spk.pre_key = Some(bob.add_one_time_keys(1)?.pre_keys[0].to_bytes().to_vec());
@@ -299,7 +300,7 @@ mod tests {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         assert_eq!(
             storage
-                .add_message("bob", proto::service::Message::default())
+                .add_message("bob", MessageProto::default())
                 .err()
                 .map(|e| e.code()),
             Some(Code::NotFound)
@@ -319,7 +320,7 @@ mod tests {
             bob_spk.clone().into(),
         )?;
 
-        let message_proto = proto::service::Message {
+        let message_proto = MessageProto {
             sender_identity: Some(String::from("alice")),
             sender_identity_key: Some(b"alice identity key".to_vec()),
             ephemeral_key: Some(b"alice ephemeral key".to_vec()),

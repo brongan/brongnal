@@ -1,16 +1,19 @@
-use crate::brongnal::Storage;
 use ed25519_dalek::VerifyingKey;
+use proto::service::Message as MessageProto;
+use proto::service::SignedPreKey as SignedPreKeyProto;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
+use crate::brongnal::Storage;
+
 #[derive(Clone, Debug)]
 pub struct MemoryStorage {
     identity_key: Arc<Mutex<HashMap<String, VerifyingKey>>>,
-    current_pre_key: Arc<Mutex<HashMap<String, proto::service::SignedPreKey>>>,
+    current_pre_key: Arc<Mutex<HashMap<String, SignedPreKeyProto>>>,
     one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
-    messages: Arc<Mutex<HashMap<String, Vec<proto::service::Message>>>>,
+    messages: Arc<Mutex<HashMap<String, Vec<MessageProto>>>>,
 }
 
 impl Storage for MemoryStorage {
@@ -18,7 +21,7 @@ impl Storage for MemoryStorage {
         &self,
         identity: String,
         identity_key: VerifyingKey,
-        signed_pre_key: proto::service::SignedPreKey,
+        signed_pre_key: SignedPreKeyProto,
     ) -> tonic::Result<()> {
         self.identity_key
             .lock()
@@ -35,11 +38,7 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
-    fn update_pre_key(
-        &self,
-        identity: &str,
-        mut pre_key: proto::service::SignedPreKey,
-    ) -> tonic::Result<()> {
+    fn update_pre_key(&self, identity: &str, mut pre_key: SignedPreKeyProto) -> tonic::Result<()> {
         self.current_pre_key
             .lock()
             .unwrap()
@@ -61,10 +60,7 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
-    fn get_current_keys(
-        &self,
-        identity: &str,
-    ) -> tonic::Result<(VerifyingKey, proto::service::SignedPreKey)> {
+    fn get_current_keys(&self, identity: &str) -> tonic::Result<(VerifyingKey, SignedPreKeyProto)> {
         let identity_key = *self
             .identity_key
             .lock()
@@ -91,16 +87,16 @@ impl Storage for MemoryStorage {
         Ok(one_time_key)
     }
 
-    fn add_message(&self, recipient: &str, message: proto::service::Message) -> tonic::Result<()> {
+    fn add_message(&self, recipient: &str, message: MessageProto) -> tonic::Result<()> {
         let mut messages = self.messages.lock().unwrap();
         if !messages.contains_key(recipient) {
-            messages.insert(recipient.to_string(), Vec::new());
+            messages.insert(recipient.to_owned(), Vec::new());
         }
         messages.get_mut(recipient).unwrap().push(message);
         Ok(())
     }
 
-    fn get_messages(&self, identity: &str) -> tonic::Result<Vec<proto::service::Message>> {
+    fn get_messages(&self, identity: &str) -> tonic::Result<Vec<MessageProto>> {
         Ok(self
             .messages
             .lock()

@@ -3,7 +3,8 @@ use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use ed25519_dalek::SigningKey;
 use proto::service::brongnal_client::BrongnalClient;
 use proto::service::{
-    RegisterPreKeyBundleRequest, RequestPreKeysRequest, RetrieveMessagesRequest, SendMessageRequest,
+    Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
+    RetrieveMessagesRequest, SendMessageRequest,
 };
 use protocol::x3dh;
 use std::collections::HashMap;
@@ -133,7 +134,7 @@ pub async fn message(
 // TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.
 // TODO(https://github.com/brongan/brongnal/issues/24) - Avoid blocking sqlite calls from async.
 pub async fn get_messages(
-    mut stream: Streaming<proto::service::Message>,
+    mut stream: Streaming<MessageProto>,
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     tx: Sender<DecryptedMessage>,
 ) -> Result<()> {
