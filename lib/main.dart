@@ -47,7 +47,11 @@ void main() async {
 }
 
 void setupWindow() {
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+  if (!kIsWeb &&
+      (Platform.isWindows ||
+          Platform.isLinux ||
+          Platform.isMacOS ||
+          Platform.isAndroid)) {
     WidgetsFlutterBinding.ensureInitialized();
   }
 }

@@ -3,14 +3,11 @@ use client::{listen, message, register, sqlite_client::SqliteClient, DecryptedMe
 use messages::brongnal::{ReceivedMessage, RegisterUserRequest};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
+use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::{
-    self,
-    sync::{
-        mpsc::{self, Sender},
-        Mutex,
-    },
-};
+use tokio;
+use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
 mod messages;
@@ -79,9 +76,8 @@ async fn main() {
         .await
         .unwrap();
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal").unwrap();
-    let identity_key_path = xdg_dirs.place_data_file("identity_key").unwrap();
-    let db_path = xdg_dirs.place_data_file("keys.sqlite").unwrap();
+    let identity_key_path = PathBuf::from("identity_key");
+    let db_path = PathBuf::from("keys.sqlite");
     let client = Arc::new(Mutex::new(
         SqliteClient::new(&identity_key_path, &db_path).unwrap(),
     ));
