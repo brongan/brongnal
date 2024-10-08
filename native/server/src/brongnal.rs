@@ -1,9 +1,10 @@
 use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_server::Brongnal;
 use proto::service::Message as MessageProto;
+use proto::service::PreKeyBundle as PreKeyBundleProto;
 use proto::service::SignedPreKey as SignedPreKeyProto;
 use proto::service::{
-    PreKeyBundle, RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RequestPreKeysRequest,
+    RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
 };
 use proto::{parse_verifying_key, parse_x25519_public_key};
@@ -11,6 +12,7 @@ use protocol::bundle::verify_bundle;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Result, Status};
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -19,27 +21,27 @@ pub trait Storage: std::fmt::Debug {
     /// Add a new identity to the storage.
     /// For now, repeated calls should not return an error.
     // TODO(#25) - Return error when attempting to overwrite registration.
-    fn add_user(
+    fn register_user(
         &self,
         identity: String,
-        identity_key: VerifyingKey,
-        signed_pre_key: SignedPreKeyProto,
+        ik: VerifyingKey,
+        spk: SignedPreKeyProto,
     ) -> Result<()>;
 
     /// Replaces the signed pre key for a given identity.
     // TODO(#27) -  Implement signed pre key rotation.
     #[allow(dead_code)]
-    fn update_pre_key(&self, identity: &str, pre_key: SignedPreKeyProto) -> Result<()>;
+    fn update_spk(&self, identity: &str, pre_key: SignedPreKeyProto) -> Result<()>;
 
     /// Appends new unburnt one time pre keys for others to message a given identity.
-    fn add_one_time_keys(&self, identity: &str, pre_keys: Vec<X25519PublicKey>) -> Result<()>;
+    fn add_opks(&self, identity: &str, pre_keys: Vec<X25519PublicKey>) -> Result<()>;
 
     /// Retrieves the identity key and signed pre key for a given identity.
     /// A client must first invoke this before messaging a peer.
     fn get_current_keys(&self, identity: &str) -> Result<(VerifyingKey, SignedPreKeyProto)>;
 
     /// Retrieve a one time pre key for an identity.
-    fn pop_one_time_key(&self, identity: &str) -> Result<Option<X25519PublicKey>>;
+    fn pop_opk(&self, identity: &str) -> Result<Option<X25519PublicKey>>;
 
     /// Enqueue a message for a given recipient.
     fn add_message(&self, recipient: &str, message: MessageProto) -> Result<()>;
@@ -51,7 +53,7 @@ pub trait Storage: std::fmt::Debug {
 #[derive(Debug)]
 pub struct BrongnalController {
     storage: Box<dyn Storage + Send + Sync>,
-    receivers: Arc<Mutex<HashMap<String, mpsc::Sender<Result<MessageProto>>>>>,
+    receivers: Arc<Mutex<HashMap<String, Sender<Result<MessageProto>>>>>,
 }
 
 impl BrongnalController {
@@ -76,38 +78,34 @@ impl Brongnal for BrongnalController {
             .identity
             .clone()
             .ok_or(Status::invalid_argument("request missing identity"))?;
-        let identity_key = parse_verifying_key(&request.identity_key())
+        let ik = parse_verifying_key(&request.identity_key())
             .map_err(|_| Status::invalid_argument("request has invalid identity_key"))?;
-        let signed_pre_key_proto = request
+        let spk_proto = request
             .signed_pre_key
             .ok_or(Status::invalid_argument("request is missing signed prekey"))?;
-        let signed_pre_key = protocol::x3dh::SignedPreKey::try_from(signed_pre_key_proto.clone())?;
-        verify_bundle(
-            &identity_key,
-            &[signed_pre_key.pre_key],
-            &signed_pre_key.signature,
-        )
-        .map_err(|_| Status::unauthenticated("failed to validate signed prekey signature"))?;
+        let spk = protocol::x3dh::SignedPreKey::try_from(spk_proto.clone())?;
+        verify_bundle(&ik, &[spk.pre_key], &spk.signature)
+            .map_err(|_| Status::unauthenticated("failed to validate signed prekey signature"))?;
 
-        let one_time_keys = request.one_time_key_bundle.ok_or(Status::invalid_argument(
-            "request missing one_time_key_bundle",
+        let opks = request.one_time_key_bundle.ok_or(Status::invalid_argument(
+            "request missing one_time_prekey_bundle",
         ))?;
-        let pre_keys: Vec<X25519PublicKey> = one_time_keys
+        let pre_keys: Vec<X25519PublicKey> = opks
             .pre_keys
             .iter()
             .map(|key| parse_x25519_public_key(&key))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| Status::invalid_argument("invalid prekey bundle"))?;
-        let signature = Signature::from_slice(one_time_keys.signature()).map_err(|_e| {
+        let signature = Signature::from_slice(opks.signature()).map_err(|_e| {
             Status::invalid_argument("one time prekey bundle signature is invalid")
         })?;
-        verify_bundle(&identity_key, &pre_keys, &signature).map_err(|_| {
+        verify_bundle(&ik, &pre_keys, &signature).map_err(|_| {
             Status::unauthenticated("failed to validate one time prekey bundle signature")
         })?;
 
         self.storage
-            .add_user(identity.clone(), identity_key, signed_pre_key_proto)?;
-        self.storage.add_one_time_keys(&identity, pre_keys)?;
+            .register_user(identity.clone(), ik, spk_proto)?;
+        self.storage.add_opks(&identity, pre_keys)?;
 
         Ok(Response::new(RegisterPreKeyBundleResponse {}))
     }
@@ -115,18 +113,18 @@ impl Brongnal for BrongnalController {
     async fn request_pre_keys(
         &self,
         request: Request<RequestPreKeysRequest>,
-    ) -> Result<Response<PreKeyBundle>> {
+    ) -> Result<Response<PreKeyBundleProto>> {
         let request = request.into_inner();
         println!("Retrieving PreKeyBundle for \"{}\".", request.identity());
 
-        let (identity_key, signed_pre_key) = self.storage.get_current_keys(request.identity())?;
+        let (ik, spk) = self.storage.get_current_keys(request.identity())?;
         // TODO(#26) - Prevent one time key pop abuse.
-        let one_time_key = self.storage.pop_one_time_key(request.identity())?;
+        let opk = self.storage.pop_opk(request.identity())?;
 
-        let reply = PreKeyBundle {
-            identity_key: Some(identity_key.as_bytes().into()),
-            one_time_key: one_time_key.map(|otk| otk.as_bytes().into()),
-            signed_pre_key: Some(signed_pre_key.into()),
+        let reply = PreKeyBundleProto {
+            identity_key: Some(ik.as_bytes().into()),
+            one_time_key: opk.map(|opk| opk.as_bytes().into()),
+            signed_pre_key: Some(spk.into()),
         };
         Ok(Response::new(reply))
     }

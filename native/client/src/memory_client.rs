@@ -9,9 +9,9 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSec
 use x3dh::{SignedPreKey, SignedPreKeys};
 
 pub struct MemoryClient {
-    identity_key: SigningKey,
+    ik: SigningKey,
     pre_key: X25519StaticSecret,
-    one_time_pre_keys: HashMap<X25519PublicKey, X25519StaticSecret>,
+    opks: HashMap<X25519PublicKey, X25519StaticSecret>,
 }
 
 impl Default for MemoryClient {
@@ -23,25 +23,25 @@ impl Default for MemoryClient {
 impl MemoryClient {
     pub fn new() -> Self {
         Self {
-            identity_key: SigningKey::generate(&mut OsRng),
+            ik: SigningKey::generate(&mut OsRng),
             pre_key: X25519StaticSecret::random_from_rng(OsRng),
-            one_time_pre_keys: HashMap::new(),
+            opks: HashMap::new(),
         }
     }
 }
 
 impl X3DHClient for MemoryClient {
-    fn fetch_wipe_one_time_secret_key(
+    fn fetch_wipe_opk(
         &mut self,
-        one_time_key: &X25519PublicKey,
+        opk: &X25519PublicKey,
     ) -> Result<X25519StaticSecret> {
-        self.one_time_pre_keys
-            .remove(one_time_key)
+        self.opks
+            .remove(opk)
             .context("Client failed to find pre key.")
     }
 
-    fn get_identity_key(&self) -> Result<SigningKey> {
-        Ok(self.identity_key.clone())
+    fn get_ik(&self) -> Result<SigningKey> {
+        Ok(self.ik.clone())
     }
 
     fn get_pre_key(&self) -> Result<X25519StaticSecret> {
@@ -52,21 +52,21 @@ impl X3DHClient for MemoryClient {
         Ok(SignedPreKey {
             pre_key: X25519PublicKey::from(&self.pre_key),
             signature: sign_bundle(
-                &self.identity_key,
+                &self.ik,
                 &[(self.pre_key.clone(), X25519PublicKey::from(&self.pre_key))],
             ),
         })
     }
 
-    fn add_one_time_keys(&mut self, num_keys: u32) -> Result<SignedPreKeys> {
-        let otks = create_prekey_bundle(&self.identity_key, num_keys);
-        let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
-        for otk in otks.bundle {
-            self.one_time_pre_keys.insert(otk.1, otk.0);
+    fn create_opks(&mut self, num_keys: u32) -> Result<SignedPreKeys> {
+        let opks = create_prekey_bundle(&self.ik, num_keys);
+        let pre_keys = opks.bundle.iter().map(|(_, _pub)| *_pub).collect();
+        for opk in opks.bundle {
+            self.opks.insert(opk.1, opk.0);
         }
         Ok(SignedPreKeys {
             pre_keys,
-            signature: otks.signature,
+            signature: opks.signature,
         })
     }
 }

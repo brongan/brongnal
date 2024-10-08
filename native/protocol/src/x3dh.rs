@@ -14,6 +14,9 @@ use x25519_dalek::{
     StaticSecret as X25519StaticSecret,
 };
 
+// See https://signal.org/docs/specifications/x3dh/ for an explanation of the below variable names
+// and functions of the X3DH protocol.
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKey {
     pub pre_key: X25519PublicKey,
@@ -27,24 +30,24 @@ pub struct SignedPreKeys {
 }
 
 pub struct X3DHSendKeyAgreement {
-    pub ephemeral_key: X25519PublicKey,
-    pub secret_key: [u8; 32],
+    pub ek: X25519PublicKey,
+    pub sk: [u8; 32],
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
     pub sender_identity: String,
-    pub sender_identity_key: VerifyingKey,
-    pub ephemeral_key: X25519PublicKey,
-    pub one_time_key: Option<X25519PublicKey>,
+    pub sender_ik: VerifyingKey,
+    pub ek: X25519PublicKey,
+    pub opk: Option<X25519PublicKey>,
     pub ciphertext: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PreKeyBundle {
-    pub identity_key: VerifyingKey,
-    pub one_time_key: Option<X25519PublicKey>,
-    pub signed_pre_key: SignedPreKey,
+    pub ik: VerifyingKey,
+    pub opk: Option<X25519PublicKey>,
+    pub spk: SignedPreKey,
 }
 
 // KDF(KM) represents 32 bytes of output from the HKDF algorithm [3] with inputs:
@@ -78,30 +81,24 @@ pub enum X3DHError {
 //    DH4 = DH(EKA, OPKB)
 //    SK = KDF(DH1 || DH2 || DH3 || DH4)
 fn initiate_send_get_sk(
-    identity_key: VerifyingKey,
-    signed_pre_key: SignedPreKey,
-    one_time_key: Option<X25519PublicKey>,
-    sender_key: &SigningKey,
+    recipient_ik: VerifyingKey,
+    spk: SignedPreKey,
+    opk: Option<X25519PublicKey>,
+    sender_ik: &SigningKey,
 ) -> Result<X3DHSendKeyAgreement, X3DHError> {
-    let _ = verify_bundle(
-        &identity_key,
-        &[signed_pre_key.pre_key],
-        &signed_pre_key.signature,
-    )
-    .map_err(|_| X3DHError::SignatureValidation);
+    let _ = verify_bundle(&recipient_ik, &[spk.pre_key], &spk.signature)
+        .map_err(|_| X3DHError::SignatureValidation);
 
-    let ephemeral_secret = X25519ReusableSecret::random();
-    let ephemeral_key = X25519PublicKey::from(&ephemeral_secret);
-    let dh1 = X25519StaticSecret::from(sender_key.to_scalar_bytes())
-        .diffie_hellman(&signed_pre_key.pre_key);
-    let dh2 = ephemeral_secret.diffie_hellman(&X25519PublicKey::from(
-        identity_key.to_montgomery().to_bytes(),
+    let ek = X25519ReusableSecret::random();
+    let dh1 = X25519StaticSecret::from(sender_ik.to_scalar_bytes()).diffie_hellman(&spk.pre_key);
+    let dh2 = ek.diffie_hellman(&X25519PublicKey::from(
+        recipient_ik.to_montgomery().to_bytes(),
     ));
-    let dh3 = ephemeral_secret.diffie_hellman(&signed_pre_key.pre_key);
+    let dh3 = ek.diffie_hellman(&spk.pre_key);
 
-    let secret_key = match one_time_key {
-        Some(one_time_key) => {
-            let dh4 = ephemeral_secret.diffie_hellman(&one_time_key);
+    let sk = match opk {
+        Some(one_time_prekey) => {
+            let dh4 = ek.diffie_hellman(&one_time_prekey);
             kdf(&[
                 dh1.to_bytes(),
                 dh2.to_bytes(),
@@ -114,8 +111,8 @@ fn initiate_send_get_sk(
     };
 
     Ok(X3DHSendKeyAgreement {
-        ephemeral_key,
-        secret_key,
+        ek: X25519PublicKey::from(&ek),
+        sk,
     })
 }
 
@@ -125,26 +122,23 @@ fn initiate_send_get_sk(
 //    Identifiers stating which of Bob's prekeys Alice used
 //    An initial ciphertext encrypted with some AEAD encryption scheme [4] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
 pub fn initiate_send(
-    bundle: PreKeyBundle,
+    prekey_bundle: PreKeyBundle,
     sender_identity: String,
-    sender_key: &SigningKey,
+    sender_ik: &SigningKey,
     message: &[u8],
 ) -> Result<([u8; 32], Message), X3DHError> {
-    let X3DHSendKeyAgreement {
-        ephemeral_key,
-        secret_key,
-    } = initiate_send_get_sk(
-        bundle.identity_key,
-        bundle.signed_pre_key,
-        bundle.one_time_key,
-        sender_key,
+    let X3DHSendKeyAgreement { ek, sk } = initiate_send_get_sk(
+        prekey_bundle.ik,
+        prekey_bundle.spk,
+        prekey_bundle.opk,
+        sender_ik,
     )?;
     // Alice then calculates an "associated data" byte sequence AD that contains identity information for both parties:
     //   AD = Encode(IKA) || Encode(IKB)
     // Alice may optionally append additional information to AD, such as Alice and Bob's usernames, certificates, or other identifying information.
     let associated_data = [
-        sender_key.verifying_key().to_bytes(),
-        bundle.identity_key.to_bytes(),
+        sender_ik.verifying_key().to_bytes(),
+        prekey_bundle.ik.to_bytes(),
     ]
     .concat();
 
@@ -155,38 +149,35 @@ pub fn initiate_send(
             msg: message,
             aad: &associated_data,
         },
-        &ChaCha20Poly1305::new_from_slice(&secret_key).unwrap(),
+        &ChaCha20Poly1305::new_from_slice(&sk).unwrap(),
     )?;
 
     Ok((
-        secret_key,
+        sk,
         Message {
             sender_identity,
-            sender_identity_key: sender_key.verifying_key(),
-            ephemeral_key,
-            one_time_key: bundle.one_time_key,
+            sender_ik: sender_ik.verifying_key(),
+            ek,
+            opk: prekey_bundle.opk,
             ciphertext,
         },
     ))
 }
 
 fn initiate_recv_get_sk(
-    sender_identity_key: &VerifyingKey,
-    ephemeral_key: X25519PublicKey,
-    otk: Option<X25519StaticSecret>,
-    identity_key: &SigningKey,
-    pre_key: &X25519StaticSecret,
+    sender_ik: &VerifyingKey,
+    ek: X25519PublicKey,
+    opk: Option<X25519StaticSecret>,
+    receiver_ik: &SigningKey,
+    spk: &X25519StaticSecret,
 ) -> [u8; 32] {
-    let dh1 = pre_key.diffie_hellman(&X25519PublicKey::from(
-        sender_identity_key.to_montgomery().to_bytes(),
-    ));
-    let dh2 =
-        X25519StaticSecret::from(identity_key.to_scalar_bytes()).diffie_hellman(&ephemeral_key);
-    let dh3 = pre_key.diffie_hellman(&ephemeral_key);
+    let dh1 = spk.diffie_hellman(&X25519PublicKey::from(sender_ik.to_montgomery().to_bytes()));
+    let dh2 = X25519StaticSecret::from(receiver_ik.to_scalar_bytes()).diffie_hellman(&ek);
+    let dh3 = spk.diffie_hellman(&ek);
 
-    if let Some(one_time_key) = otk {
+    if let Some(opk) = opk {
         // Bob deletes any one-time prekey private key that was used, for forward secrecy.
-        let dh4 = one_time_key.diffie_hellman(&ephemeral_key);
+        let dh4 = opk.diffie_hellman(&ek);
         kdf(&[
             dh1.to_bytes(),
             dh2.to_bytes(),
@@ -200,41 +191,28 @@ fn initiate_recv_get_sk(
 }
 
 // Caller must delete sk on error.
-// otk must be wiped.
+// opk must be wiped.
 pub fn initiate_recv(
-    recv_identity_key: &SigningKey,
-    recv_pre_key: &X25519StaticSecret,
-    sender_identity_key: &VerifyingKey,
-    ephemeral_key: X25519PublicKey,
-    otk: Option<X25519StaticSecret>,
+    receiver_ik: &SigningKey,
+    receiver_spk: &X25519StaticSecret,
+    sender_ik: &VerifyingKey,
+    ek: X25519PublicKey,
+    receiver_opk: Option<X25519StaticSecret>,
     ciphertext: &[u8],
 ) -> Result<([u8; 32], Vec<u8>), X3DHError> {
     // Upon receiving Alice's initial message, Bob retrieves Alice's identity key and ephemeral key from the message.
     // Bob also loads his identity private key, and the private key(s) corresponding to whichever signed prekey and one-time prekey (if any) Alice used.
     // Using these keys, Bob repeats the DH and KDF calculations from the previous section to derive SK, and then deletes the DH values.
-    let secret_key = initiate_recv_get_sk(
-        sender_identity_key,
-        ephemeral_key,
-        otk,
-        recv_identity_key,
-        recv_pre_key,
-    );
+    let sk = initiate_recv_get_sk(sender_ik, ek, receiver_opk, receiver_ik, receiver_spk);
 
     // Bob then constructs the AD byte sequence using IKA and IKB, as described in the previous section.
     // AD = Encode(IKA) || Encode(IKB)
-    let associated_data = [
-        sender_identity_key.to_bytes(),
-        recv_identity_key.verifying_key().to_bytes(),
-    ]
-    .concat();
+    let ad = [sender_ik.to_bytes(), receiver_ik.verifying_key().to_bytes()].concat();
 
     // Bob may then continue using SK or keys derived from SK within the post-X3DH protocol for communication with Alice.
     // Finally, Bob attempts to decrypt the initial ciphertext using SK and AD.
-    let cipher = ChaCha20Poly1305::new_from_slice(&secret_key).unwrap();
-    Ok((
-        secret_key,
-        decrypt_data(&ciphertext, &associated_data, &cipher)?,
-    ))
+    let cipher = ChaCha20Poly1305::new_from_slice(&sk).unwrap();
+    Ok((sk, decrypt_data(&ciphertext, &ad, &cipher)?))
 }
 
 #[cfg(test)]
@@ -253,7 +231,7 @@ mod tests {
     // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
     // 3. Bob receives and processes Alice's initial message.
     #[test]
-    fn x3dh_key_agreement_otk() -> Result<()> {
+    fn x3dh_key_agreement_opk() -> Result<()> {
         let bob_ik = SigningKey::generate(&mut OsRng);
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
         let bob_spk_secret = bob_spk.bundle[0].clone().0;
@@ -263,18 +241,18 @@ mod tests {
         };
         let alice_ik = SigningKey::generate(&mut OsRng);
 
-        let otk = X25519StaticSecret::random_from_rng(OsRng);
-        let otk_pub = X25519PublicKey::from(&otk);
+        let opk = X25519StaticSecret::random_from_rng(OsRng);
+        let opk_pub = X25519PublicKey::from(&opk);
 
         let X3DHSendKeyAgreement {
-            ephemeral_key,
-            secret_key,
-        } = initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, Some(otk_pub), &alice_ik)?;
+            ek: ephemeral_key,
+            sk: secret_key,
+        } = initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, Some(opk_pub), &alice_ik)?;
 
         let recv_sk = initiate_recv_get_sk(
             &alice_ik.verifying_key(),
             ephemeral_key,
-            Some(otk),
+            Some(opk),
             &bob_ik,
             &bob_spk_secret,
         );
@@ -293,25 +271,23 @@ mod tests {
         };
         let alice_ik = SigningKey::generate(&mut OsRng);
 
-        let X3DHSendKeyAgreement {
-            ephemeral_key,
-            secret_key,
-        } = initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, None, &alice_ik)?;
+        let X3DHSendKeyAgreement { ek, sk } =
+            initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, None, &alice_ik)?;
 
         let recv_sk = initiate_recv_get_sk(
             &alice_ik.verifying_key(),
-            ephemeral_key,
+            ek,
             None,
             &bob_ik,
             &bob_spk_secret,
         );
-        assert_eq!(secret_key, recv_sk);
+        assert_eq!(sk, recv_sk);
 
         Ok(())
     }
 
     #[test]
-    fn x3dh_send_recv_otk() -> Result<()> {
+    fn x3dh_send_recv_opk() -> Result<()> {
         // 1. Bob publishes his identity key and prekeys to a server.
         let bob_ik = SigningKey::generate(&mut OsRng);
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
@@ -320,17 +296,17 @@ mod tests {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
-        let bob_otk_priv = X25519StaticSecret::random_from_rng(OsRng);
-        let bob_otk_pub = X25519PublicKey::from(&bob_otk_priv);
+        let bob_opk_priv = X25519StaticSecret::random_from_rng(OsRng);
+        let bob_opk_pub = X25519PublicKey::from(&bob_opk_priv);
 
         let alice_ik = SigningKey::generate(&mut OsRng);
 
         let plaintext = "Hello Bob!";
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
         let bundle = PreKeyBundle {
-            identity_key: bob_ik.verifying_key(),
-            one_time_key: Some(bob_otk_pub),
-            signed_pre_key: bob_spk.clone(),
+            ik: bob_ik.verifying_key(),
+            opk: Some(bob_opk_pub),
+            spk: bob_spk.clone(),
         };
         let (send_sk, message) =
             initiate_send(bundle, "alice".to_owned(), &alice_ik, plaintext.as_bytes())?;
@@ -339,9 +315,9 @@ mod tests {
         let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
-            &message.sender_identity_key,
-            message.ephemeral_key,
-            Some(bob_otk_priv),
+            &message.sender_ik,
+            message.ek,
+            Some(bob_opk_priv),
             &message.ciphertext,
         )?;
         assert_eq!(send_sk, recv_sk);
@@ -364,9 +340,9 @@ mod tests {
 
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
         let bundle = PreKeyBundle {
-            identity_key: bob_ik.verifying_key(),
-            one_time_key: None,
-            signed_pre_key: bob_spk.clone(),
+            ik: bob_ik.verifying_key(),
+            opk: None,
+            spk: bob_spk.clone(),
         };
         let (send_sk, message) =
             initiate_send(bundle, "alice".to_owned(), &alice_ik, b"Hello Bob!")?;
@@ -375,8 +351,8 @@ mod tests {
         let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
-            &message.sender_identity_key,
-            message.ephemeral_key,
+            &message.sender_ik,
+            message.ek,
             None,
             &message.ciphertext,
         )?;
