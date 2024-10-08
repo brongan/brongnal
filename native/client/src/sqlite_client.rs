@@ -28,7 +28,7 @@ pub struct SqliteClient {
     connection: Connection,
 }
 
-fn read_identity_key(path: &Path) -> Result<SigningKey> {
+fn read_ik(path: &Path) -> Result<SigningKey> {
     let key_bytes = std::fs::read(path)?;
     let key_bytes: &[u8] = &key_bytes;
     SigningKey::from_keypair_bytes(
@@ -39,7 +39,7 @@ fn read_identity_key(path: &Path) -> Result<SigningKey> {
     .map_err(|_| anyhow!("invalid key"))
 }
 
-fn create_identity_key(path: &Path) -> Result<SigningKey> {
+fn init_ik(path: &Path) -> Result<SigningKey> {
     let key = SigningKey::generate(&mut OsRng);
     std::fs::write(path, key.to_keypair_bytes())
         .context("Failed to write identity key to disk.")?;
@@ -48,10 +48,9 @@ fn create_identity_key(path: &Path) -> Result<SigningKey> {
 
 impl SqliteClient {
     pub fn new(identity_key_path: &Path, db_path: &Path) -> Result<SqliteClient> {
-        let identity_key = match read_identity_key(&identity_key_path) {
+        let identity_key = match read_ik(&identity_key_path) {
             Ok(key) => key,
-            Err(_) => create_identity_key(&identity_key_path)
-                .context("Failed to create new identity key.")?,
+            Err(_) => init_ik(&identity_key_path).context("Failed to create new identity key.")?,
         };
 
         let connection = Connection::open(db_path).context("Failed to open db_path.")?;
@@ -101,19 +100,19 @@ impl SqliteClient {
 }
 
 impl X3DHClient for SqliteClient {
-    fn fetch_wipe_one_time_secret_key(
+    fn fetch_wipe_opk(
         &mut self,
-        one_time_key: &X25519PublicKey,
+        one_time_prekey: &X25519PublicKey,
     ) -> Result<X25519StaticSecret, anyhow::Error> {
         let key: [u8; 32] = self.connection.query_row(
             "DELETE from keys WHERE public_key=?1 RETURNING private_key",
-            params![one_time_key.to_bytes()],
+            params![one_time_prekey.to_bytes()],
             |row| Ok(row.get(0)?),
         )?;
         Ok(X25519StaticSecret::from(key))
     }
 
-    fn get_identity_key(&self) -> Result<SigningKey, anyhow::Error> {
+    fn get_ik(&self) -> Result<SigningKey, anyhow::Error> {
         Ok(self.identity_key.clone())
     }
 
@@ -144,15 +143,15 @@ impl X3DHClient for SqliteClient {
         })
     }
 
-    fn add_one_time_keys(&mut self, num_keys: u32) -> Result<SignedPreKeys> {
-        let otks = create_prekey_bundle(&self.identity_key, num_keys);
-        let pre_keys = otks.bundle.iter().map(|(_, _pub)| *_pub).collect();
-        let persisted_pre_keys: Vec<PreKey> = otks
+    fn create_opks(&mut self, num_keys: u32) -> Result<SignedPreKeys> {
+        let opks = create_prekey_bundle(&self.identity_key, num_keys);
+        let pre_keys = opks.bundle.iter().map(|(_, _pub)| *_pub).collect();
+        let persisted_pre_keys: Vec<PreKey> = opks
             .bundle
             .into_iter()
-            .map(|otk| PreKey {
-                priv_key: otk.0,
-                pub_key: otk.1,
+            .map(|opk| PreKey {
+                priv_key: opk.0,
+                pub_key: opk.1,
                 key_type: KeyType::OneTimeKey,
             })
             .collect();
@@ -160,7 +159,7 @@ impl X3DHClient for SqliteClient {
             .context("failed to add one time keys")?;
         Ok(SignedPreKeys {
             pre_keys,
-            signature: otks.signature,
+            signature: opks.signature,
         })
     }
 }

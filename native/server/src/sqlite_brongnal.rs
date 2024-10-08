@@ -65,60 +65,52 @@ impl SqliteStorage {
 }
 
 impl Storage for SqliteStorage {
-    fn add_user(
+    fn register_user(
         &self,
         identity: String,
-        identity_key: VerifyingKey,
-        signed_pre_key: SignedPreKeyProto,
+        ik: VerifyingKey,
+        spk: SignedPreKeyProto,
     ) -> tonic::Result<()> {
         println!("Adding user \"{identity}\" to the database.");
 
         let _ = self.connection()?.execute(
             "INSERT INTO user (identity, key, current_pre_key, creation_time) VALUES (?1, ?2, ?3, ?4)",
             (
-                identity, identity_key.to_bytes(), signed_pre_key.encode_to_vec(),
+                identity, ik.to_bytes(), spk.encode_to_vec(),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
             ),
         ).context("failed to insert key.");
         Ok(())
     }
 
-    fn update_pre_key(
-        &self,
-        identity: &str,
-        signed_pre_key: SignedPreKeyProto,
-    ) -> tonic::Result<()> {
+    fn update_spk(&self, identity: &str, spk: SignedPreKeyProto) -> tonic::Result<()> {
         println!("Updating pre key for user \"{identity}\" to the database.");
 
         let _: String = self
             .connection()?
             .query_row(
                 "UPDATE user SET current_pre_key = ?2 WHERE identity = ?1 RETURNING identity",
-                params![identity, signed_pre_key.encode_to_vec()],
+                params![identity, spk.encode_to_vec()],
                 |row| Ok(row.get(0)?),
             )
             .map_err(|_| Status::not_found("user not found"))?;
         Ok(())
     }
 
-    fn add_one_time_keys(
-        &self,
-        identity: &str,
-        pre_keys: Vec<X25519PublicKey>,
-    ) -> tonic::Result<()> {
+    fn add_opks(&self, identity: &str, opks: Vec<X25519PublicKey>) -> tonic::Result<()> {
         println!(
             "Adding {} one time keys for user \"{identity}\" to the database.",
-            pre_keys.len()
+            opks.len()
         );
 
         let connection = self.connection()?;
         let mut stmt = connection
             .prepare("INSERT INTO pre_key (user_identity, key, creation_time) VALUES (?1, ?2, ?3)")
             .unwrap();
-        for pre_key in pre_keys {
+        for opk in opks {
             stmt.execute((
                 identity,
-                pre_key.to_bytes(),
+                opk.to_bytes(),
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
@@ -132,7 +124,7 @@ impl Storage for SqliteStorage {
     fn get_current_keys(&self, identity: &str) -> tonic::Result<(VerifyingKey, SignedPreKeyProto)> {
         println!("Retrieving pre keys for user \"{identity}\" from the database.");
 
-        let (identity_key, signed_pre_key): (Vec<u8>, Vec<u8>) = self
+        let (ik, spk): (Vec<u8>, Vec<u8>) = self
             .connection()?
             .query_row(
                 "SELECT key, current_pre_key FROM user WHERE identity = ?1",
@@ -140,12 +132,12 @@ impl Storage for SqliteStorage {
                 |row| Ok((row.get(0).unwrap(), row.get(1).unwrap())),
             )
             .map_err(|_| Status::not_found("user not found"))?;
-        let ik = parse_verifying_key(&identity_key).unwrap();
-        let spk = SignedPreKeyProto::decode(&*signed_pre_key).unwrap();
+        let ik = parse_verifying_key(&ik).unwrap();
+        let spk = SignedPreKeyProto::decode(&*spk).unwrap();
         Ok((ik, spk))
     }
 
-    fn pop_one_time_key(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
+    fn pop_opk(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
         println!("Popping one time key for user \"{identity}\" from the database.");
 
         let key: Option<[u8;32]> = match self.connection()?.query_row(
@@ -211,23 +203,16 @@ mod tests {
     use tonic::Code;
 
     #[test]
-    fn add_user_get_keys() -> Result<()> {
+    fn register_user_get_keys_success() -> Result<()> {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         let alice = MemoryClient::new();
-        let alice_verifying_key = VerifyingKey::from(&alice.get_identity_key().unwrap());
+        let alice_ik = VerifyingKey::from(&alice.get_ik().unwrap());
         let alice_spk: SignedPreKeyProto = alice.get_spk().unwrap().into();
         assert_eq!(
-            storage.add_user(
-                String::from("alice"),
-                alice_verifying_key,
-                alice_spk.clone()
-            )?,
+            storage.register_user(String::from("alice"), alice_ik, alice_spk.clone())?,
             ()
         );
-        assert_eq!(
-            storage.get_current_keys("alice")?,
-            (alice_verifying_key, alice_spk)
-        );
+        assert_eq!(storage.get_current_keys("alice")?, (alice_ik, alice_spk));
         Ok(())
     }
 
@@ -242,34 +227,34 @@ mod tests {
     }
 
     #[test]
-    fn pop_empty_one_time_keys() -> Result<()> {
+    fn pop_empty_opks_none() -> Result<()> {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
-        assert_eq!(storage.pop_one_time_key("bob")?, None);
+        assert_eq!(storage.pop_opk("bob")?, None);
         Ok(())
     }
 
     #[test]
-    fn retrieve_one_time_key() -> Result<()> {
+    fn retrieve_opk() -> Result<()> {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         let mut bob = MemoryClient::new();
-        let keys = bob.add_one_time_keys(1)?.pre_keys;
-        storage.add_user(
+        let keys = bob.create_opks(1)?.pre_keys;
+        storage.register_user(
             String::from("bob"),
-            (&bob.get_identity_key()?).into(),
+            (&bob.get_ik()?).into(),
             bob.get_spk()?.into(),
         )?;
-        storage.add_one_time_keys("bob", keys.clone())?;
-        assert_eq!(storage.pop_one_time_key("bob")?, Some(keys[0]));
-        assert_eq!(storage.pop_one_time_key("bob")?, None);
+        storage.add_opks("bob", keys.clone())?;
+        assert_eq!(storage.pop_opk("bob")?, Some(keys[0]));
+        assert_eq!(storage.pop_opk("bob")?, None);
         Ok(())
     }
 
     #[test]
-    fn updating_pre_key_not_found() -> Result<()> {
+    fn updating_spk_user_not_found() -> Result<()> {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         assert_eq!(
             storage
-                .update_pre_key("bob", SignedPreKeyProto::default())
+                .update_spk("bob", SignedPreKeyProto::default())
                 .err()
                 .map(|e| e.code()),
             Some(Code::NotFound)
@@ -278,20 +263,17 @@ mod tests {
     }
 
     #[test]
-    fn update_pre_key_success() -> Result<()> {
+    fn update_spk_success() -> Result<()> {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         let mut bob = MemoryClient::new();
-        let bob_verifying_key = VerifyingKey::from(&bob.get_identity_key().unwrap());
+        let bob_ik = VerifyingKey::from(&bob.get_ik().unwrap());
         let mut bob_spk: SignedPreKeyProto = bob.get_spk().unwrap().into();
-        storage.add_user(String::from("bob"), bob_verifying_key, bob_spk.clone())?;
+        storage.register_user(String::from("bob"), bob_ik, bob_spk.clone())?;
 
-        bob_spk.pre_key = Some(bob.add_one_time_keys(1)?.pre_keys[0].to_bytes().to_vec());
-        storage.update_pre_key("bob", bob_spk.clone())?;
+        bob_spk.pre_key = Some(bob.create_opks(1)?.pre_keys[0].to_bytes().to_vec());
+        storage.update_spk("bob", bob_spk.clone())?;
 
-        assert_eq!(
-            storage.get_current_keys("bob")?,
-            (bob_verifying_key, bob_spk)
-        );
+        assert_eq!(storage.get_current_keys("bob")?, (bob_ik, bob_spk));
         Ok(())
     }
 
@@ -312,13 +294,9 @@ mod tests {
     fn add_get_message() -> Result<()> {
         let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
         let bob = MemoryClient::new();
-        let bob_verifying_key = VerifyingKey::from(&bob.get_identity_key().unwrap());
+        let bob_ik = VerifyingKey::from(&bob.get_ik().unwrap());
         let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().unwrap();
-        storage.add_user(
-            String::from("bob"),
-            bob_verifying_key,
-            bob_spk.clone().into(),
-        )?;
+        storage.register_user(String::from("bob"), bob_ik, bob_spk.clone().into())?;
 
         let message_proto = MessageProto {
             sender_identity: Some(String::from("alice")),

@@ -10,36 +10,47 @@ use crate::brongnal::Storage;
 
 #[derive(Clone, Debug)]
 pub struct MemoryStorage {
-    identity_key: Arc<Mutex<HashMap<String, VerifyingKey>>>,
-    current_pre_key: Arc<Mutex<HashMap<String, SignedPreKeyProto>>>,
-    one_time_pre_keys: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
+    iks: Arc<Mutex<HashMap<String, VerifyingKey>>>,
+    spks: Arc<Mutex<HashMap<String, SignedPreKeyProto>>>,
+    opks: Arc<Mutex<HashMap<String, Vec<X25519PublicKey>>>>,
     messages: Arc<Mutex<HashMap<String, Vec<MessageProto>>>>,
 }
 
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        MemoryStorage {
+            iks: Arc::new(Mutex::new(HashMap::new())),
+            spks: Arc::new(Mutex::new(HashMap::new())),
+            opks: Arc::new(Mutex::new(HashMap::new())),
+            messages: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
 impl Storage for MemoryStorage {
-    fn add_user(
+    fn register_user(
         &self,
         identity: String,
-        identity_key: VerifyingKey,
-        signed_pre_key: SignedPreKeyProto,
+        ik: VerifyingKey,
+        spk: SignedPreKeyProto,
     ) -> tonic::Result<()> {
-        self.identity_key
+        self.iks
             .lock()
             .unwrap()
-            .insert(identity.clone(), identity_key);
-        self.current_pre_key
+            .insert(identity.clone(), ik);
+        self.spks
             .lock()
             .unwrap()
-            .insert(identity.clone(), signed_pre_key);
-        self.one_time_pre_keys
+            .insert(identity.clone(), spk);
+        self.opks
             .lock()
             .unwrap()
             .insert(identity, Vec::new());
         Ok(())
     }
 
-    fn update_pre_key(&self, identity: &str, mut pre_key: SignedPreKeyProto) -> tonic::Result<()> {
-        self.current_pre_key
+    fn update_spk(&self, identity: &str, mut pre_key: SignedPreKeyProto) -> tonic::Result<()> {
+        self.spks
             .lock()
             .unwrap()
             .get_mut(identity)
@@ -47,13 +58,13 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
-    fn add_one_time_keys(
+    fn add_opks(
         &self,
         identity: &str,
         mut pre_keys: Vec<X25519PublicKey>,
     ) -> tonic::Result<()> {
-        let mut one_time_pre_keys = self.one_time_pre_keys.lock().unwrap();
-        one_time_pre_keys
+        let mut opks = self.opks.lock().unwrap();
+        opks
             .get_mut(identity)
             .ok_or(Status::not_found("User not found."))?
             .append(&mut pre_keys);
@@ -61,30 +72,30 @@ impl Storage for MemoryStorage {
     }
 
     fn get_current_keys(&self, identity: &str) -> tonic::Result<(VerifyingKey, SignedPreKeyProto)> {
-        let identity_key = *self
-            .identity_key
+        let ik = *self
+            .iks
             .lock()
             .unwrap()
             .get(identity)
             .ok_or(Status::not_found("User not found."))?;
-        let signed_pre_key = self
-            .current_pre_key
+        let spk = self
+            .spks
             .lock()
             .unwrap()
             .get(identity)
             .ok_or(Status::not_found("User not found."))?
             .to_owned();
-        Ok((identity_key, signed_pre_key))
+        Ok((ik, spk))
     }
 
-    fn pop_one_time_key(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
-        let one_time_key =
-            if let Some(one_time_keys) = self.one_time_pre_keys.lock().unwrap().get_mut(identity) {
-                one_time_keys.pop()
+    fn pop_opk(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
+        let opk =
+            if let Some(opks) = self.opks.lock().unwrap().get_mut(identity) {
+                opks.pop()
             } else {
                 None
             };
-        Ok(one_time_key)
+        Ok(opk)
     }
 
     fn add_message(&self, recipient: &str, message: MessageProto) -> tonic::Result<()> {
@@ -106,13 +117,3 @@ impl Storage for MemoryStorage {
     }
 }
 
-impl Default for MemoryStorage {
-    fn default() -> Self {
-        MemoryStorage {
-            identity_key: Arc::new(Mutex::new(HashMap::new())),
-            current_pre_key: Arc::new(Mutex::new(HashMap::new())),
-            one_time_pre_keys: Arc::new(Mutex::new(HashMap::new())),
-            messages: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-}
