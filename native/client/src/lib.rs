@@ -20,14 +20,14 @@ pub mod memory_client;
 pub mod sqlite_client;
 
 pub trait X3DHClient {
-    fn fetch_wipe_one_time_secret_key(
+    fn fetch_wipe_opk(
         &mut self,
-        one_time_key: &X25519PublicKey,
+        opk: &X25519PublicKey,
     ) -> Result<X25519StaticSecret, anyhow::Error>;
-    fn get_identity_key(&self) -> Result<SigningKey, anyhow::Error>;
+    fn get_ik(&self) -> Result<SigningKey, anyhow::Error>;
     fn get_pre_key(&self) -> Result<X25519StaticSecret, anyhow::Error>;
     fn get_spk(&self) -> Result<SignedPreKey, anyhow::Error>;
-    fn add_one_time_keys(&mut self, num_keys: u32) -> Result<SignedPreKeys>;
+    fn create_opks(&mut self, num_keys: u32) -> Result<SignedPreKeys>;
 }
 
 #[allow(dead_code)]
@@ -88,16 +88,12 @@ pub async fn register(
     eprintln!("Registering {name}!");
     let request = {
         let mut x3dh_client = x3dh_client.lock().await;
-        let ik = x3dh_client
-            .get_identity_key()?
-            .verifying_key()
-            .as_bytes()
-            .to_vec();
+        let ik = x3dh_client.get_ik()?.verifying_key().as_bytes().to_vec();
         tonic::Request::new(RegisterPreKeyBundleRequest {
             identity_key: Some(ik),
             identity: Some(name.clone()),
             signed_pre_key: Some(x3dh_client.get_spk()?.into()),
-            one_time_key_bundle: Some(x3dh_client.add_one_time_keys(100)?.into()),
+            one_time_key_bundle: Some(x3dh_client.create_opks(100)?.into()),
         })
     };
     stub.register_pre_key_bundle(request).await?;
@@ -120,7 +116,7 @@ pub async fn message(
     let (_sk, message) = initiate_send(
         response.into_inner().try_into()?,
         sender_identity,
-        &x3dh_client.lock().await.get_identity_key()?,
+        &x3dh_client.lock().await.get_ik()?,
         message,
     )?;
     let request = tonic::Request::new(SendMessageRequest {
@@ -141,24 +137,24 @@ pub async fn get_messages(
     while let Some(message) = stream.message().await? {
         let x3dh::Message {
             sender_identity,
-            sender_identity_key,
-            ephemeral_key,
-            one_time_key: otk,
+            sender_ik,
+            ek,
+            opk,
             ciphertext,
         } = message.try_into()?;
         let mut x3dh_client = x3dh_client.lock().await;
-        let otk = if let Some(otk) = otk {
+        let opk = if let Some(opk) = opk {
             // TODO(#28) - Handle a missing one-time prekey.
-            Some(x3dh_client.fetch_wipe_one_time_secret_key(&otk)?)
+            Some(x3dh_client.fetch_wipe_opk(&opk)?)
         } else {
             None
         };
         let (_sk, message) = initiate_recv(
-            &x3dh_client.get_identity_key()?,
+            &x3dh_client.get_ik()?,
             &x3dh_client.get_pre_key()?,
-            &sender_identity_key,
-            ephemeral_key,
-            otk,
+            &sender_ik,
+            ek,
+            opk,
             &ciphertext,
         )?;
         tx.send(DecryptedMessage {
