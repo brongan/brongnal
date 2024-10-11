@@ -1,6 +1,6 @@
 # Brongnal
 
-I took [Going Bark: A Furry’s Guide to End-to-End Encryption](https://soatok.blog/2020/11/14/going-bark-a-furrys-guide-to-end-to-end-encryption/) as a great idea for a project.
+I took [Going Bark: A Furry’s Guide to End-to-End Encryption](https://soatok.blog/2020/11/14/going-bark-a-furrys-guide-to-end-to-end-encryption/) as a great idea for a project. See [Signal Protocol](https://signal.org/docs/specifications/x3dh/)
 
 X3DH and Double-Ratchet are implemented in Rust in the [protocol](./native/protocol/) directory.
 
