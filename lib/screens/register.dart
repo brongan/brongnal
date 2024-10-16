@@ -1,6 +1,7 @@
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 class Register extends StatelessWidget {
   const Register({

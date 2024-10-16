@@ -1,27 +1,30 @@
 syntax = "proto3";
 package brongnal;
 
-// [RINF:DART-SIGNAL]
-message RegisterUserRequest {
-	// optional
-	optional string username = 1;
-
-	optional string db_path = 2;
+// [DART-SIGNAL]
+message RustStartup {
+	optional string database_directory = 1;
+	optional string username = 2;
 }
 
-// [RINF:RUST-SIGNAL]
+// [DART-SIGNAL]
+message RegisterUserRequest {
+	optional string username = 1;
+}
+
+// [RUST-SIGNAL]
 message RegisterUserResponse {
 	optional string username = 1;
 }
 
-// [RINF:DART-SIGNAL]
+// [DART-SIGNAL]
 message SendMessage {
 	optional string sender = 1;
 	optional string receiver = 2;
 	optional string message = 3;
 }
 
-// [RINF:RUST-SIGNAL]
+// [RUST-SIGNAL]
 message ReceivedMessage {
 	optional string sender = 1;
 	optional string message = 2;

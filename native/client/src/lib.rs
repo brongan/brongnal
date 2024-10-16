@@ -149,19 +149,25 @@ pub async fn get_messages(
         } else {
             None
         };
-        let (_sk, message) = initiate_recv(
+        match initiate_recv(
             &x3dh_client.get_ik()?,
             &x3dh_client.get_pre_key()?,
             &sender_ik,
             ek,
             opk,
             &ciphertext,
-        )?;
-        tx.send(DecryptedMessage {
-            sender_identity,
-            message,
-        })
-        .await?;
+        ) {
+            Ok((_sk, message)) => {
+                tx.send(DecryptedMessage {
+                    sender_identity,
+                    message,
+                })
+                .await?;
+            }
+            Err(e) => {
+                eprintln!("Failed to decrypt message: {e}");
+            }
+        }
     }
     eprintln!("Server terminated message stream.");
     Ok(())

@@ -1,19 +1,21 @@
+import './messages/generated.dart';
+import 'dart:io' show Platform, Directory;
+import 'messages/brongnal.pb.dart';
 import 'package:brongnal_app/common/theme.dart';
-import 'package:brongnal_app/generated/service.pbgrpc.dart';
-import 'package:grpc/grpc.dart';
-import 'package:brongnal_app/screens/register.dart';
 import 'package:brongnal_app/database.dart';
+import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/home.dart';
+import 'package:brongnal_app/screens/register.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:grpc/grpc.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:rinf/rinf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './messages/generated.dart';
-import 'dart:io' show Platform, Directory;
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'messages/brongnal.pb.dart';
+import 'package:xdg_directories/xdg_directories.dart';
 
 void main() async {
   setupWindow();
@@ -22,7 +24,16 @@ void main() async {
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final username = prefs.getString("username");
 
-  final database = AppDatabase();
+  Directory databaseDirectory;
+  try {
+    databaseDirectory = Directory(p.join(dataHome.path, "brongnal"));
+  } on StateError catch (_) {
+    databaseDirectory = await getApplicationCacheDirectory();
+  }
+  RustStartup(databaseDirectory: databaseDirectory.path, username: username)
+      .sendSignalToRust();
+
+  final database = AppDatabase(databaseDirectory);
   List<MessageModel> allMessages =
       await database.select(database.messages).get();
   final Map<String, List<MessageModel>> conversations = {};
@@ -33,7 +44,6 @@ void main() async {
     conversations.putIfAbsent(peer, () => []);
     conversations[peer]!.add(messageModel);
   }
-  final directory = await getApplicationSupportDirectory();
 
   runApp(
     ChangeNotifierProvider(
@@ -41,7 +51,7 @@ void main() async {
         database: database,
         conversations: conversations,
       ),
-      child: BrongnalApp(username: username, directory: directory),
+      child: BrongnalApp(username: username, directory: databaseDirectory),
     ),
   );
 }
