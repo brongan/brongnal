@@ -42,8 +42,8 @@ async fn main() -> Result<()> {
 
     let mut stub = BrongnalClient::connect(addr).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
-    let identity_key_path = xdg_dirs.place_data_file("identity_key")?;
-    let db_path = xdg_dirs.place_data_file(format!("{name}_keys.sqlite"))?;
+    let identity_key_path = xdg_dirs.place_data_file(format!("{}_identity_key", name))?;
+    let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let client = Arc::new(Mutex::new(SqliteClient::new(&identity_key_path, &db_path)?));
 
     register(&mut stub, client.clone(), name.clone()).await?;
