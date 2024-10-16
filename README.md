@@ -47,6 +47,15 @@ Now you can run and build this app just like any other Flutter projects.
 flutter run
 ```
 
+If you're building for Android `flutter build apk` or `flutter run`.
+I have these settings:
+
+```
+flutter config --jdk-dir /usr/lib/jvm/java-17-openjdk
+flutter config --android-sdk ~/android-sdk
+```
+Ensure that you have your config pointing to the correct installations.
+
 ### Backend
 
 To run and build the backend, you need to have installed:
