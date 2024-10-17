@@ -10,7 +10,8 @@ build:
 	flutter build apk
 
 precommit: build container
-	dart analyze flutter_package --fatal-infos
+	cargo t
+	dart analyze --fatal-infos
 	dart format .
 	cargo fmt
 	cargo clippy --fix --allow-dirty
