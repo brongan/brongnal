@@ -299,6 +299,7 @@ dependencies = [
  "rustls 0.23.14",
  "strum",
  "strum_macros",
+ "thiserror",
  "tokio",
  "tokio-rustls 0.26.0",
  "tonic",

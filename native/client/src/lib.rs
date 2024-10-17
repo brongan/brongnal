@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Context;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use ed25519_dalek::SigningKey;
 use proto::service::brongnal_client::BrongnalClient;
@@ -6,9 +6,11 @@ use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
-use protocol::x3dh;
+use protocol::x3dh::{self, X3DHError};
 use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
@@ -19,15 +21,36 @@ use x3dh::{initiate_recv, initiate_send, SignedPreKey, SignedPreKeys};
 pub mod memory_client;
 pub mod sqlite_client;
 
+type ClientResult<T> = Result<T, ClientError>;
+
+#[derive(Error, Debug)]
+pub enum ClientError {
+    #[error("failed to load identity key: {0}")]
+    LoadIdentityKey(&'static str),
+    #[error("failed to save identity key")]
+    SaveIdentityKey,
+    #[error("rusqlite error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+    #[error("failed to insert pre keys: {0}")]
+    InsertPreKey(rusqlite::Error),
+    #[error("failed to retrieve OPK for {0:?}")]
+    WipeOpk(X25519PublicKey),
+    #[error("failed to retrieve pre key")]
+    RetrievePreKey(rusqlite::Error),
+    #[error("grpc error: {0}")]
+    Grpc(#[from] tonic::Status),
+    #[error("send decrypted message error: {0}")]
+    Send(#[from] SendError<DecryptedMessage>),
+    #[error("x3dh error: {0}")]
+    X3DH(#[from] X3DHError),
+}
+
 pub trait X3DHClient {
-    fn fetch_wipe_opk(
-        &mut self,
-        opk: &X25519PublicKey,
-    ) -> Result<X25519StaticSecret, anyhow::Error>;
-    fn get_ik(&self) -> Result<SigningKey, anyhow::Error>;
-    fn get_pre_key(&self) -> Result<X25519StaticSecret, anyhow::Error>;
-    fn get_spk(&self) -> Result<SignedPreKey, anyhow::Error>;
-    fn create_opks(&mut self, num_keys: u32) -> Result<SignedPreKeys>;
+    fn fetch_wipe_opk(&mut self, opk: &X25519PublicKey) -> ClientResult<X25519StaticSecret>;
+    fn get_ik(&self) -> ClientResult<SigningKey>;
+    fn get_pre_key(&self) -> ClientResult<X25519StaticSecret>;
+    fn get_spk(&self) -> ClientResult<SignedPreKey>;
+    fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys>;
 }
 
 #[allow(dead_code)]
@@ -41,7 +64,10 @@ impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
         self.session_keys.insert(recipient_identity, *secret_key);
     }
 
-    fn get_encryption_key(&mut self, recipient_identity: &Identity) -> Result<ChaCha20Poly1305> {
+    fn get_encryption_key(
+        &mut self,
+        recipient_identity: &Identity,
+    ) -> anyhow::Result<ChaCha20Poly1305> {
         let key = self
             .session_keys
             .get(recipient_identity)
@@ -64,7 +90,7 @@ pub async fn listen(
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     name: String,
     tx: Sender<DecryptedMessage>,
-) -> Result<()> {
+) -> ClientResult<()> {
     let stream = stub
         .retrieve_messages(RetrieveMessagesRequest {
             identity: Some(name),
@@ -84,7 +110,7 @@ pub async fn register(
     stub: &mut BrongnalClient<Channel>,
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     name: String,
-) -> Result<()> {
+) -> ClientResult<()> {
     eprintln!("Registering {name}!");
     let request = {
         let mut x3dh_client = x3dh_client.lock().await;
@@ -107,7 +133,7 @@ pub async fn message(
     sender_identity: String,
     recipient_identity: &str,
     message: &str,
-) -> Result<()> {
+) -> ClientResult<()> {
     let message = message.as_bytes();
     let request = tonic::Request::new(RequestPreKeysRequest {
         identity: Some(recipient_identity.to_owned()),
@@ -133,7 +159,7 @@ pub async fn get_messages(
     mut stream: Streaming<MessageProto>,
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     tx: Sender<DecryptedMessage>,
-) -> Result<()> {
+) -> ClientResult<()> {
     while let Some(message) = stream.message().await? {
         let x3dh::Message {
             sender_identity,
