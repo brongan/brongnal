@@ -5,20 +5,20 @@ use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 #[derive(Error, Debug)]
-pub enum ClientError {
+pub enum KeyError {
     #[error("Key was not a valid ED25519 point.")]
     InvalidEd25519Key,
     #[error("Key was not a valid X25519 point.")]
     InvalidX25519Key,
 }
 
-pub fn parse_verifying_key(key: &[u8]) -> Result<VerifyingKey, ClientError> {
-    VerifyingKey::from_bytes(&key.try_into().map_err(|_| ClientError::InvalidEd25519Key)?)
-        .map_err(|_| ClientError::InvalidEd25519Key)
+pub fn parse_verifying_key(key: &[u8]) -> Result<VerifyingKey, KeyError> {
+    VerifyingKey::from_bytes(&key.try_into().map_err(|_| KeyError::InvalidEd25519Key)?)
+        .map_err(|_| KeyError::InvalidEd25519Key)
 }
 
-pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, ClientError> {
-    let key: [u8; 32] = key.try_into().map_err(|_| ClientError::InvalidX25519Key)?;
+pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, KeyError> {
+    let key: [u8; 32] = key.try_into().map_err(|_| KeyError::InvalidX25519Key)?;
     Ok(X25519PublicKey::from(key))
 }
 pub mod gossamer {
