@@ -12,7 +12,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use tonic::transport::Channel;
 use tonic::Streaming;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
@@ -153,6 +153,36 @@ pub async fn message(
     Ok(())
 }
 
+pub fn handle_message(
+    message: MessageProto,
+    mut x3dh_client: MutexGuard<dyn X3DHClient + Send>,
+) -> ClientResult<DecryptedMessage> {
+    let x3dh::Message {
+        sender_identity,
+        sender_ik,
+        ek,
+        opk,
+        ciphertext,
+    } = message.try_into()?;
+    let opk = if let Some(opk) = opk {
+        Some(x3dh_client.fetch_wipe_opk(&opk)?)
+    } else {
+        None
+    };
+    let (_sk, message) = initiate_recv(
+        &x3dh_client.get_ik()?,
+        &x3dh_client.get_pre_key()?,
+        &sender_ik,
+        ek,
+        opk,
+        &ciphertext,
+    )?;
+    return Ok(DecryptedMessage {
+        sender_identity,
+        message,
+    });
+}
+
 // TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.
 // TODO(https://github.com/brongan/brongnal/issues/24) - Avoid blocking sqlite calls from async.
 pub async fn get_messages(
@@ -161,35 +191,8 @@ pub async fn get_messages(
     tx: Sender<DecryptedMessage>,
 ) -> ClientResult<()> {
     while let Some(message) = stream.message().await? {
-        let x3dh::Message {
-            sender_identity,
-            sender_ik,
-            ek,
-            opk,
-            ciphertext,
-        } = message.try_into()?;
-        let mut x3dh_client = x3dh_client.lock().await;
-        let opk = if let Some(opk) = opk {
-            // TODO(#28) - Handle a missing one-time prekey.
-            Some(x3dh_client.fetch_wipe_opk(&opk)?)
-        } else {
-            None
-        };
-        match initiate_recv(
-            &x3dh_client.get_ik()?,
-            &x3dh_client.get_pre_key()?,
-            &sender_ik,
-            ek,
-            opk,
-            &ciphertext,
-        ) {
-            Ok((_sk, message)) => {
-                tx.send(DecryptedMessage {
-                    sender_identity,
-                    message,
-                })
-                .await?;
-            }
+        match handle_message(message, x3dh_client.lock().await) {
+            Ok(decrypted) => tx.send(decrypted).await?,
             Err(e) => {
                 eprintln!("Failed to decrypt message: {e}");
             }
