@@ -1531,6 +1531,7 @@ dependencies = [
  "tonic",
  "tonic-reflection",
  "x25519-dalek",
+ "xdg",
 ]
 
 [[package]]

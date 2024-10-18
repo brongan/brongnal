@@ -19,6 +19,7 @@ tokio-stream = "0.1.15"
 tonic = "0.11.0"
 tonic-reflection = { version = "0.11.0", features = ["server"] }
 x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
+xdg = "2.5.2"
 
 [dev-dependencies]
 client = { path = "../client/" }
