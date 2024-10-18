@@ -145,6 +145,7 @@ pub async fn message(
         &x3dh_client.lock().await.get_ik()?,
         message,
     )?;
+    eprintln!("Sending message: {message}");
     let request = tonic::Request::new(SendMessageRequest {
         recipient_identity: Some(recipient_identity.to_owned()),
         message: Some(message.into()),
@@ -157,29 +158,24 @@ pub fn handle_message(
     message: MessageProto,
     mut x3dh_client: MutexGuard<dyn X3DHClient + Send>,
 ) -> ClientResult<DecryptedMessage> {
-    let x3dh::Message {
-        sender_identity,
-        sender_ik,
-        ek,
-        opk,
-        ciphertext,
-    } = message.try_into()?;
-    let opk = if let Some(opk) = opk {
+    let message: x3dh::Message = message.try_into()?;
+    eprintln!("Received Message Proto: {message}");
+    let opk = if let Some(opk) = message.opk {
         Some(x3dh_client.fetch_wipe_opk(&opk)?)
     } else {
         None
     };
-    let (_sk, message) = initiate_recv(
+    let (_sk, decrypted) = initiate_recv(
         &x3dh_client.get_ik()?,
         &x3dh_client.get_pre_key()?,
-        &sender_ik,
-        ek,
+        &message.sender_ik,
+        message.ek,
         opk,
-        &ciphertext,
+        &message.ciphertext,
     )?;
     return Ok(DecryptedMessage {
-        sender_identity,
-        message,
+        sender_identity: message.sender_identity,
+        message: decrypted,
     });
 }
 

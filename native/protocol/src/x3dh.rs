@@ -43,6 +43,25 @@ pub struct Message {
     pub ciphertext: Vec<u8>,
 }
 
+#[allow(deprecated)]
+impl std::fmt::Display for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "From: {} with key: {}\n\
+            Keys: {}    {}\n\
+            Payload: {}\n",
+            self.sender_identity,
+            base64::encode(self.sender_ik),
+            base64::encode(self.ek),
+            self.opk
+                .map(|opk| base64::encode(opk))
+                .unwrap_or(String::from("(None)")),
+            base64::encode(&self.ciphertext)
+        )
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PreKeyBundle {
     pub ik: VerifyingKey,
