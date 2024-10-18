@@ -1,11 +1,12 @@
 use crate::messages::*;
-use client::{listen, message, register, sqlite_client::SqliteClient, DecryptedMessage};
+use client::{listen, message, register, sqlite_client::SqliteClient};
+use client::{DecryptedMessage, X3DHClient};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio;
-use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
@@ -13,59 +14,57 @@ mod messages;
 
 rinf::write_interface!();
 
-async fn register_and_listen(
-    mut stub: BrongnalClient<Channel>,
-    client: Arc<Mutex<SqliteClient>>,
-    tx: Sender<DecryptedMessage>,
-    username: String,
-) {
-    match register(&mut stub, client.clone(), username.clone()).await {
-        Ok(_) => {
-            debug_print!("Registered {username}");
-        }
-        Err(e) => {
-            debug_print!("Failed to register {username} with error: {e}");
-            return;
-        }
+async fn await_rust_startup() -> Option<(PathBuf, Option<String>)> {
+    let receiver = RustStartup::get_dart_signal_receiver();
+    while let Some(dart_signal) = receiver.recv().await {
+        let message = dart_signal.message;
+        return Some((
+            PathBuf::from(message.database_directory().to_owned()),
+            message.username,
+        ));
     }
-    if let Err(e) = listen(stub, client, username, tx).await {
-        debug_print!("Listen terminated with: {e}");
-    }
+    debug_print!("Lost rust startup connection to flutter.");
+    None
 }
 
-async fn handle_register_user(
-    stub: BrongnalClient<Channel>,
+async fn await_register_widget(
+    mut stub: BrongnalClient<Channel>,
     client: Arc<Mutex<SqliteClient>>,
-    tx: Sender<DecryptedMessage>,
-) {
+) -> Option<String> {
     let receiver = RegisterUserRequest::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let message: RegisterUserRequest = dart_signal.message;
         match message.username {
-            Some(name) => {
-                debug_print!("Received request to register {name}");
-                tokio::spawn(register_and_listen(
-                    stub.clone(),
-                    client.clone(),
-                    tx.clone(),
-                    name.clone(),
-                ));
-                RegisterUserResponse {
-                    username: Some(name),
+            Some(username) => {
+                debug_print!("Received request to register {username}");
+                match register(&mut stub, client.clone(), username.clone()).await {
+                    Ok(_) => {
+                        debug_print!("Registered {username}");
+                        RegisterUserResponse {
+                            username: Some(username.clone()),
+                        }
+                        .send_signal_to_dart();
+                        return Some(username);
+                    }
+                    Err(e) => {
+                        debug_print!("Failed to register {username} with error: {e}");
+                    }
                 }
-                .send_signal_to_dart();
             }
             None => {
                 debug_print!("Received empty register request.");
             }
         }
     }
+    debug_print!("Lost message connection to flutter!");
+    None
 }
 
-async fn handle_send_message(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<SqliteClient>>) {
+async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<SqliteClient>>) {
     let receiver = SendMessage::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
+        debug_print!("Rust received message from flutter!: {}", req.message());
         match message(
             &mut stub,
             client.clone(),
@@ -81,40 +80,21 @@ async fn handle_send_message(mut stub: BrongnalClient<Channel>, client: Arc<Mute
             }
         }
     }
+    debug_print!("Lost message connection to flutter!");
 }
 
-#[tokio::main]
-async fn main() {
-    let stub = BrongnalClient::connect("https://signal.brongan.com:443")
-        .await
-        .unwrap();
-
-    let receiver = RustStartup::get_dart_signal_receiver();
-    let (db_dir, username) = loop {
-        if let Some(dart_signal) = receiver.recv().await {
-            let message = dart_signal.message;
-            break (
-                PathBuf::from(message.database_directory().to_owned()),
-                message.username,
-            );
-        }
-    };
-
-    debug_print!("Database Directory: {db_dir:?}");
-    let identity_key_path = db_dir.join("identity_key");
-    let db_path = db_dir.join("keys.sqlite");
-    let client = Arc::new(Mutex::new(
-        SqliteClient::new(&identity_key_path, &db_path).unwrap(),
-    ));
-
-    let (tx, mut rx) = mpsc::channel(100);
-    if let Some(username) = username {
-        register_and_listen(stub.clone(), client.clone(), tx, username).await;
-    } else {
-        tokio::spawn(handle_register_user(stub.clone(), client.clone(), tx));
+async fn decrypt_messages(
+    stub: BrongnalClient<Channel>,
+    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
+    name: String,
+    tx: Sender<DecryptedMessage>,
+) {
+    if let Err(e) = listen(stub, x3dh_client, name, tx).await {
+        debug_print!("Listen terminated with: {e}");
     }
-    tokio::spawn(handle_send_message(stub.clone(), client.clone()));
+}
 
+async fn send_messages_to_flutter(mut rx: Receiver<DecryptedMessage>) {
     while let Some(decrypted) = rx.recv().await {
         let message = String::from_utf8(decrypted.message).ok();
         if let Some(message) = &message {
@@ -129,5 +109,42 @@ async fn main() {
         }
         .send_signal_to_dart();
     }
+    debug_print!("Lost decrypted message stream.");
+}
+
+#[tokio::main]
+async fn main() {
+    let stub = BrongnalClient::connect("http://100.80.66.28:8080")
+        .await
+        .unwrap();
+
+    let (db_dir, mut username) = await_rust_startup()
+        .await
+        .expect("Rust startup message sent.");
+
+    let identity_key_path = db_dir.join("identity_key");
+    let db_path = db_dir.join("keys.sqlite");
+    debug_print!("Identity Key Path: {identity_key_path:?}");
+    debug_print!("Datbase Path: {db_path:?}");
+    let client = Arc::new(Mutex::new(
+        SqliteClient::new(&identity_key_path, &db_path).unwrap(),
+    ));
+
+    if let None = username {
+        username = await_register_widget(stub.clone(), client.clone()).await;
+    }
+
+    tokio::spawn(send_messages(stub.clone(), client.clone()));
+
+    // TODO these really should not be separate async tasks.
+    let (tx, rx) = mpsc::channel(100);
+    tokio::spawn(decrypt_messages(
+        stub.clone(),
+        client.clone(),
+        username.unwrap(),
+        tx,
+    ));
+    tokio::spawn(send_messages_to_flutter(rx));
+
     rinf::dart_shutdown().await;
 }
