@@ -26,9 +26,9 @@ type ClientResult<T> = Result<T, ClientError>;
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("failed to load identity key: {0}")]
-    LoadIdentityKey(&'static str),
+    GetIdentityKey(rusqlite::Error),
     #[error("failed to save identity key")]
-    SaveIdentityKey,
+    InsertIdentityKey(rusqlite::Error),
     #[error("rusqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("failed to insert pre keys: {0}")]
@@ -36,7 +36,7 @@ pub enum ClientError {
     #[error("failed to retrieve OPK for {0:?}")]
     WipeOpk(X25519PublicKey),
     #[error("failed to retrieve pre key")]
-    RetrievePreKey(rusqlite::Error),
+    GetPreKey(rusqlite::Error),
     #[error("grpc error: {0}")]
     Grpc(#[from] tonic::Status),
     #[error("send decrypted message error: {0}")]
@@ -46,9 +46,9 @@ pub enum ClientError {
 }
 
 pub trait X3DHClient {
+    fn get_pre_key(&self, pre_key: &X25519PublicKey) -> ClientResult<X25519StaticSecret>;
     fn fetch_wipe_opk(&mut self, opk: &X25519PublicKey) -> ClientResult<X25519StaticSecret>;
     fn get_ik(&self) -> ClientResult<SigningKey>;
-    fn get_pre_key(&self) -> ClientResult<X25519StaticSecret>;
     fn get_spk(&self) -> ClientResult<SignedPreKey>;
     fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys>;
 }
@@ -167,7 +167,7 @@ pub fn handle_message(
     };
     let (_sk, decrypted) = initiate_recv(
         &x3dh_client.get_ik()?,
-        &x3dh_client.get_pre_key()?,
+        &x3dh_client.get_pre_key(&message.pre_key)?,
         &message.sender_ik,
         message.ek,
         opk,

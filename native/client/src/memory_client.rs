@@ -38,7 +38,7 @@ impl X3DHClient for MemoryClient {
         Ok(self.ik.clone())
     }
 
-    fn get_pre_key(&self) -> ClientResult<X25519StaticSecret> {
+    fn get_pre_key(&self, _pre_key: &X25519PublicKey) -> ClientResult<X25519StaticSecret> {
         Ok(self.pre_key.clone())
     }
 

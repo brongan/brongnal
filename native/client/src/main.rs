@@ -4,6 +4,7 @@ use client::{listen, message, register, DecryptedMessage};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use proto::service::brongnal_client::BrongnalClient;
+use rusqlite::Connection;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -42,9 +43,8 @@ async fn main() -> Result<()> {
 
     let mut stub = BrongnalClient::connect(addr).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
-    let identity_key_path = xdg_dirs.place_data_file(format!("{}_identity_key", name))?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
-    let client = Arc::new(Mutex::new(SqliteClient::new(&identity_key_path, &db_path)?));
+    let client = Arc::new(Mutex::new(SqliteClient::new(Connection::open(db_path)?)?));
 
     register(&mut stub, client.clone(), name.clone()).await?;
 

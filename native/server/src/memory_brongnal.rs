@@ -34,18 +34,9 @@ impl Storage for MemoryStorage {
         ik: VerifyingKey,
         spk: SignedPreKeyProto,
     ) -> tonic::Result<()> {
-        self.iks
-            .lock()
-            .unwrap()
-            .insert(identity.clone(), ik);
-        self.spks
-            .lock()
-            .unwrap()
-            .insert(identity.clone(), spk);
-        self.opks
-            .lock()
-            .unwrap()
-            .insert(identity, Vec::new());
+        self.iks.lock().unwrap().insert(identity.clone(), ik);
+        self.spks.lock().unwrap().insert(identity.clone(), spk);
+        self.opks.lock().unwrap().insert(identity, Vec::new());
         Ok(())
     }
 
@@ -58,14 +49,9 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
-    fn add_opks(
-        &self,
-        identity: &str,
-        mut pre_keys: Vec<X25519PublicKey>,
-    ) -> tonic::Result<()> {
+    fn add_opks(&self, identity: &str, mut pre_keys: Vec<X25519PublicKey>) -> tonic::Result<()> {
         let mut opks = self.opks.lock().unwrap();
-        opks
-            .get_mut(identity)
+        opks.get_mut(identity)
             .ok_or(Status::not_found("User not found."))?
             .append(&mut pre_keys);
         Ok(())
@@ -89,12 +75,11 @@ impl Storage for MemoryStorage {
     }
 
     fn pop_opk(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
-        let opk =
-            if let Some(opks) = self.opks.lock().unwrap().get_mut(identity) {
-                opks.pop()
-            } else {
-                None
-            };
+        let opk = if let Some(opks) = self.opks.lock().unwrap().get_mut(identity) {
+            opks.pop()
+        } else {
+            None
+        };
         Ok(opk)
     }
 
@@ -116,4 +101,3 @@ impl Storage for MemoryStorage {
             .unwrap_or(Vec::new()))
     }
 }
-

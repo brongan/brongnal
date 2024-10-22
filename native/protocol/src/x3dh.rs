@@ -39,6 +39,7 @@ pub struct Message {
     pub sender_identity: String,
     pub sender_ik: VerifyingKey,
     pub ek: X25519PublicKey,
+    pub pre_key: X25519PublicKey,
     pub opk: Option<X25519PublicKey>,
     pub ciphertext: Vec<u8>,
 }
@@ -82,7 +83,6 @@ fn kdf(km: &[u8]) -> [u8; 32] {
     hk.expand(b"Brongnal", &mut okm).unwrap();
     okm
 }
-
 #[derive(Error, Debug, Serialize, Deserialize)]
 pub enum X3DHError {
     #[error("Signature failed to validate.")]
@@ -101,7 +101,7 @@ pub enum X3DHError {
 //    SK = KDF(DH1 || DH2 || DH3 || DH4)
 fn initiate_send_get_sk(
     recipient_ik: VerifyingKey,
-    spk: SignedPreKey,
+    spk: &SignedPreKey,
     opk: Option<X25519PublicKey>,
     sender_ik: &SigningKey,
 ) -> Result<X3DHSendKeyAgreement, X3DHError> {
@@ -148,7 +148,7 @@ pub fn initiate_send(
 ) -> Result<([u8; 32], Message), X3DHError> {
     let X3DHSendKeyAgreement { ek, sk } = initiate_send_get_sk(
         prekey_bundle.ik,
-        prekey_bundle.spk,
+        &prekey_bundle.spk,
         prekey_bundle.opk,
         sender_ik,
     )?;
@@ -177,6 +177,7 @@ pub fn initiate_send(
             sender_identity,
             sender_ik: sender_ik.verifying_key(),
             ek,
+            pre_key: prekey_bundle.spk.pre_key,
             opk: prekey_bundle.opk,
             ciphertext,
         },
@@ -266,7 +267,7 @@ mod tests {
         let X3DHSendKeyAgreement {
             ek: ephemeral_key,
             sk: secret_key,
-        } = initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, Some(opk_pub), &alice_ik)?;
+        } = initiate_send_get_sk(bob_ik.verifying_key(), &bob_spk, Some(opk_pub), &alice_ik)?;
 
         let recv_sk = initiate_recv_get_sk(
             &alice_ik.verifying_key(),
@@ -291,7 +292,7 @@ mod tests {
         let alice_ik = SigningKey::generate(&mut OsRng);
 
         let X3DHSendKeyAgreement { ek, sk } =
-            initiate_send_get_sk(bob_ik.verifying_key(), bob_spk, None, &alice_ik)?;
+            initiate_send_get_sk(bob_ik.verifying_key(), &bob_spk, None, &alice_ik)?;
 
         let recv_sk = initiate_recv_get_sk(
             &alice_ik.verifying_key(),
