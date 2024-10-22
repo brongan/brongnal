@@ -93,7 +93,7 @@ impl Storage for SqliteStorage {
                 params![identity, spk.encode_to_vec()],
                 |row| Ok(row.get(0)?),
             )
-            .map_err(|_| Status::not_found("user not found"))?;
+            .map_err(|_| Status::not_found(format!("pre key for user {identity} not found")))?;
         Ok(())
     }
 
@@ -131,7 +131,7 @@ impl Storage for SqliteStorage {
                 [identity],
                 |row| Ok((row.get(0).unwrap(), row.get(1).unwrap())),
             )
-            .map_err(|_| Status::not_found("user not found"))?;
+            .map_err(|_| Status::not_found(format!("User: \"{identity}\" is not registered.")))?;
         let ik = parse_verifying_key(&ik).unwrap();
         let spk = SignedPreKeyProto::decode(&*spk).unwrap();
         Ok((ik, spk))
@@ -168,7 +168,7 @@ impl Storage for SqliteStorage {
                         .as_secs(),
                 ),|row| Ok(row.get(0)?),
             )
-            .map_err(|_| Status::not_found("user not found"))?;
+            .map_err(|_| Status::not_found(format!("Cannot enqueue message for unknown user: {recipient}")))?;
         Ok(())
     }
 
@@ -302,6 +302,7 @@ mod tests {
             sender_identity: Some(String::from("alice")),
             sender_identity_key: Some(b"alice identity key".to_vec()),
             ephemeral_key: Some(b"alice ephemeral key".to_vec()),
+            pre_key: Some(b"bob pre key".to_vec()),
             one_time_key: Some(b"bob one time key".to_vec()),
             ciphertext: Some(b"ciphertext".to_vec()),
         };

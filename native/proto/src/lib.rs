@@ -85,6 +85,9 @@ impl TryFrom<MessageProto> for X3DHMessage {
         let ek = parse_x25519_public_key(&value.ephemeral_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid ephemeral_key: {e}")))?;
 
+        let pre_key = parse_x25519_public_key(&value.pre_key())
+            .map_err(|e| Status::invalid_argument(format!("Invalid pre: {e}")))?;
+
         let opk = if let Some(opk) = value.one_time_key {
             Some(
                 parse_x25519_public_key(&opk)
@@ -97,6 +100,7 @@ impl TryFrom<MessageProto> for X3DHMessage {
             sender_identity,
             sender_ik,
             ek,
+            pre_key,
             opk,
             ciphertext: value
                 .ciphertext
@@ -112,6 +116,7 @@ impl Into<MessageProto> for X3DHMessage {
             sender_identity: Some(self.sender_identity),
             sender_identity_key: Some(self.sender_ik.to_bytes().to_vec()),
             ephemeral_key: Some(self.ek.to_bytes().to_vec()),
+            pre_key: Some(self.pre_key.to_bytes().to_vec()),
             one_time_key: self.opk.map(|opk| opk.to_bytes().to_vec()),
             ciphertext: Some(self.ciphertext),
         }

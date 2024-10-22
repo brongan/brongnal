@@ -3,6 +3,7 @@ use client::{listen, message, register, sqlite_client::SqliteClient};
 use client::{DecryptedMessage, X3DHClient};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
+use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio;
@@ -27,29 +28,14 @@ async fn await_rust_startup() -> Option<(PathBuf, Option<String>)> {
     None
 }
 
-async fn await_register_widget(
-    mut stub: BrongnalClient<Channel>,
-    client: Arc<Mutex<SqliteClient>>,
-) -> Option<String> {
+async fn await_register_widget() -> Option<String> {
     let receiver = RegisterUserRequest::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let message: RegisterUserRequest = dart_signal.message;
         match message.username {
             Some(username) => {
                 debug_print!("Received request to register {username}");
-                match register(&mut stub, client.clone(), username.clone()).await {
-                    Ok(_) => {
-                        debug_print!("Registered {username}");
-                        RegisterUserResponse {
-                            username: Some(username.clone()),
-                        }
-                        .send_signal_to_dart();
-                        return Some(username);
-                    }
-                    Err(e) => {
-                        debug_print!("Failed to register {username} with error: {e}");
-                    }
-                }
+                return Some(username);
             }
             None => {
                 debug_print!("Received empty register request.");
@@ -114,36 +100,48 @@ async fn send_messages_to_flutter(mut rx: Receiver<DecryptedMessage>) {
 
 #[tokio::main]
 async fn main() {
-    let stub = BrongnalClient::connect("http://100.80.66.28:8080")
+    // TODO gracefully handle a lack of network connection.
+    let mut stub = BrongnalClient::connect("http://signal.brongan.com:8080")
         .await
         .unwrap();
 
     let (db_dir, mut username) = await_rust_startup()
         .await
         .expect("Rust startup message sent.");
+    debug_print!("Flutter persisted username: {username:?}");
 
-    let identity_key_path = db_dir.join("identity_key");
     let db_path = db_dir.join("keys.sqlite");
-    debug_print!("Identity Key Path: {identity_key_path:?}");
-    debug_print!("Datbase Path: {db_path:?}");
+    debug_print!("Database Path: {db_path:?}");
     let client = Arc::new(Mutex::new(
-        SqliteClient::new(&identity_key_path, &db_path).unwrap(),
+        SqliteClient::new(Connection::open(db_path).expect("open database"))
+            .expect("init database"),
     ));
 
-    if let None = username {
-        username = await_register_widget(stub.clone(), client.clone()).await;
+    while let None = username {
+        username = await_register_widget().await;
+        debug_print!("Registered from register widget: {username:?}");
+    }
+    let username = username.unwrap();
+
+    debug_print!("Registering with username: {}", username);
+    match register(&mut stub, client.clone(), username.clone()).await {
+        Ok(_) => {
+            debug_print!("Registered {username}");
+            RegisterUserResponse {
+                username: Some(username.clone()),
+            }
+            .send_signal_to_dart();
+        }
+        Err(e) => {
+            debug_print!("Failed to register {username} with error: {e}");
+        }
     }
 
     tokio::spawn(send_messages(stub.clone(), client.clone()));
 
     // TODO these really should not be separate async tasks.
     let (tx, rx) = mpsc::channel(100);
-    tokio::spawn(decrypt_messages(
-        stub.clone(),
-        client.clone(),
-        username.unwrap(),
-        tx,
-    ));
+    tokio::spawn(decrypt_messages(stub.clone(), client.clone(), username, tx));
     tokio::spawn(send_messages_to_flutter(rx));
 
     rinf::dart_shutdown().await;

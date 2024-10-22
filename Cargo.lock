@@ -289,6 +289,7 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chacha20poly1305",
  "ed25519-dalek",
  "futures",
