@@ -54,7 +54,9 @@ To run and build the backend, you need to have installed:
 * [protoc](https://grpc.io/docs/protoc-installation/)
 
 ```bash
-cargo r -p server
+mkdir db ;
+touch db/brongnal.db3 ;
+cargo r -p server ;
 ```
 
 ### Client
