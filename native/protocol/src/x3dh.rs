@@ -121,8 +121,8 @@ fn initiate_send_get_sk(
     opk: Option<X25519PublicKey>,
     sender_ik: &SigningKey,
 ) -> Result<X3DHSendKeyAgreement, X3DHError> {
-    let _ = verify_bundle(&recipient_ik, &[spk.pre_key], &spk.signature)
-        .map_err(|_| X3DHError::SignatureValidation);
+    verify_bundle(&recipient_ik, &[spk.pre_key], &spk.signature)
+        .map_err(|_| X3DHError::SignatureValidation)?;
 
     let ek = X25519ReusableSecret::random();
     let dh1 = X25519StaticSecret::from(sender_ik.to_scalar_bytes()).diffie_hellman(&spk.pre_key);
