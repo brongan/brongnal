@@ -14,8 +14,21 @@ use x25519_dalek::{
     StaticSecret as X25519StaticSecret,
 };
 
-// See https://signal.org/docs/specifications/x3dh/ for an explanation of the below variable names
-// and functions of the X3DH protocol.
+/*
+    Glossary - See https://signal.org/docs/specifications/x3dh/
+    Alice is sending an end-to-end encrypted (E2EE) message to Bob.
+    SK - Shared Secret. This protocol is used to result in Alice and Bob deriving the same sk which
+    they can use for Symmetric encryptic encryption and ratcheting.
+    EK - Ephemeral Key. This key is created when Alice sends message to Bob. She uses the private
+    key to calculate `sk`, forgets `ek`, and puts the `ek` public key in the encoded message.
+    IK - Identity Key. A long-term ED25519 key that identifies as user in the protocol.
+    SPK - Signed Pre Key. A medium-term X25519 key signed by the user's IK.
+    OPK - One-Time Pre Key. A short-term X25519 key that can only be used once by a client. The
+    public key should only be vended by the server once to avoid failures.
+    DH - Elliptic-curve Diffie–Hellman (ECDH) is a key agreement protocol that allows two parties,
+    each having an elliptic-curve public–private key pair, to establish a shared secret over an insecure channel
+    IKA - Alice's Identity Key
+*/
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKey {
@@ -70,6 +83,8 @@ pub struct PreKeyBundle {
     pub spk: SignedPreKey,
 }
 
+// KDF = Key Derivation Function
+// HKDF (https://en.wikipedia.org/wiki/HKDF) is an HMAC based KDF construction defined in https://datatracker.ietf.org/doc/html/rfc5869.
 // KDF(KM) represents 32 bytes of output from the HKDF algorithm [3] with inputs:
 //    HKDF input key material = F || KM, where KM is an input byte sequence containing secret key material, and F is a byte sequence containing 32 0xFF bytes if curve is X25519, and 57 0xFF bytes if curve is X448. F is used for cryptographic domain separation with XEdDSA [2].
 //    HKDF salt = A zero-filled byte sequence with length equal to the hash output length.
@@ -91,6 +106,7 @@ pub enum X3DHError {
     Aead(#[from] AeadError),
 }
 
+// DH(PK1, PK2) represents a byte sequence which is the shared secret output from an Elliptic Curve Diffie-Hellman function involving the key pairs represented by public keys PK1 and PK2. The Elliptic Curve Diffie-Hellman function will be either the X25519 or X448 function from [1], depending on the curve parameter.
 // If the bundle does not contain a one-time prekey, she calculates:
 //    DH1 = DH(IKA, SPKB)
 //    DH2 = DH(EKA, IKB)
