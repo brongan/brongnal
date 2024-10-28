@@ -46,7 +46,7 @@ ThemeData bronganlDarkTheme = ThemeData(
   navigationBarTheme: const NavigationBarThemeData(
     backgroundColor: Color.fromRGBO(40, 43, 48, 1.0),
     indicatorColor: Color.fromRGBO(70, 75, 92, 1.0),
-    labelTextStyle: MaterialStatePropertyAll(conversationMessageStyle),
+    labelTextStyle: WidgetStatePropertyAll(conversationMessageStyle),
   ),
   iconTheme: const IconThemeData(color: textColor, size: 40),
   textTheme: const TextTheme(
