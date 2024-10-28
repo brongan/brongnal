@@ -25,7 +25,7 @@ ThemeData bronganlDarkTheme = ThemeData(
   colorScheme: ColorScheme.fromSeed(
     seedColor: Colors.deepOrange,
     brightness: Brightness.dark,
-  ).copyWith(background: backgroundColor),
+  ).copyWith(surface: backgroundColor),
   dialogBackgroundColor: backgroundColor,
   drawerTheme: const DrawerThemeData(backgroundColor: backgroundColor),
   appBarTheme: const AppBarTheme(

@@ -65,7 +65,7 @@ class _HomeState extends State<Home> {
     return Scaffold(
         appBar: getHomeAppBar(context),
         drawer: getHomeDrawer(context),
-        backgroundColor: theme.colorScheme.background,
+        backgroundColor: theme.colorScheme.surface,
         body: body,
         floatingActionButton: BrongnalFloatingActionButtons(
             self: username, destination: _destination),
