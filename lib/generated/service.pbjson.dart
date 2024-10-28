@@ -47,8 +47,22 @@ const RegisterPreKeyBundleRequest$json = {
   '2': [
     {'1': 'identity', '3': 1, '4': 1, '5': 9, '10': 'identity'},
     {'1': 'ik', '3': 2, '4': 1, '5': 12, '10': 'ik'},
-    {'1': 'spk', '3': 3, '4': 1, '5': 11, '6': '.service.SignedPreKey', '10': 'spk'},
-    {'1': 'otk_bundle', '3': 4, '4': 1, '5': 11, '6': '.service.SignedPreKeys', '10': 'otkBundle'},
+    {
+      '1': 'spk',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.service.SignedPreKey',
+      '10': 'spk'
+    },
+    {
+      '1': 'otk_bundle',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.service.SignedPreKeys',
+      '10': 'otkBundle'
+    },
   ],
 };
 
@@ -65,8 +79,8 @@ const RegisterPreKeyBundleResponse$json = {
 };
 
 /// Descriptor for `RegisterPreKeyBundleResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List registerPreKeyBundleResponseDescriptor = $convert.base64Decode(
-    'ChxSZWdpc3RlclByZUtleUJ1bmRsZVJlc3BvbnNl');
+final $typed_data.Uint8List registerPreKeyBundleResponseDescriptor =
+    $convert.base64Decode('ChxSZWdpc3RlclByZUtleUJ1bmRsZVJlc3BvbnNl');
 
 @$core.Deprecated('Use requestPreKeysRequestDescriptor instead')
 const RequestPreKeysRequest$json = {
@@ -77,8 +91,9 @@ const RequestPreKeysRequest$json = {
 };
 
 /// Descriptor for `RequestPreKeysRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List requestPreKeysRequestDescriptor = $convert.base64Decode(
-    'ChVSZXF1ZXN0UHJlS2V5c1JlcXVlc3QSGgoIaWRlbnRpdHkYASABKAlSCGlkZW50aXR5');
+final $typed_data.Uint8List requestPreKeysRequestDescriptor =
+    $convert.base64Decode(
+        'ChVSZXF1ZXN0UHJlS2V5c1JlcXVlc3QSGgoIaWRlbnRpdHkYASABKAlSCGlkZW50aXR5');
 
 @$core.Deprecated('Use preKeyBundleDescriptor instead')
 const PreKeyBundle$json = {
@@ -86,7 +101,14 @@ const PreKeyBundle$json = {
   '2': [
     {'1': 'identity_key', '3': 1, '4': 1, '5': 12, '10': 'identityKey'},
     {'1': 'otk', '3': 2, '4': 1, '5': 12, '10': 'otk'},
-    {'1': 'spk', '3': 3, '4': 1, '5': 11, '6': '.service.SignedPreKey', '10': 'spk'},
+    {
+      '1': 'spk',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.service.SignedPreKey',
+      '10': 'spk'
+    },
   ],
 };
 
@@ -116,8 +138,21 @@ final $typed_data.Uint8List x3DHMessageDescriptor = $convert.base64Decode(
 const SendMessageRequest$json = {
   '1': 'SendMessageRequest',
   '2': [
-    {'1': 'recipient_identity', '3': 1, '4': 1, '5': 9, '10': 'recipientIdentity'},
-    {'1': 'message', '3': 2, '4': 1, '5': 11, '6': '.service.X3DHMessage', '10': 'message'},
+    {
+      '1': 'recipient_identity',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'recipientIdentity'
+    },
+    {
+      '1': 'message',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.service.X3DHMessage',
+      '10': 'message'
+    },
   ],
 };
 
@@ -133,8 +168,8 @@ const SendMessageResponse$json = {
 };
 
 /// Descriptor for `SendMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List sendMessageResponseDescriptor = $convert.base64Decode(
-    'ChNTZW5kTWVzc2FnZVJlc3BvbnNl');
+final $typed_data.Uint8List sendMessageResponseDescriptor =
+    $convert.base64Decode('ChNTZW5kTWVzc2FnZVJlc3BvbnNl');
 
 @$core.Deprecated('Use retrieveMessagesRequestDescriptor instead')
 const RetrieveMessagesRequest$json = {
@@ -145,19 +180,27 @@ const RetrieveMessagesRequest$json = {
 };
 
 /// Descriptor for `RetrieveMessagesRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List retrieveMessagesRequestDescriptor = $convert.base64Decode(
-    'ChdSZXRyaWV2ZU1lc3NhZ2VzUmVxdWVzdBIaCghpZGVudGl0eRgBIAEoCVIIaWRlbnRpdHk=');
+final $typed_data.Uint8List retrieveMessagesRequestDescriptor =
+    $convert.base64Decode(
+        'ChdSZXRyaWV2ZU1lc3NhZ2VzUmVxdWVzdBIaCghpZGVudGl0eRgBIAEoCVIIaWRlbnRpdHk=');
 
 @$core.Deprecated('Use retrieveMessagesResponseDescriptor instead')
 const RetrieveMessagesResponse$json = {
   '1': 'RetrieveMessagesResponse',
   '2': [
-    {'1': 'messages', '3': 1, '4': 3, '5': 11, '6': '.service.X3DHMessage', '10': 'messages'},
+    {
+      '1': 'messages',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.service.X3DHMessage',
+      '10': 'messages'
+    },
   ],
 };
 
 /// Descriptor for `RetrieveMessagesResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List retrieveMessagesResponseDescriptor = $convert.base64Decode(
-    'ChhSZXRyaWV2ZU1lc3NhZ2VzUmVzcG9uc2USMAoIbWVzc2FnZXMYASADKAsyFC5zZXJ2aWNlLl'
-    'gzREhNZXNzYWdlUghtZXNzYWdlcw==');
-
+final $typed_data.Uint8List retrieveMessagesResponseDescriptor =
+    $convert.base64Decode(
+        'ChhSZXRyaWV2ZU1lc3NhZ2VzUmVzcG9uc2USMAoIbWVzc2FnZXMYASADKAsyFC5zZXJ2aWNlLl'
+        'gzREhNZXNzYWdlUghtZXNzYWdlcw==');

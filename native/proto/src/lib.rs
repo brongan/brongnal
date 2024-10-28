@@ -38,24 +38,24 @@ use service::PreKeyBundle as PreKeyBundleProto;
 use service::SignedPreKey as SignedPreKeyProto;
 use service::SignedPreKeys as SignedPreKeysProto;
 
-impl Into<SignedPreKeyProto> for SignedPreKey {
-    fn into(self) -> SignedPreKeyProto {
+impl From<SignedPreKey> for SignedPreKeyProto {
+    fn from(val: SignedPreKey) -> Self {
         SignedPreKeyProto {
-            pre_key: Some(self.pre_key.to_bytes().to_vec()),
-            signature: Some(self.signature.to_vec()),
+            pre_key: Some(val.pre_key.to_bytes().to_vec()),
+            signature: Some(val.signature.to_vec()),
         }
     }
 }
 
-impl Into<SignedPreKeysProto> for SignedPreKeys {
-    fn into(self) -> SignedPreKeysProto {
+impl From<SignedPreKeys> for SignedPreKeysProto {
+    fn from(val: SignedPreKeys) -> Self {
         SignedPreKeysProto {
-            pre_keys: self
+            pre_keys: val
                 .pre_keys
                 .into_iter()
                 .map(|key| key.to_bytes().to_vec())
                 .collect(),
-            signature: Some(self.signature.to_vec()),
+            signature: Some(val.signature.to_vec()),
         }
     }
 }
@@ -68,7 +68,7 @@ impl TryFrom<SignedPreKeyProto> for SignedPreKey {
 
         let pre_key = parse_x25519_public_key(value.pre_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid SignedPreKey: {e}")))?;
-        let signature = Signature::from_slice(&signature)
+        let signature = Signature::from_slice(signature)
             .map_err(|_| Status::invalid_argument("Pre Key has an invalid X25519 Signature"))?;
         Ok(SignedPreKey { pre_key, signature })
     }
@@ -82,10 +82,10 @@ impl TryFrom<MessageProto> for X3DHMessage {
         let sender_ik = parse_verifying_key(value.sender_identity_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid sender_identity_key: {e}")))?;
 
-        let ek = parse_x25519_public_key(&value.ephemeral_key())
+        let ek = parse_x25519_public_key(value.ephemeral_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid ephemeral_key: {e}")))?;
 
-        let pre_key = parse_x25519_public_key(&value.pre_key())
+        let pre_key = parse_x25519_public_key(value.pre_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid pre: {e}")))?;
 
         let opk = if let Some(opk) = value.one_time_key {
@@ -110,15 +110,15 @@ impl TryFrom<MessageProto> for X3DHMessage {
     }
 }
 
-impl Into<MessageProto> for X3DHMessage {
-    fn into(self) -> MessageProto {
+impl From<X3DHMessage> for MessageProto {
+    fn from(val: X3DHMessage) -> Self {
         MessageProto {
-            sender_identity: Some(self.sender_identity),
-            sender_identity_key: Some(self.sender_ik.to_bytes().to_vec()),
-            ephemeral_key: Some(self.ek.to_bytes().to_vec()),
-            pre_key: Some(self.pre_key.to_bytes().to_vec()),
-            one_time_key: self.opk.map(|opk| opk.to_bytes().to_vec()),
-            ciphertext: Some(self.ciphertext),
+            sender_identity: Some(val.sender_identity),
+            sender_identity_key: Some(val.sender_ik.to_bytes().to_vec()),
+            ephemeral_key: Some(val.ek.to_bytes().to_vec()),
+            pre_key: Some(val.pre_key.to_bytes().to_vec()),
+            one_time_key: val.opk.map(|opk| opk.to_bytes().to_vec()),
+            ciphertext: Some(val.ciphertext),
         }
     }
 }
@@ -162,17 +162,17 @@ impl TryInto<SignedMessage> for gossamer::SignedMessage {
         let signature = Signature::from_slice(self.signature()).map_err(|_| {
             Status::invalid_argument("SignedMessage has an invalid X25519 Signature")
         })?;
-        let public_key = parse_verifying_key(&self.public_key()).map_err(|e| {
+        let public_key = parse_verifying_key(self.public_key()).map_err(|e| {
             Status::invalid_argument(format!(
                 "SignedMessage has invalid sender_identity_key: {e}"
             ))
         })?;
         let contents = self.contents();
         public_key
-            .verify_strict(&contents, &signature)
+            .verify_strict(contents, &signature)
             .map_err(|_| Status::unauthenticated("SignedMessage signature invalid."))?;
 
-        let message = gossamer::Message::decode(&*contents)
+        let message = gossamer::Message::decode(contents)
             .map_err(|_| Status::invalid_argument("contents are not serialized message."))?;
 
         Ok(SignedMessage {

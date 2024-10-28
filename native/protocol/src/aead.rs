@@ -22,7 +22,7 @@ pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Vec<u
         .encrypt(&nonce, payload)
         .map_err(|_| AeadError::Encrypt)?;
 
-    return Ok([vec![VERSION_TAG], nonce.to_vec(), ciphertext].concat());
+    Ok([vec![VERSION_TAG], nonce.to_vec(), ciphertext].concat())
 }
 
 pub fn decrypt_data(
@@ -36,7 +36,7 @@ pub fn decrypt_data(
     let nonce_bytes = &ciphertext[1..(NONCE_LEN + 1)];
     let msg = &ciphertext[(NONCE_LEN + 1)..];
     cipher
-        .decrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: &msg, aad })
+        .decrypt(Nonce::from_slice(nonce_bytes), Payload { msg, aad })
         .map_err(|_| AeadError::Encrypt)
 }
 

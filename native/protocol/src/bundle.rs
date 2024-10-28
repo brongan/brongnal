@@ -60,14 +60,11 @@ mod tests {
                 .into_iter()
                 .map(|pair| pair.1)
                 .collect();
-            assert_eq!(
-                verify_bundle(
-                    &VerifyingKey::from(&key),
-                    &bundle_keys,
-                    &signed_bundle.signature
-                )?,
-                ()
-            );
+            verify_bundle(
+                &VerifyingKey::from(&key),
+                &bundle_keys,
+                &signed_bundle.signature,
+            )?;
 
             let other_key = SigningKey::generate(&mut OsRng);
             assert!(verify_bundle(

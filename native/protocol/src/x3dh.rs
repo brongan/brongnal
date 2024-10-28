@@ -69,7 +69,7 @@ impl std::fmt::Display for Message {
             base64::encode(self.sender_ik),
             base64::encode(self.ek),
             self.opk
-                .map(|opk| base64::encode(opk))
+                .map(base64::encode)
                 .unwrap_or(String::from("(None)")),
             base64::encode(&self.ciphertext)
         )
@@ -248,7 +248,7 @@ pub fn initiate_recv(
     // Bob may then continue using SK or keys derived from SK within the post-X3DH protocol for communication with Alice.
     // Finally, Bob attempts to decrypt the initial ciphertext using SK and AD.
     let cipher = ChaCha20Poly1305::new_from_slice(&sk).unwrap();
-    Ok((sk, decrypt_data(&ciphertext, &ad, &cipher)?))
+    Ok((sk, decrypt_data(ciphertext, &ad, &cipher)?))
 }
 
 #[cfg(test)]

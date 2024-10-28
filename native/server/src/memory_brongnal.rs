@@ -98,6 +98,6 @@ impl Storage for MemoryStorage {
             .lock()
             .unwrap()
             .remove(identity)
-            .unwrap_or(Vec::new()))
+            .unwrap_or_default())
     }
 }

@@ -6,7 +6,6 @@ use rinf::debug_print;
 use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
@@ -17,7 +16,7 @@ rinf::write_interface!();
 
 async fn await_rust_startup() -> Option<(PathBuf, Option<String>)> {
     let receiver = RustStartup::get_dart_signal_receiver();
-    while let Some(dart_signal) = receiver.recv().await {
+    if let Some(dart_signal) = receiver.recv().await {
         let message = dart_signal.message;
         return Some((
             PathBuf::from(message.database_directory().to_owned()),
@@ -117,7 +116,7 @@ async fn main() {
             .expect("init database"),
     ));
 
-    while let None = username {
+    while username.is_none() {
         username = await_register_widget().await;
         debug_print!("Registered from register widget: {username:?}");
     }
