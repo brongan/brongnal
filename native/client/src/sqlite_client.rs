@@ -12,9 +12,9 @@ use x3dh::{SignedPreKey, SignedPreKeys};
 #[derive(Clone, Copy, strum_macros::Display)]
 #[repr(u32)]
 enum KeyType {
-    IdentityKey = 0,
-    PreKey = 1,
-    OneTimePreKey = 2,
+    Identity = 0,
+    Pre = 1,
+    OneTimePre = 2,
 }
 
 pub struct SqliteClient {
@@ -42,38 +42,38 @@ fn insert_identity_key(identity_key: &SigningKey, connection: &Connection) -> Cl
     connection.execute("INSERT INTO keys (public_key, private_key, key_type, creation_time) VALUES (?1, ?2, ?3, ?4)", params![
             VerifyingKey::from(identity_key).to_bytes(),
             identity_key.to_bytes(),
-            KeyType::IdentityKey as u32,
+            KeyType::Identity as u32,
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs() ]).map_err(|e| ClientError::InsertIdentityKey(e))?;
+                .as_secs() ]).map_err(ClientError::InsertIdentityKey)?;
     Ok(())
 }
 
 fn load_identity_key(connection: &Connection) -> ClientResult<Option<SigningKey>> {
     let key: Option<[u8; 32]> = match connection.query_row(
         "SELECT private_key FROM keys WHERE key_type = ?1",
-        params![KeyType::IdentityKey as u32],
+        params![KeyType::Identity as u32],
         |row| row.get(0),
     ) {
         Ok(value) => Ok(Some(value)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(ClientError::GetIdentityKey(e)),
     }?;
-    Ok(key.map(|key| SigningKey::from(key)))
+    Ok(key.map(SigningKey::from))
 }
 
 fn load_pre_key(connection: &Connection) -> ClientResult<Option<X25519StaticSecret>> {
     let key: Option<[u8; 32]> = match connection.query_row(
         "SELECT private_key FROM keys WHERE key_type = ?1 ORDER BY creation_time DESC LIMIT 1",
-        params![KeyType::PreKey as u32],
+        params![KeyType::Pre as u32],
         |row| row.get(0),
     ) {
         Ok(value) => Ok(Some(value)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(ClientError::GetIdentityKey(e)),
     }?;
-    Ok(key.map(|key| X25519StaticSecret::from(key)))
+    Ok(key.map(X25519StaticSecret::from))
 }
 
 fn insert_pre_keys(
@@ -97,31 +97,27 @@ fn insert_pre_keys(
                 .unwrap()
                 .as_secs(),
         ))
-        .map_err(|e| ClientError::InsertPreKey(e))?;
+        .map_err(ClientError::InsertPreKey)?;
     }
     Ok(())
 }
 
 fn lazy_init_identity_key(connection: &Connection) -> ClientResult<()> {
-    if let Some(_) = load_identity_key(&connection)? {
+    if load_identity_key(connection)?.is_some() {
         return Ok(());
     }
     info!("Creating initial identity key.");
     let identity_key = SigningKey::generate(&mut OsRng);
-    insert_identity_key(&identity_key, &connection)?;
+    insert_identity_key(&identity_key, connection)?;
     Ok(())
 }
 
 fn lazy_init_pre_key(connection: &Connection) -> ClientResult<()> {
-    if let Some(_) = load_pre_key(&connection)? {
+    if load_pre_key(connection)?.is_some() {
         return Ok(());
     }
     info!("Creating initial pre key.");
-    insert_pre_keys(
-        &[X25519StaticSecret::random()],
-        KeyType::PreKey,
-        &connection,
-    )?;
+    insert_pre_keys(&[X25519StaticSecret::random()], KeyType::Pre, connection)?;
     Ok(())
 }
 
@@ -130,10 +126,10 @@ fn opk_count(connection: &Connection) -> ClientResult<u32> {
     connection
         .query_row(
             "SELECT COUNT(*) FROM keys WHERE key_type = ?1",
-            params![KeyType::OneTimePreKey as u32],
-            |row| Ok(row.get(0)?),
+            params![KeyType::OneTimePre as u32],
+            |row| row.get(0),
         )
-        .map_err(|e| ClientError::GetPreKey(e))
+        .map_err(ClientError::GetPreKey)
 }
 
 impl SqliteClient {
@@ -160,7 +156,7 @@ impl X3DHClient for SqliteClient {
             .query_row(
                 "DELETE from keys WHERE public_key=?1 RETURNING private_key",
                 params![one_time_prekey.to_bytes()],
-                |row| Ok(row.get(0)?),
+                |row| row.get(0),
             )
             .map_err(|_| ClientError::WipeOpk(pubkey))?;
         Ok(X25519StaticSecret::from(key))
@@ -175,7 +171,7 @@ impl X3DHClient for SqliteClient {
         #[allow(deprecated)]
         let pubkey = base64::encode(pre_key.to_bytes());
         debug!("Loading pre key: {pubkey}");
-        let key: [u8; 32] = self.connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1", params![pre_key.to_bytes()], |row| Ok(row.get(0)?)).map_err(|e| ClientError::GetPreKey(e))?;
+        let key: [u8; 32] = self.connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1", params![pre_key.to_bytes()], |row| row.get(0)).map_err(ClientError::GetPreKey)?;
         Ok(X25519StaticSecret::from(key))
     }
 
@@ -199,11 +195,7 @@ impl X3DHClient for SqliteClient {
         let pre_keys = opks.bundle.iter().map(|(_, _pub)| *_pub).collect();
         let persisted_pre_keys: Vec<X25519StaticSecret> =
             opks.bundle.into_iter().map(|opk| opk.0).collect();
-        insert_pre_keys(
-            &persisted_pre_keys,
-            KeyType::OneTimePreKey,
-            &self.connection,
-        )?;
+        insert_pre_keys(&persisted_pre_keys, KeyType::OneTimePre, &self.connection)?;
         Ok(SignedPreKeys {
             pre_keys,
             signature: opks.signature,
@@ -229,7 +221,7 @@ mod tests {
     fn load_pre_key_not_found() -> Result<()> {
         let connection = Connection::open_in_memory()?;
         create_key_table(&connection)?;
-        assert_eq!(load_pre_key(&connection)?.is_none(), true);
+        assert!(load_pre_key(&connection)?.is_none());
         Ok(())
     }
 
@@ -240,7 +232,7 @@ mod tests {
         lazy_init_identity_key(&connection)?;
 
         let key = load_identity_key(&connection)?;
-        assert_eq!(key.is_some(), true);
+        assert!(key.is_some());
 
         lazy_init_identity_key(&connection)?;
         assert_eq!(load_identity_key(&connection)?, key);
@@ -254,7 +246,7 @@ mod tests {
         lazy_init_pre_key(&connection)?;
 
         let key = load_pre_key(&connection)?;
-        assert_eq!(key.is_some(), true);
+        assert!(key.is_some());
 
         assert_eq!(
             load_pre_key(&connection)?
@@ -271,7 +263,7 @@ mod tests {
         create_key_table(&connection)?;
         lazy_init_pre_key(&connection)?;
         let key1 = load_pre_key(&connection)?;
-        assert_eq!(key1.is_some(), true);
+        assert!(key1.is_some());
         let key1 = key1.unwrap();
 
         let client = SqliteClient::new(connection)?;

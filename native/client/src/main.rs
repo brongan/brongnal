@@ -1,14 +1,10 @@
 use anyhow::Result;
 use client::sqlite_client::SqliteClient;
 use client::{listen, message, register, DecryptedMessage};
-use tracing::{info, Level};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use proto::service::brongnal_client::BrongnalClient;
 use rusqlite::Connection;
-use tracing_subscriber::filter::Targets;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -16,6 +12,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{env, thread};
 use tokio::sync::{mpsc, Mutex};
+use tracing::{info, Level};
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Debug)]
 struct Command {
@@ -27,7 +27,7 @@ fn parse_command(input: &str) -> IResult<&str, Command> {
     let (input, name) = alphanumeric1(input)?;
     let (message, _spaces) = multispace1(input)?;
     Ok((
-        &"",
+        "",
         Command {
             to: name.to_owned(),
             msg: message.to_owned(),
@@ -67,12 +67,11 @@ async fn main() -> Result<()> {
     let (cli_tx, mut cli_rx) = mpsc::unbounded_channel();
 
     thread::spawn(move || {
-        let mut lines = BufReader::new(stdin()).lines();
-        while let Some(line) = lines.next() {
+        for line in BufReader::new(stdin()).lines() {
             let line = line.unwrap();
             match parse_command(&line).map_err(|e| e.to_owned()) {
                 Ok((_, command)) => {
-                    if let Err(_) = cli_tx.send(command) {
+                    if cli_tx.send(command).is_err() {
                         return;
                     }
                 }

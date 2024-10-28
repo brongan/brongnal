@@ -174,10 +174,10 @@ pub fn handle_message(
         opk,
         &message.ciphertext,
     )?;
-    return Ok(DecryptedMessage {
+    Ok(DecryptedMessage {
         sender_identity: message.sender_identity,
         message: decrypted,
-    });
+    })
 }
 
 // TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.

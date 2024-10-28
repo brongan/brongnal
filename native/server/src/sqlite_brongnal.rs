@@ -92,7 +92,7 @@ impl Storage for SqliteStorage {
             .query_row(
                 "UPDATE user SET current_pre_key = ?2 WHERE identity = ?1 RETURNING identity",
                 params![identity, spk.encode_to_vec()],
-                |row| Ok(row.get(0)?),
+                |row| row.get(0),
             )
             .map_err(|_| Status::not_found(format!("pre key for user {identity} not found")))?;
         Ok(())
@@ -150,7 +150,7 @@ impl Storage for SqliteStorage {
             Err(e) => Err(Status::not_found(format!("failed to query for pre_key: {e}"))),
         }?;
 
-        Ok(key.map(|key| X25519PublicKey::from(key)))
+        Ok(key.map(X25519PublicKey::from))
     }
 
     fn add_message(&self, recipient: &str, message: MessageProto) -> tonic::Result<()> {
@@ -167,7 +167,7 @@ impl Storage for SqliteStorage {
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
                         .as_secs(),
-                ),|row| Ok(row.get(0)?),
+                ),|row| row.get(0),
             )
             .map_err(|_| Status::not_found(format!("Cannot enqueue message for unknown user: {recipient}")))?;
         Ok(())
@@ -182,7 +182,7 @@ impl Storage for SqliteStorage {
             .map_err(|e| {
                 Status::internal(format!("Failed to query message table for {identity}: {e}"))
             })?;
-        let message_iter = stmt.query_map([identity], |row| Ok(row.get(0)?)).unwrap();
+        let message_iter = stmt.query_map([identity], |row| row.get(0)).unwrap();
         let mut ret = Vec::new();
         for message in message_iter {
             // TODO wtf is happening here?

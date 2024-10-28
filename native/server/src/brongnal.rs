@@ -1,6 +1,4 @@
 use ed25519_dalek::{Signature, VerifyingKey};
-use tracing::error;
-use tracing::info;
 use proto::service::brongnal_server::Brongnal;
 use proto::service::Message as MessageProto;
 use proto::service::PreKeyBundle as PreKeyBundleProto;
@@ -17,6 +15,8 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Result, Status};
+use tracing::error;
+use tracing::info;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 pub trait Storage: std::fmt::Debug {
@@ -74,7 +74,7 @@ impl BrongnalController {
             .identity
             .clone()
             .ok_or(Status::invalid_argument("request missing identity"))?;
-        let ik = parse_verifying_key(&request.identity_key())
+        let ik = parse_verifying_key(request.identity_key())
             .map_err(|_| Status::invalid_argument("request has invalid identity_key"))?;
         let spk_proto = request
             .signed_pre_key
@@ -89,7 +89,7 @@ impl BrongnalController {
         let pre_keys: Vec<X25519PublicKey> = opks
             .pre_keys
             .iter()
-            .map(|key| parse_x25519_public_key(&key))
+            .map(|key| parse_x25519_public_key(key))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| Status::invalid_argument("invalid prekey bundle"))?;
         let signature = Signature::from_slice(opks.signature()).map_err(|_e| {
@@ -114,8 +114,7 @@ impl BrongnalController {
         ))?;
         let message_proto: MessageProto = request
             .message
-            .ok_or(Status::invalid_argument("request missing message"))?
-            .into();
+            .ok_or(Status::invalid_argument("request missing message"))?;
         let _ = protocol::x3dh::Message::try_from(message_proto.clone())?;
 
         let tx = self
@@ -123,7 +122,7 @@ impl BrongnalController {
             .lock()
             .unwrap()
             .get(&recipient_identity)
-            .map(|tx| tx.clone());
+            .cloned();
         if let Some(tx) = tx {
             if let Ok(()) = tx.send(Ok(message_proto.clone())).await {
                 return Ok(SendMessageResponse {});
@@ -172,7 +171,7 @@ impl Brongnal for BrongnalController {
         let reply = PreKeyBundleProto {
             identity_key: Some(ik.as_bytes().into()),
             one_time_key: opk.map(|opk| opk.as_bytes().into()),
-            signed_pre_key: Some(spk.into()),
+            signed_pre_key: Some(spk),
         };
         Ok(Response::new(reply))
     }
@@ -215,7 +214,7 @@ impl Brongnal for BrongnalController {
             .inspect_err(|e| error!("Failed to retrieve messages from storage: {e}"))?
         {
             // TODO handle result.
-            let _ = tx.send(Ok(message.into())).await;
+            let _ = tx.send(Ok(message)).await;
         }
         self.receivers.lock().unwrap().insert(identity, tx);
 
