@@ -101,7 +101,7 @@ async fn send_messages_to_flutter(mut rx: Receiver<DecryptedMessage>) {
 #[tokio::main]
 async fn main() {
     // TODO gracefully handle a lack of network connection.
-    let mut stub = BrongnalClient::connect("http://signal.brongan.com:8080")
+    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443")
         .await
         .unwrap();
 
