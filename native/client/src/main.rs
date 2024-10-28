@@ -1,13 +1,18 @@
 use anyhow::Result;
 use client::sqlite_client::SqliteClient;
 use client::{listen, message, register, DecryptedMessage};
+use tracing::{info, Level};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use proto::service::brongnal_client::BrongnalClient;
 use rusqlite::Connection;
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{env, thread};
 use tokio::sync::{mpsc, Mutex};
@@ -39,7 +44,15 @@ async fn main() -> Result<()> {
         .map(|addr| addr.to_owned())
         .unwrap_or("https://signal.brongan.com:443".to_owned());
 
-    eprintln!("Registering {name} at {addr}");
+    let filter = Targets::from_str(std::env::var("RUST_LOG").as_deref().unwrap_or("info"))
+        .expect("RUST_LOG should be a valid tracing filter");
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .finish()
+        .with(filter)
+        .try_init()?;
+
+    info!("Registering {name} at {addr}");
 
     let mut stub = BrongnalClient::connect(addr).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
