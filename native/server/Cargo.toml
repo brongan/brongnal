@@ -12,7 +12,9 @@ futures = "0.3.30"
 prost = "0.12.4"
 proto = { path = "../proto/" }
 protocol = { path = "../protocol/" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
 rusqlite = "0.31.0"
+sentry = { version = "0.34.0", default-features = false, features = ["reqwest", "rustls", "backtrace", "contexts", "panic"] }
 thiserror = "1.0.58"
 tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros"] }
 tokio-stream = "0.1.15"
@@ -25,3 +27,4 @@ xdg = "2.5.2"
 
 [dev-dependencies]
 client = { path = "../client/" }
+
