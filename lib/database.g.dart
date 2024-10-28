@@ -233,6 +233,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
 }
 
 class _$AppDatabaseManager {
+  // ignore: unused_field
   final _$AppDatabase _db;
   _$AppDatabaseManager(this._db);
 }
