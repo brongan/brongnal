@@ -1,11 +1,11 @@
 use crate::{ClientError, ClientResult, X3DHClient};
 use chacha20poly1305::aead::OsRng;
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use tracing::{debug, info};
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
 use rusqlite::{params, Connection};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::{debug, info};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use x3dh::{SignedPreKey, SignedPreKeys};
 
@@ -76,7 +76,6 @@ fn load_pre_key(connection: &Connection) -> ClientResult<Option<X25519StaticSecr
     Ok(key.map(|key| X25519StaticSecret::from(key)))
 }
 
-#[allow(deprecated)]
 fn insert_pre_keys(
     keys: &[X25519StaticSecret],
     key_type: KeyType,
@@ -86,7 +85,9 @@ fn insert_pre_keys(
             "INSERT INTO keys (public_key, private_key, key_type, creation_time) VALUES (?1, ?2, ?3, ?4)")?;
     for key in keys {
         let pre_key = X25519PublicKey::from(key).to_bytes();
-        debug!("Inserting pre key: {}", base64::encode(pre_key));
+        #[allow(deprecated)]
+        let pubkey = base64::encode(pre_key);
+        debug!("Inserting pre key: {pubkey}");
         stmt.execute((
             pre_key,
             key.to_bytes(),
@@ -146,16 +147,14 @@ impl SqliteClient {
     }
 }
 
-#[allow(deprecated)]
 impl X3DHClient for SqliteClient {
     fn fetch_wipe_opk(
         &mut self,
         one_time_prekey: &X25519PublicKey,
     ) -> ClientResult<X25519StaticSecret> {
-        debug!(
-            "Using one time pre key '{}'",
-            base64::encode(one_time_prekey.to_bytes())
-        );
+        #[allow(deprecated)]
+        let pubkey = base64::encode(one_time_prekey.to_bytes());
+        debug!("Using one time pre key '{pubkey}'",);
         let key: [u8; 32] = self
             .connection
             .query_row(
@@ -163,7 +162,7 @@ impl X3DHClient for SqliteClient {
                 params![one_time_prekey.to_bytes()],
                 |row| Ok(row.get(0)?),
             )
-            .map_err(|_| ClientError::WipeOpk(*one_time_prekey))?;
+            .map_err(|_| ClientError::WipeOpk(pubkey))?;
         Ok(X25519StaticSecret::from(key))
     }
 
@@ -173,14 +172,18 @@ impl X3DHClient for SqliteClient {
     }
 
     fn get_pre_key(&self, pre_key: &X25519PublicKey) -> ClientResult<X25519StaticSecret> {
-        debug!("Loading pre key: {}", base64::encode(pre_key.to_bytes()));
+        #[allow(deprecated)]
+        let pubkey = base64::encode(pre_key.to_bytes());
+        debug!("Loading pre key: {pubkey}");
         let key: [u8; 32] = self.connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1", params![pre_key.to_bytes()], |row| Ok(row.get(0)?)).map_err(|e| ClientError::GetPreKey(e))?;
         Ok(X25519StaticSecret::from(key))
     }
 
     fn get_spk(&self) -> ClientResult<SignedPreKey> {
         let pre_key = load_pre_key(&self.connection)?.unwrap();
-        debug!("Signing pre key: {}", base64::encode(pre_key.to_bytes()));
+        #[allow(deprecated)]
+        let pubkey = base64::encode(pre_key.to_bytes());
+        debug!("Signing pre key: {pubkey}");
         Ok(SignedPreKey {
             pre_key: X25519PublicKey::from(&pre_key),
             signature: sign_bundle(

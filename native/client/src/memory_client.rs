@@ -31,7 +31,10 @@ impl MemoryClient {
 
 impl X3DHClient for MemoryClient {
     fn fetch_wipe_opk(&mut self, opk: &X25519PublicKey) -> ClientResult<X25519StaticSecret> {
-        self.opks.remove(opk).ok_or(ClientError::WipeOpk(*opk))
+        #[allow(deprecated)]
+        self.opks
+            .remove(opk)
+            .ok_or_else(|| ClientError::WipeOpk(base64::encode(opk.to_bytes())))
     }
 
     fn get_ik(&self) -> ClientResult<SigningKey> {

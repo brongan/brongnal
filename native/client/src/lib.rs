@@ -34,8 +34,8 @@ pub enum ClientError {
     Sqlite(#[from] rusqlite::Error),
     #[error("failed to insert pre keys: {0}")]
     InsertPreKey(rusqlite::Error),
-    #[error("failed to retrieve OPK for {0:?}")]
-    WipeOpk(X25519PublicKey),
+    #[error("failed to retrieve OPK private key for pubkey: {0}")]
+    WipeOpk(String),
     #[error("failed to retrieve pre key")]
     GetPreKey(rusqlite::Error),
     #[error("grpc error: {0}")]
