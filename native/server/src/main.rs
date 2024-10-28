@@ -4,13 +4,14 @@ use proto::gossamer::gossamer_server::GossamerServer;
 use proto::service::brongnal_server::BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
 use rusqlite::Connection;
+use sentry::ClientInitGuard;
 use sqlite_brongnal::SqliteStorage;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::str::FromStr;
 use tonic::transport::Server;
 use tonic_reflection::server::Builder;
-use tracing::{info, Level};
+use tracing::{info, warn, Level};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -22,12 +23,6 @@ mod sqlite_brongnal;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let reflection_service = Builder::configure()
-        .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
-        .build()
-        .unwrap();
-    let server_addr = (IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080).into();
-
     let filter = Targets::from_str(std::env::var("RUST_LOG").as_deref().unwrap_or("info"))
         .expect("RUST_LOG should be a valid tracing filter");
     tracing_subscriber::fmt()
@@ -36,7 +31,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(filter)
         .try_init()?;
 
-    info!("Brongnal Server listening at: {server_addr}");
+    let _guard: Option<ClientInitGuard> = if let Some(dsn) = std::env::var("SENTRY_DSN").ok() {
+        info!("Creating Sentry guard.");
+        Some(sentry::init((
+            dsn,
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            },
+        )))
+    } else {
+        warn!("Not creating Sentry guard.");
+        None
+    };
+
+    let reflection_service = Builder::configure()
+        .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
+        .build()
+        .unwrap();
+    let server_addr = (IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080).into();
 
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path: PathBuf = if let Ok(db_dir) = std::env::var("DB") {
@@ -47,6 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Database Path: {}", db_path.display());
     let connection = Connection::open(db_path)?;
     let controller = BrongnalController::new(Box::new(SqliteStorage::new(connection)?));
+
+    info!("Brongnal Server listening at: {server_addr}");
 
     Server::builder()
         .add_service(BrongnalServer::new(controller))
