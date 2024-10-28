@@ -15,6 +15,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, MutexGuard};
 use tonic::transport::Channel;
 use tonic::Streaming;
+use tracing::{debug, error, info, warn};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use x3dh::{initiate_recv, initiate_send, SignedPreKey, SignedPreKeys};
 
@@ -97,10 +98,10 @@ pub async fn listen(
         })
         .await;
     if let Err(e) = &stream {
-        eprintln!("Failed to retrieve messages: {e}");
+        error!("Failed to retrieve messages: {e}");
     }
     if let Err(e) = get_messages(stream?.into_inner(), x3dh_client, tx).await {
-        eprintln!("get_messages terminated with: {e}");
+        error!("get_messages terminated with: {e}");
         return Err(e);
     }
     Ok(())
@@ -111,7 +112,7 @@ pub async fn register(
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     name: String,
 ) -> ClientResult<()> {
-    eprintln!("Registering {name}!");
+    debug!("Registering {name}!");
     let request = {
         let mut x3dh_client = x3dh_client.lock().await;
         let ik = x3dh_client.get_ik()?.verifying_key().as_bytes().to_vec();
@@ -123,7 +124,7 @@ pub async fn register(
         })
     };
     stub.register_pre_key_bundle(request).await?;
-    eprintln!("Registered: {}!", name);
+    info!("Registered: {}!", name);
     Ok(())
 }
 
@@ -145,7 +146,7 @@ pub async fn message(
         &x3dh_client.lock().await.get_ik()?,
         message,
     )?;
-    eprintln!("Sending message: {message}");
+    debug!("Sending message: {message}");
     let request = tonic::Request::new(SendMessageRequest {
         recipient_identity: Some(recipient_identity.to_owned()),
         message: Some(message.into()),
@@ -159,7 +160,7 @@ pub fn handle_message(
     mut x3dh_client: MutexGuard<dyn X3DHClient + Send>,
 ) -> ClientResult<DecryptedMessage> {
     let message: x3dh::Message = message.try_into()?;
-    eprintln!("Received Message Proto: {message}");
+    debug!("Received Message Proto: {message}");
     let opk = if let Some(opk) = message.opk {
         Some(x3dh_client.fetch_wipe_opk(&opk)?)
     } else {
@@ -190,10 +191,10 @@ pub async fn get_messages(
         match handle_message(message, x3dh_client.lock().await) {
             Ok(decrypted) => tx.send(decrypted).await?,
             Err(e) => {
-                eprintln!("Failed to decrypt message: {e}");
+                error!("Failed to decrypt message: {e}");
             }
         }
     }
-    eprintln!("Server terminated message stream.");
+    warn!("Server terminated message stream.");
     Ok(())
 }

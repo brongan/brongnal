@@ -10,6 +10,7 @@ use std::sync::MutexGuard;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{sync::Arc, sync::Mutex};
 use tonic::Status;
+use tracing::debug;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 #[derive(Debug)]
@@ -71,7 +72,7 @@ impl Storage for SqliteStorage {
         ik: VerifyingKey,
         spk: SignedPreKeyProto,
     ) -> tonic::Result<()> {
-        println!("Adding user \"{identity}\" to the database.");
+        debug!("Adding user \"{identity}\" to the database.");
 
         let _ = self.connection()?.execute(
             "INSERT INTO user (identity, key, current_pre_key, creation_time) VALUES (?1, ?2, ?3, ?4)",
@@ -84,7 +85,7 @@ impl Storage for SqliteStorage {
     }
 
     fn update_spk(&self, identity: &str, spk: SignedPreKeyProto) -> tonic::Result<()> {
-        println!("Updating pre key for user \"{identity}\" to the database.");
+        debug!("Updating pre key for user \"{identity}\" to the database.");
 
         let _: String = self
             .connection()?
@@ -98,7 +99,7 @@ impl Storage for SqliteStorage {
     }
 
     fn add_opks(&self, identity: &str, opks: Vec<X25519PublicKey>) -> tonic::Result<()> {
-        println!(
+        debug!(
             "Adding {} one time keys for user \"{identity}\" to the database.",
             opks.len()
         );
@@ -122,7 +123,7 @@ impl Storage for SqliteStorage {
     }
 
     fn get_current_keys(&self, identity: &str) -> tonic::Result<(VerifyingKey, SignedPreKeyProto)> {
-        println!("Retrieving pre keys for user \"{identity}\" from the database.");
+        debug!("Retrieving pre keys for user \"{identity}\" from the database.");
 
         let (ik, spk): (Vec<u8>, Vec<u8>) = self
             .connection()?
@@ -138,7 +139,7 @@ impl Storage for SqliteStorage {
     }
 
     fn pop_opk(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
-        println!("Popping one time key for user \"{identity}\" from the database.");
+        debug!("Popping one time key for user \"{identity}\" from the database.");
 
         let key: Option<[u8;32]> = match self.connection()?.query_row(
             "DELETE from pre_key WHERE key = ( SELECT key FROM pre_key WHERE user_identity = ?1 ORDER BY creation_time LIMIT 1) RETURNING key", 
@@ -153,7 +154,7 @@ impl Storage for SqliteStorage {
     }
 
     fn add_message(&self, recipient: &str, message: MessageProto) -> tonic::Result<()> {
-        println!("Enqueueing message for user {recipient} in database.");
+        debug!("Enqueueing message for user {recipient} in database.");
 
         let _: u64 = self
             .connection()?
@@ -173,7 +174,7 @@ impl Storage for SqliteStorage {
     }
 
     fn get_messages(&self, identity: &str) -> tonic::Result<Vec<MessageProto>> {
-        println!("Retrieving messages for \"{identity}\" from the database.");
+        debug!("Retrieving messages for \"{identity}\" from the database.");
 
         let connection = self.connection()?;
         let mut stmt = connection

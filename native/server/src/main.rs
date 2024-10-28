@@ -1,12 +1,17 @@
 use crate::gossamer::InMemoryGossamer;
 use brongnal::BrongnalController;
+use tracing::{info, Level};
 use proto::gossamer::gossamer_server::GossamerServer;
 use proto::service::brongnal_server::BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
 use rusqlite::Connection;
 use sqlite_brongnal::SqliteStorage;
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
+use std::str::FromStr;
 use tonic::transport::Server;
 use tonic_reflection::server::Builder;
 
@@ -23,7 +28,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
     let server_addr = (IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080).into();
 
-    println!("Brongnal Server listening at: {server_addr}");
+let filter = Targets::from_str(std::env::var("RUST_LOG").as_deref().unwrap_or("info"))
+        .expect("RUST_LOG should be a valid tracing filter");
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .finish()
+        .with(filter)
+        .try_init()?;
+
+
+    info!("Brongnal Server listening at: {server_addr}");
 
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path: PathBuf = if let Ok(db_dir) = std::env::var("DB") {
@@ -31,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         xdg_dirs.place_data_file("brongnal_server.db3").unwrap()
     };
-    println!("Database Path: {}", db_path.display());
+    info!("Database Path: {}", db_path.display());
     let connection = Connection::open(db_path)?;
     let controller = BrongnalController::new(Box::new(SqliteStorage::new(connection)?));
 

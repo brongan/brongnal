@@ -1,6 +1,7 @@
 use crate::{ClientError, ClientResult, X3DHClient};
 use chacha20poly1305::aead::OsRng;
 use ed25519_dalek::{SigningKey, VerifyingKey};
+use tracing::{debug, info};
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
 use rusqlite::{params, Connection};
@@ -85,7 +86,7 @@ fn insert_pre_keys(
             "INSERT INTO keys (public_key, private_key, key_type, creation_time) VALUES (?1, ?2, ?3, ?4)")?;
     for key in keys {
         let pre_key = X25519PublicKey::from(key).to_bytes();
-        eprintln!("Inserting pre key: {}", base64::encode(pre_key));
+        debug!("Inserting pre key: {}", base64::encode(pre_key));
         stmt.execute((
             pre_key,
             key.to_bytes(),
@@ -104,7 +105,7 @@ fn lazy_init_identity_key(connection: &Connection) -> ClientResult<()> {
     if let Some(_) = load_identity_key(&connection)? {
         return Ok(());
     }
-    eprintln!("Creating initial identity key.");
+    info!("Creating initial identity key.");
     let identity_key = SigningKey::generate(&mut OsRng);
     insert_identity_key(&identity_key, &connection)?;
     Ok(())
@@ -114,7 +115,7 @@ fn lazy_init_pre_key(connection: &Connection) -> ClientResult<()> {
     if let Some(_) = load_pre_key(&connection)? {
         return Ok(());
     }
-    eprintln!("Creating initial pre key.");
+    info!("Creating initial pre key.");
     insert_pre_keys(
         &[X25519StaticSecret::random()],
         KeyType::PreKey,
@@ -151,7 +152,7 @@ impl X3DHClient for SqliteClient {
         &mut self,
         one_time_prekey: &X25519PublicKey,
     ) -> ClientResult<X25519StaticSecret> {
-        eprintln!(
+        debug!(
             "Using one time pre key '{}'",
             base64::encode(one_time_prekey.to_bytes())
         );
@@ -167,19 +168,19 @@ impl X3DHClient for SqliteClient {
     }
 
     fn get_ik(&self) -> ClientResult<SigningKey> {
-        eprintln!("Loading identity key.");
+        debug!("Loading identity key.");
         Ok(load_identity_key(&self.connection)?.unwrap())
     }
 
     fn get_pre_key(&self, pre_key: &X25519PublicKey) -> ClientResult<X25519StaticSecret> {
-        eprintln!("Loading pre key: {}", base64::encode(pre_key.to_bytes()));
+        debug!("Loading pre key: {}", base64::encode(pre_key.to_bytes()));
         let key: [u8; 32] = self.connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1", params![pre_key.to_bytes()], |row| Ok(row.get(0)?)).map_err(|e| ClientError::GetPreKey(e))?;
         Ok(X25519StaticSecret::from(key))
     }
 
     fn get_spk(&self) -> ClientResult<SignedPreKey> {
         let pre_key = load_pre_key(&self.connection)?.unwrap();
-        eprintln!("Signing pre key: {}", base64::encode(pre_key.to_bytes()));
+        debug!("Signing pre key: {}", base64::encode(pre_key.to_bytes()));
         Ok(SignedPreKey {
             pre_key: X25519PublicKey::from(&pre_key),
             signature: sign_bundle(
@@ -190,7 +191,7 @@ impl X3DHClient for SqliteClient {
     }
 
     fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys> {
-        eprintln!("Creating {num_keys} one time pre keys!");
+        debug!("Creating {num_keys} one time pre keys!");
         let opks = create_prekey_bundle(&load_identity_key(&self.connection)?.unwrap(), num_keys);
         let pre_keys = opks.bundle.iter().map(|(_, _pub)| *_pub).collect();
         let persisted_pre_keys: Vec<X25519StaticSecret> =
