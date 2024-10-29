@@ -1,4 +1,5 @@
 use anyhow::Context;
+use async_trait::async_trait;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use ed25519_dalek::SigningKey;
 use proto::service::brongnal_client::BrongnalClient;
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::{Mutex, MutexGuard};
+use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tonic::Streaming;
 use tracing::{debug, error, info, warn};
@@ -26,12 +27,14 @@ type ClientResult<T> = Result<T, ClientError>;
 
 #[derive(Error, Debug)]
 pub enum ClientError {
-    #[error("failed to load identity key: {0}")]
-    GetIdentityKey(rusqlite::Error),
+    #[error("failed to load identity key")]
+    GetIdentityKey,
     #[error("failed to save identity key")]
     InsertIdentityKey(rusqlite::Error),
     #[error("rusqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("tokio_rusqlite error: {0}")]
+    TokioSqlite(#[from] tokio_rusqlite::Error),
     #[error("failed to insert pre keys: {0}")]
     InsertPreKey(rusqlite::Error),
     #[error("failed to retrieve OPK private key for pubkey: {0}")]
@@ -46,12 +49,13 @@ pub enum ClientError {
     X3DH(#[from] X3DHError),
 }
 
+#[async_trait]
 pub trait X3DHClient {
-    fn get_pre_key(&self, pre_key: &X25519PublicKey) -> ClientResult<X25519StaticSecret>;
-    fn fetch_wipe_opk(&mut self, opk: &X25519PublicKey) -> ClientResult<X25519StaticSecret>;
-    fn get_ik(&self) -> ClientResult<SigningKey>;
-    fn get_spk(&self) -> ClientResult<SignedPreKey>;
-    fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys>;
+    async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret>;
+    async fn fetch_wipe_opk(&mut self, opk: X25519PublicKey) -> ClientResult<X25519StaticSecret>;
+    async fn get_ik(&self) -> ClientResult<SigningKey>;
+    async fn get_spk(&self) -> ClientResult<SignedPreKey>;
+    async fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys>;
 }
 
 #[allow(dead_code)]
@@ -115,12 +119,17 @@ pub async fn register(
     debug!("Registering {name}!");
     let request = {
         let mut x3dh_client = x3dh_client.lock().await;
-        let ik = x3dh_client.get_ik()?.verifying_key().as_bytes().to_vec();
+        let ik = x3dh_client
+            .get_ik()
+            .await?
+            .verifying_key()
+            .as_bytes()
+            .to_vec();
         tonic::Request::new(RegisterPreKeyBundleRequest {
             identity_key: Some(ik),
             identity: Some(name.clone()),
-            signed_pre_key: Some(x3dh_client.get_spk()?.into()),
-            one_time_key_bundle: Some(x3dh_client.create_opks(100)?.into()),
+            signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
+            one_time_key_bundle: Some(x3dh_client.create_opks(100).await?.into()),
         })
     };
     stub.register_pre_key_bundle(request).await?;
@@ -143,7 +152,7 @@ pub async fn message(
     let (_sk, message) = initiate_send(
         response.into_inner().try_into()?,
         sender_identity,
-        &x3dh_client.lock().await.get_ik()?,
+        &x3dh_client.lock().await.get_ik().await?,
         message,
     )?;
     debug!("Sending message: {message}");
@@ -155,40 +164,36 @@ pub async fn message(
     Ok(())
 }
 
-pub fn handle_message(
-    message: MessageProto,
-    mut x3dh_client: MutexGuard<dyn X3DHClient + Send>,
-) -> ClientResult<DecryptedMessage> {
-    let message: x3dh::Message = message.try_into()?;
-    debug!("Received Message Proto: {message}");
-    let opk = if let Some(opk) = message.opk {
-        Some(x3dh_client.fetch_wipe_opk(&opk)?)
-    } else {
-        None
-    };
-    let (_sk, decrypted) = initiate_recv(
-        &x3dh_client.get_ik()?,
-        &x3dh_client.get_pre_key(&message.pre_key)?,
-        &message.sender_ik,
-        message.ek,
-        opk,
-        &message.ciphertext,
-    )?;
-    Ok(DecryptedMessage {
-        sender_identity: message.sender_identity,
-        message: decrypted,
-    })
-}
-
 // TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.
-// TODO(https://github.com/brongan/brongnal/issues/24) - Avoid blocking sqlite calls from async.
 pub async fn get_messages(
     mut stream: Streaming<MessageProto>,
     x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
     tx: Sender<DecryptedMessage>,
 ) -> ClientResult<()> {
     while let Some(message) = stream.message().await? {
-        match handle_message(message, x3dh_client.lock().await) {
+        let res = {
+            let message: x3dh::Message = message.try_into()?;
+            let mut x3dh_client = x3dh_client.lock().await;
+            debug!("Received Message Proto: {message}");
+            let opk = if let Some(opk) = message.opk {
+                Some(x3dh_client.fetch_wipe_opk(opk).await?)
+            } else {
+                None
+            };
+            let (_sk, decrypted) = initiate_recv(
+                &x3dh_client.get_ik().await?,
+                &x3dh_client.get_pre_key(message.pre_key).await?,
+                &message.sender_ik,
+                message.ek,
+                opk,
+                &message.ciphertext,
+            )?;
+            Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
+                sender_identity: message.sender_identity,
+                message: decrypted,
+            })
+        };
+        match res {
             Ok(decrypted) => tx.send(decrypted).await?,
             Err(e) => {
                 error!("Failed to decrypt message: {e}");

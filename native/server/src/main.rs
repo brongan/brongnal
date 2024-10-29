@@ -3,12 +3,13 @@ use brongnal::BrongnalController;
 use proto::gossamer::gossamer_server::GossamerServer;
 use proto::service::brongnal_server::BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
-use rusqlite::Connection;
 use sentry::ClientInitGuard;
 use sqlite_brongnal::SqliteStorage;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
+use tokio_rusqlite::Connection;
 use tonic::transport::Server;
 use tonic_reflection::server::Builder;
 use tracing::{info, warn, Level};
@@ -31,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(filter)
         .try_init()?;
 
-    let _guard: Option<ClientInitGuard> = if let Some(dsn) = std::env::var("SENTRY_DSN").ok() {
+    let _guard: Option<ClientInitGuard> = if let Ok(dsn) = std::env::var("SENTRY_DSN") {
         info!("Creating Sentry guard.");
         Some(sentry::init((
             dsn,
@@ -58,8 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         xdg_dirs.place_data_file("brongnal_server.db3").unwrap()
     };
     info!("Database Path: {}", db_path.display());
-    let connection = Connection::open(db_path)?;
-    let controller = BrongnalController::new(Box::new(SqliteStorage::new(connection)?));
+    let connection = Connection::open(db_path).await?;
+    let controller = BrongnalController::new(Arc::new(SqliteStorage::new(connection).await?));
 
     info!("Brongnal Server listening at: {server_addr}");
 

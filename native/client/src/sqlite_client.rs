@@ -1,4 +1,5 @@
 use crate::{ClientError, ClientResult, X3DHClient};
+use async_trait::async_trait;
 use chacha20poly1305::aead::OsRng;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
@@ -18,10 +19,10 @@ enum KeyType {
 }
 
 pub struct SqliteClient {
-    connection: Connection,
+    connection: tokio_rusqlite::Connection,
 }
 
-fn create_key_table(connection: &Connection) -> ClientResult<()> {
+fn create_key_table(connection: &Connection) -> rusqlite::Result<()> {
     connection.pragma_update(None, "journal_mode", "WAL")?;
     connection.pragma_update(None, "synchronous", "normal")?;
     connection.pragma_update(None, "foreign_keys", "on")?;
@@ -38,7 +39,7 @@ fn create_key_table(connection: &Connection) -> ClientResult<()> {
     Ok(())
 }
 
-fn insert_identity_key(identity_key: &SigningKey, connection: &Connection) -> ClientResult<()> {
+fn insert_identity_key(identity_key: &SigningKey, connection: &Connection) -> rusqlite::Result<()> {
     connection.execute("INSERT INTO keys (public_key, private_key, key_type, creation_time) VALUES (?1, ?2, ?3, ?4)", params![
             VerifyingKey::from(identity_key).to_bytes(),
             identity_key.to_bytes(),
@@ -46,11 +47,12 @@ fn insert_identity_key(identity_key: &SigningKey, connection: &Connection) -> Cl
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs() ]).map_err(ClientError::InsertIdentityKey)?;
+                .as_secs()
+    ])?;
     Ok(())
 }
 
-fn load_identity_key(connection: &Connection) -> ClientResult<Option<SigningKey>> {
+fn load_identity_key(connection: &Connection) -> rusqlite::Result<Option<SigningKey>> {
     let key: Option<[u8; 32]> = match connection.query_row(
         "SELECT private_key FROM keys WHERE key_type = ?1",
         params![KeyType::Identity as u32],
@@ -58,20 +60,20 @@ fn load_identity_key(connection: &Connection) -> ClientResult<Option<SigningKey>
     ) {
         Ok(value) => Ok(Some(value)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(ClientError::GetIdentityKey(e)),
+        Err(e) => Err(e),
     }?;
     Ok(key.map(SigningKey::from))
 }
 
-fn load_pre_key(connection: &Connection) -> ClientResult<Option<X25519StaticSecret>> {
+fn load_pre_key(connection: &Connection) -> rusqlite::Result<Option<X25519StaticSecret>> {
     let key: Option<[u8; 32]> = match connection.query_row(
-        "SELECT private_key FROM keys WHERE key_type = ?1 ORDER BY creation_time DESC LIMIT 1",
+        "SELECT private_key FROM keys WHERE key_type = ?1",
         params![KeyType::Pre as u32],
         |row| row.get(0),
     ) {
         Ok(value) => Ok(Some(value)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(ClientError::GetIdentityKey(e)),
+        Err(e) => Err(e),
     }?;
     Ok(key.map(X25519StaticSecret::from))
 }
@@ -80,7 +82,7 @@ fn insert_pre_keys(
     keys: &[X25519StaticSecret],
     key_type: KeyType,
     connection: &Connection,
-) -> ClientResult<()> {
+) -> rusqlite::Result<()> {
     let mut stmt = connection.prepare(
             "INSERT INTO keys (public_key, private_key, key_type, creation_time) VALUES (?1, ?2, ?3, ?4)")?;
     for key in keys {
@@ -96,13 +98,12 @@ fn insert_pre_keys(
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-        ))
-        .map_err(ClientError::InsertPreKey)?;
+        ))?;
     }
     Ok(())
 }
 
-fn lazy_init_identity_key(connection: &Connection) -> ClientResult<()> {
+fn lazy_init_identity_key(connection: &Connection) -> rusqlite::Result<()> {
     if load_identity_key(connection)?.is_some() {
         return Ok(());
     }
@@ -112,7 +113,7 @@ fn lazy_init_identity_key(connection: &Connection) -> ClientResult<()> {
     Ok(())
 }
 
-fn lazy_init_pre_key(connection: &Connection) -> ClientResult<()> {
+fn lazy_init_pre_key(connection: &Connection) -> rusqlite::Result<()> {
     if load_pre_key(connection)?.is_some() {
         return Ok(());
     }
@@ -122,80 +123,114 @@ fn lazy_init_pre_key(connection: &Connection) -> ClientResult<()> {
 }
 
 #[allow(dead_code)]
-fn opk_count(connection: &Connection) -> ClientResult<u32> {
-    connection
-        .query_row(
-            "SELECT COUNT(*) FROM keys WHERE key_type = ?1",
-            params![KeyType::OneTimePre as u32],
-            |row| row.get(0),
-        )
-        .map_err(ClientError::GetPreKey)
+fn opk_count(connection: &Connection) -> rusqlite::Result<u32> {
+    connection.query_row(
+        "SELECT COUNT(*) FROM keys WHERE key_type = ?1",
+        params![KeyType::OneTimePre as u32],
+        |row| row.get(0),
+    )
 }
 
 impl SqliteClient {
-    pub fn new(connection: Connection) -> ClientResult<SqliteClient> {
-        create_key_table(&connection)?;
-        lazy_init_identity_key(&connection)?;
-        lazy_init_pre_key(&connection)?;
+    pub async fn new(connection: tokio_rusqlite::Connection) -> ClientResult<SqliteClient> {
+        connection
+            .call(|connection| {
+                create_key_table(connection)?;
+                lazy_init_identity_key(connection)?;
+                lazy_init_pre_key(connection)?;
+                Ok(())
+            })
+            .await
+            .map_err(ClientError::TokioSqlite)?;
 
         let sqlite_client = SqliteClient { connection };
         Ok(sqlite_client)
     }
 }
 
+#[async_trait]
 impl X3DHClient for SqliteClient {
-    fn fetch_wipe_opk(
+    async fn fetch_wipe_opk(
         &mut self,
-        one_time_prekey: &X25519PublicKey,
+        one_time_prekey: X25519PublicKey,
     ) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
         let pubkey = base64::encode(one_time_prekey.to_bytes());
         debug!("Using one time pre key '{pubkey}'",);
         let key: [u8; 32] = self
             .connection
-            .query_row(
-                "DELETE from keys WHERE public_key=?1 RETURNING private_key",
-                params![one_time_prekey.to_bytes()],
-                |row| row.get(0),
-            )
+            .call(move |connection| {
+                Ok(connection.query_row(
+                    "DELETE from keys WHERE public_key=?1 RETURNING private_key",
+                    params![one_time_prekey.to_bytes()],
+                    |row| row.get(0),
+                )?)
+            })
+            .await
             .map_err(|_| ClientError::WipeOpk(pubkey))?;
         Ok(X25519StaticSecret::from(key))
     }
 
-    fn get_ik(&self) -> ClientResult<SigningKey> {
+    async fn get_ik(&self) -> ClientResult<SigningKey> {
         debug!("Loading identity key.");
-        Ok(load_identity_key(&self.connection)?.unwrap())
+        self.connection
+            .call(|connection| Ok(load_identity_key(connection)?))
+            .await?
+            .ok_or(ClientError::GetIdentityKey)
     }
 
-    fn get_pre_key(&self, pre_key: &X25519PublicKey) -> ClientResult<X25519StaticSecret> {
+    async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
         let pubkey = base64::encode(pre_key.to_bytes());
         debug!("Loading pre key: {pubkey}");
-        let key: [u8; 32] = self.connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1", params![pre_key.to_bytes()], |row| row.get(0)).map_err(ClientError::GetPreKey)?;
+        let key: [u8; 32] = self.connection.call(move |connection| {
+            Ok(connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1",
+                params![pre_key.to_bytes()],
+                |row| row.get(0))?)
+        }).await?;
         Ok(X25519StaticSecret::from(key))
     }
 
-    fn get_spk(&self) -> ClientResult<SignedPreKey> {
-        let pre_key = load_pre_key(&self.connection)?.unwrap();
-        #[allow(deprecated)]
-        let pubkey = base64::encode(pre_key.to_bytes());
-        debug!("Signing pre key: {pubkey}");
-        Ok(SignedPreKey {
-            pre_key: X25519PublicKey::from(&pre_key),
-            signature: sign_bundle(
-                &load_identity_key(&self.connection)?.unwrap(),
-                &[(pre_key.clone(), X25519PublicKey::from(&pre_key))],
-            ),
-        })
+    async fn get_spk(&self) -> ClientResult<SignedPreKey> {
+        self.connection
+            .call(|connection| {
+                let pre_key = load_pre_key(connection)?.unwrap();
+                #[allow(deprecated)]
+                let pubkey = base64::encode(pre_key.to_bytes());
+                debug!("Signing pre key: {pubkey}");
+                Ok(SignedPreKey {
+                    pre_key: X25519PublicKey::from(&pre_key),
+                    signature: sign_bundle(
+                        &load_identity_key(connection)?.unwrap(),
+                        &[(pre_key.clone(), X25519PublicKey::from(&pre_key))],
+                    ),
+                })
+            })
+            .await
+            .map_err(ClientError::TokioSqlite)
     }
 
-    fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys> {
+    async fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys> {
         debug!("Creating {num_keys} one time pre keys!");
-        let opks = create_prekey_bundle(&load_identity_key(&self.connection)?.unwrap(), num_keys);
+        let ik: SigningKey = self
+            .connection
+            .call(|connection| Ok(load_identity_key(connection)?))
+            .await?
+            .expect("has identity key");
+        let opks = create_prekey_bundle(&ik, num_keys);
         let pre_keys = opks.bundle.iter().map(|(_, _pub)| *_pub).collect();
         let persisted_pre_keys: Vec<X25519StaticSecret> =
             opks.bundle.into_iter().map(|opk| opk.0).collect();
-        insert_pre_keys(&persisted_pre_keys, KeyType::OneTimePre, &self.connection)?;
+        self.connection
+            .call(move |connection| {
+                Ok(insert_pre_keys(
+                    &persisted_pre_keys,
+                    KeyType::OneTimePre,
+                    connection,
+                )?)
+            })
+            .await?;
+
         Ok(SignedPreKeys {
             pre_keys,
             signature: opks.signature,
@@ -208,6 +243,7 @@ mod tests {
     use crate::sqlite_client::*;
     use anyhow::anyhow;
     use anyhow::Result;
+    use rusqlite::Connection;
 
     #[test]
     fn load_identity_key_not_found() -> Result<()> {
@@ -257,32 +293,21 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn fetch_pre_key() -> Result<()> {
-        let connection = Connection::open_in_memory()?;
-        create_key_table(&connection)?;
-        lazy_init_pre_key(&connection)?;
-        let key1 = load_pre_key(&connection)?;
-        assert!(key1.is_some());
-        let key1 = key1.unwrap();
-
-        let client = SqliteClient::new(connection)?;
-        assert_eq!(
-            client
-                .get_pre_key(&X25519PublicKey::from(&key1))?
-                .to_bytes(),
-            key1.to_bytes()
-        );
-
+    #[tokio::test]
+    async fn fetch_pre_key() -> Result<()> {
+        let connection = tokio_rusqlite::Connection::open_in_memory().await?;
+        let client = SqliteClient::new(connection).await?;
+        let spk = client.get_spk().await?;
+        client.get_pre_key(spk.pre_key).await?;
         Ok(())
     }
 
-    #[test]
-    fn client_stuff() -> Result<()> {
-        let conn = Connection::open_in_memory()?;
-        let client = SqliteClient::new(conn)?;
-        let _ik = client.get_ik()?;
-        let _spk = client.get_spk()?;
+    #[tokio::test]
+    async fn client_stuff() -> Result<()> {
+        let conn = tokio_rusqlite::Connection::open_in_memory().await?;
+        let client = SqliteClient::new(conn).await?;
+        let _ik = client.get_ik().await?;
+        let _spk = client.get_spk().await?;
 
         Ok(())
     }
