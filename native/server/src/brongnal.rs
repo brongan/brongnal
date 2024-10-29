@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_server::Brongnal;
 use proto::service::Message as MessageProto;
@@ -14,62 +15,64 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Request, Response, Result, Status};
+use tonic::{Request, Response, Status};
 use tracing::error;
 use tracing::info;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
-pub trait Storage: std::fmt::Debug {
+pub type CurrentKeys = (VerifyingKey, SignedPreKeyProto);
+
+#[async_trait]
+pub trait Storage {
     /// Add a new identity to the storage.
     /// For now, repeated calls should not return an error.
     // TODO(#25) - Return error when attempting to overwrite registration.
-    fn register_user(
+    async fn register_user(
         &self,
         identity: String,
         ik: VerifyingKey,
         spk: SignedPreKeyProto,
-    ) -> Result<()>;
+    ) -> tonic::Result<()>;
 
     /// Replaces the signed pre key for a given identity.
     // TODO(#27) -  Implement signed pre key rotation.
-    #[allow(dead_code)]
-    fn update_spk(&self, identity: &str, pre_key: SignedPreKeyProto) -> Result<()>;
+    async fn update_spk(&self, identity: String, pre_key: SignedPreKeyProto) -> tonic::Result<()>;
 
     /// Appends new unburnt one time pre keys for others to message a given identity.
-    fn add_opks(&self, identity: &str, pre_keys: Vec<X25519PublicKey>) -> Result<()>;
+    async fn add_opks(&self, identity: String, pre_keys: Vec<X25519PublicKey>)
+        -> tonic::Result<()>;
 
     /// Retrieves the identity key and signed pre key for a given identity.
     /// A client must first invoke this before messaging a peer.
-    fn get_current_keys(&self, identity: &str) -> Result<(VerifyingKey, SignedPreKeyProto)>;
+    async fn get_current_keys(&self, identity: String) -> tonic::Result<CurrentKeys>;
 
     /// Retrieve a one time pre key for an identity.
-    fn pop_opk(&self, identity: &str) -> Result<Option<X25519PublicKey>>;
+    async fn pop_opk(&self, identity: String) -> tonic::Result<Option<X25519PublicKey>>;
 
     /// Enqueue a message for a given recipient.
-    fn add_message(&self, recipient: &str, message: MessageProto) -> Result<()>;
+    async fn add_message(&self, recipient: String, message: MessageProto) -> tonic::Result<()>;
 
     /// Retrieve enqueued messages for a given identity.
-    fn get_messages(&self, identity: &str) -> Result<Vec<MessageProto>>;
+    async fn get_messages(&self, identity: String) -> tonic::Result<Vec<MessageProto>>;
 }
 
-#[derive(Debug)]
 pub struct BrongnalController {
-    storage: Box<dyn Storage + Send + Sync>,
-    receivers: Arc<Mutex<HashMap<String, Sender<Result<MessageProto>>>>>,
+    storage: Arc<dyn Storage + Send + Sync + 'static>,
+    receivers: Arc<Mutex<HashMap<String, Sender<tonic::Result<MessageProto>>>>>,
 }
 
 impl BrongnalController {
-    pub fn new(storage: Box<dyn Storage + Send + Sync>) -> BrongnalController {
+    pub fn new(storage: Arc<dyn Storage + Send + Sync + 'static>) -> BrongnalController {
         BrongnalController {
             storage,
             receivers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    fn handle_register_pre_key_bundle(
+    async fn handle_register_pre_key_bundle(
         &self,
         request: RegisterPreKeyBundleRequest,
-    ) -> Result<RegisterPreKeyBundleResponse> {
+    ) -> tonic::Result<RegisterPreKeyBundleResponse> {
         let identity: String = request
             .identity
             .clone()
@@ -90,7 +93,7 @@ impl BrongnalController {
             .pre_keys
             .iter()
             .map(|key| parse_x25519_public_key(key))
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<tonic::Result<Vec<_>, _>>()
             .map_err(|_| Status::invalid_argument("invalid prekey bundle"))?;
         let signature = Signature::from_slice(opks.signature()).map_err(|_e| {
             Status::invalid_argument("one time prekey bundle signature is invalid")
@@ -100,15 +103,16 @@ impl BrongnalController {
         })?;
 
         self.storage
-            .register_user(identity.clone(), ik, spk_proto)?;
-        self.storage.add_opks(&identity, pre_keys)?;
+            .register_user(identity.clone(), ik, spk_proto)
+            .await?;
+        self.storage.add_opks(identity, pre_keys).await?;
         Ok(RegisterPreKeyBundleResponse {})
     }
 
     async fn handle_send_message(
         &self,
         request: SendMessageRequest,
-    ) -> Result<SendMessageResponse> {
+    ) -> tonic::Result<SendMessageResponse> {
         let recipient_identity = request.recipient_identity.ok_or(Status::invalid_argument(
             "request missing recipient_identity",
         ))?;
@@ -130,7 +134,8 @@ impl BrongnalController {
         }
 
         self.storage
-            .add_message(&recipient_identity, message_proto)?;
+            .add_message(recipient_identity, message_proto)
+            .await?;
 
         Ok(SendMessageResponse {})
     }
@@ -141,11 +146,12 @@ impl Brongnal for BrongnalController {
     async fn register_pre_key_bundle(
         &self,
         request: Request<RegisterPreKeyBundleRequest>,
-    ) -> Result<Response<RegisterPreKeyBundleResponse>> {
+    ) -> tonic::Result<Response<RegisterPreKeyBundleResponse>> {
         let request = request.into_inner();
         info!("Registering PreKeyBundle for \"{}\".", request.identity());
         let response = self
             .handle_register_pre_key_bundle(request)
+            .await
             .inspect_err(|e| error!("Failed to register pre key bundle: {e}"))?;
         Ok(Response::new(response))
     }
@@ -153,20 +159,17 @@ impl Brongnal for BrongnalController {
     async fn request_pre_keys(
         &self,
         request: Request<RequestPreKeysRequest>,
-    ) -> Result<Response<PreKeyBundleProto>> {
+    ) -> tonic::Result<Response<PreKeyBundleProto>> {
         let request = request.into_inner();
         info!("Retrieving PreKeyBundle for \"{}\".", request.identity());
 
-        let (ik, spk) = self
-            .storage
-            .get_current_keys(request.identity())
-            .inspect_err(|e| error!("Failed to retrieve pre keys: {e}"))?;
-
-        // TODO(#26) - Prevent one time key pop abuse.
-        let opk = self
-            .storage
-            .pop_opk(request.identity())
-            .inspect_err(|e| error!("Failed to retrieve opk: {e}"))?;
+        let (keys, opk) = tokio::join!(
+            self.storage.get_current_keys(request.identity().to_owned()),
+            // TODO(#26) - Prevent one time key pop abuse.
+            self.storage.pop_opk(request.identity().to_owned())
+        );
+        let (ik, spk) = keys?;
+        let opk = opk?;
 
         let reply = PreKeyBundleProto {
             identity_key: Some(ik.as_bytes().into()),
@@ -179,7 +182,7 @@ impl Brongnal for BrongnalController {
     async fn send_message(
         &self,
         request: Request<SendMessageRequest>,
-    ) -> Result<Response<SendMessageResponse>> {
+    ) -> tonic::Result<Response<SendMessageResponse>> {
         let request = request.into_inner();
         info!(
             "Received request to send message to: \"{}\".",
@@ -193,11 +196,11 @@ impl Brongnal for BrongnalController {
         Ok(Response::new(response))
     }
 
-    type RetrieveMessagesStream = ReceiverStream<Result<MessageProto>>;
+    type RetrieveMessagesStream = ReceiverStream<tonic::Result<MessageProto>>;
     async fn retrieve_messages(
         &self,
         request: Request<RetrieveMessagesRequest>,
-    ) -> Result<Response<Self::RetrieveMessagesStream>> {
+    ) -> tonic::Result<Response<Self::RetrieveMessagesStream>> {
         let request = request.into_inner();
         info!("Retrieving \"{}\"'s messages.", request.identity());
 
@@ -210,7 +213,8 @@ impl Brongnal for BrongnalController {
         // TODO(#14) - RetrieveMessages requires proof of possession
         for message in self
             .storage
-            .get_messages(&identity)
+            .get_messages(identity.clone())
+            .await
             .inspect_err(|e| error!("Failed to retrieve messages from storage: {e}"))?
         {
             // TODO handle result.

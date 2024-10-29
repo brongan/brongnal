@@ -1,72 +1,160 @@
+use crate::brongnal::CurrentKeys;
 use crate::brongnal::Storage;
-use anyhow::{Context, Result};
+use async_trait::async_trait;
 use ed25519_dalek::VerifyingKey;
 use prost::Message;
 use proto::parse_verifying_key;
 use proto::service::Message as MessageProto;
 use proto::service::SignedPreKey as SignedPreKeyProto;
-use rusqlite::{params, Connection};
-use std::sync::MutexGuard;
+use rusqlite::params;
+use rusqlite::Connection;
+use rusqlite::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{sync::Arc, sync::Mutex};
 use tonic::Status;
 use tracing::debug;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
-#[derive(Debug)]
-pub struct SqliteStorage(Arc<Mutex<Connection>>);
+pub struct SqliteStorage(tokio_rusqlite::Connection);
+
+fn init_db(connection: &rusqlite::Connection) -> rusqlite::Result<()> {
+    connection.pragma_update(None, "journal_mode", "WAL")?;
+    connection.pragma_update(None, "synchronous", "normal")?;
+    connection.pragma_update(None, "foreign_keys", "on")?;
+
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS user (
+                        identity STRING PRIMARY KEY,
+                        key BLOB NOT NULL,
+                        current_pre_key BLOB NOT NULL,
+                        creation_time INTEGER NOT NULL
+                    )",
+        (),
+    )?;
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS pre_key (
+                        key BLOB PRIMARY KEY,
+                        user_identity STRING NOT NULL,
+                        creation_time integer NOT NULL,
+                        FOREIGN KEY(user_identity) REFERENCES user(identity)
+                    )",
+        (),
+    )?;
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS message (
+                        message BLOB PRIMARY KEY,
+                        user_identity STRING NOT NULL,
+                        creation_time integer NOT NULL,
+                        FOREIGN KEY(user_identity) REFERENCES user(identity)
+                    )",
+        (),
+    )?;
+    Ok(())
+}
+
+fn register_user(
+    identity: &str,
+    ik: VerifyingKey,
+    spk: SignedPreKeyProto,
+    connection: &Connection,
+) -> rusqlite::Result<()> {
+    debug!("Adding user \"{identity}\" to the database.");
+
+    let _ = connection.execute(
+        "INSERT INTO user (identity, key, current_pre_key, creation_time) VALUES (?1, ?2, ?3, ?4)",
+        (
+            identity,
+            ik.to_bytes(),
+            spk.encode_to_vec(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        ),
+    )?;
+    Ok(())
+}
+
+fn update_spk(
+    identity: &str,
+    spk: SignedPreKeyProto,
+    connection: &Connection,
+) -> rusqlite::Result<()> {
+    // Returns the first row updated so missing key resullts in an error.
+    let _: String = connection.query_row(
+        "UPDATE user SET current_pre_key = ?2 WHERE identity = ?1 RETURNING identity",
+        params![&identity, spk.encode_to_vec()],
+        |row| row.get(0),
+    )?;
+    Ok(())
+}
+
+fn get_current_keys(user: &str, connection: &Connection) -> rusqlite::Result<CurrentKeys> {
+    let (ik, spk): (Vec<u8>, Vec<u8>) = connection.query_row(
+        "SELECT key, current_pre_key FROM user WHERE identity = ?1",
+        [user],
+        |row| Ok((row.get(0).unwrap(), row.get(1).unwrap())),
+    )?;
+    let ik = parse_verifying_key(&ik).unwrap();
+    let spk = SignedPreKeyProto::decode(&*spk).unwrap();
+    Ok((ik, spk))
+}
+
+fn pop_opk(identity: &str, connection: &Connection) -> rusqlite::Result<Option<X25519PublicKey>> {
+    let key: Option<[u8;32]> = match connection.query_row(
+            "DELETE from pre_key WHERE key = ( SELECT key FROM pre_key WHERE user_identity = ?1 ORDER BY creation_time LIMIT 1) RETURNING key", 
+            [identity.to_owned()],
+            |row| row.get(0)) {
+            Ok(value) => Ok(Some(value)),
+            Err(Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }?;
+    Ok(key.map(X25519PublicKey::from))
+}
+
+fn add_message(
+    recipient: &str,
+    message: MessageProto,
+    connection: &Connection,
+) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO message (message, user_identity, creation_time) VALUES (?1, ?2, ?3)",
+        (
+            message.encode_to_vec(),
+            recipient,
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        ),
+    )?;
+    Ok(())
+}
+
+fn query_messages(identity: &str, connection: &Connection) -> rusqlite::Result<Vec<MessageProto>> {
+    let mut stmt =
+        connection.prepare("DELETE from message WHERE user_identity = ?1 RETURNING message")?;
+    let message_iter = stmt.query_map([identity], |row| row.get(0)).unwrap();
+    let mut ret = Vec::new();
+    for message in message_iter {
+        let message: Vec<u8> = message?;
+        ret.push(MessageProto::decode(&*message).expect("We don't persist bad messages."));
+    }
+    Ok(ret)
+}
 
 impl SqliteStorage {
-    fn connection(&self) -> tonic::Result<MutexGuard<Connection>> {
-        self.0
-            .lock()
-            .map_err(|_e| Status::internal("failed to access sqlite connection"))
-    }
-    pub fn new(connection: Connection) -> Result<Self> {
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "synchronous", "normal")?;
-        connection.pragma_update(None, "foreign_keys", "on")?;
+    pub async fn new(connection: tokio_rusqlite::Connection) -> tokio_rusqlite::Result<Self> {
+        connection
+            .call(|connection| Ok(init_db(connection)?))
+            .await?;
 
-        connection
-            .execute(
-                "CREATE TABLE IF NOT EXISTS user (
-             identity STRING PRIMARY KEY,
-             key BLOB NOT NULL,
-             current_pre_key BLOB NOT NULL,
-             creation_time INTEGER NOT NULL
-         )",
-                (),
-            )
-            .context("Creating user table failed.")?;
-        connection
-            .execute(
-                "CREATE TABLE IF NOT EXISTS pre_key (
-             key BLOB PRIMARY KEY,
-             user_identity STRING NOT NULL,
-             creation_time integer NOT NULL,
-             FOREIGN KEY(user_identity) REFERENCES user(identity)
-         )",
-                (),
-            )
-            .context("Creating pre_key table failed.")?;
-        connection
-            .execute(
-                "CREATE TABLE IF NOT EXISTS message (
-             message BLOB PRIMARY KEY,
-             user_identity STRING NOT NULL,
-             creation_time integer NOT NULL,
-             FOREIGN KEY(user_identity) REFERENCES user(identity)
-         )",
-                (),
-            )
-            .context("Creating message table failed.")?;
-
-        Ok(SqliteStorage(Arc::new(Mutex::new(connection))))
+        Ok(SqliteStorage(connection))
     }
 }
 
+#[async_trait]
 impl Storage for SqliteStorage {
-    fn register_user(
+    async fn register_user(
         &self,
         identity: String,
         ik: VerifyingKey,
@@ -74,125 +162,91 @@ impl Storage for SqliteStorage {
     ) -> tonic::Result<()> {
         debug!("Adding user \"{identity}\" to the database.");
 
-        let _ = self.connection()?.execute(
-            "INSERT INTO user (identity, key, current_pre_key, creation_time) VALUES (?1, ?2, ?3, ?4)",
-            (
-                identity, ik.to_bytes(), spk.encode_to_vec(),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            ),
-        ).context("failed to insert key.");
+        let _ = self
+            .0
+            .call(move |connection| Ok(register_user(&identity, ik, spk, connection)))
+            .await;
         Ok(())
     }
 
-    fn update_spk(&self, identity: &str, spk: SignedPreKeyProto) -> tonic::Result<()> {
+    async fn update_spk(&self, identity: String, spk: SignedPreKeyProto) -> tonic::Result<()> {
         debug!("Updating pre key for user \"{identity}\" to the database.");
+        let identity_copy = identity.clone();
 
-        let _: String = self
-            .connection()?
-            .query_row(
-                "UPDATE user SET current_pre_key = ?2 WHERE identity = ?1 RETURNING identity",
-                params![identity, spk.encode_to_vec()],
-                |row| row.get(0),
-            )
-            .map_err(|_| Status::not_found(format!("pre key for user {identity} not found")))?;
+        self.0
+            .call(move |connection| Ok(update_spk(&identity, spk, connection)?))
+            .await
+            .map_err(|_| {
+                Status::not_found(format!("pre key for user {identity_copy} not found"))
+            })?;
         Ok(())
     }
 
-    fn add_opks(&self, identity: &str, opks: Vec<X25519PublicKey>) -> tonic::Result<()> {
+    async fn add_opks(&self, identity: String, opks: Vec<X25519PublicKey>) -> tonic::Result<()> {
         debug!(
             "Adding {} one time keys for user \"{identity}\" to the database.",
-            opks.len()
+            opks.len(),
         );
 
-        let connection = self.connection()?;
-        let mut stmt = connection
-            .prepare("INSERT INTO pre_key (user_identity, key, creation_time) VALUES (?1, ?2, ?3)")
-            .unwrap();
-        for opk in opks {
-            stmt.execute((
-                identity,
-                opk.to_bytes(),
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            ))
+        self.0
+            .call(move |connection| {
+                let mut stmt = connection
+                    .prepare("INSERT INTO pre_key (user_identity, key, creation_time) VALUES (?1, ?2, ?3)")
+                    .unwrap();
+                for opk in opks {
+                    stmt.execute((
+                            &identity,
+                            opk.to_bytes(),
+                            SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                    ))?;
+                }
+                Ok(())
+            })
+            .await
             .map_err(|_| Status::internal("failed to insert one time key"))?;
-        }
         Ok(())
     }
 
-    fn get_current_keys(&self, identity: &str) -> tonic::Result<(VerifyingKey, SignedPreKeyProto)> {
+    async fn get_current_keys(&self, identity: String) -> tonic::Result<CurrentKeys> {
         debug!("Retrieving pre keys for user \"{identity}\" from the database.");
 
-        let (ik, spk): (Vec<u8>, Vec<u8>) = self
-            .connection()?
-            .query_row(
-                "SELECT key, current_pre_key FROM user WHERE identity = ?1",
-                [identity],
-                |row| Ok((row.get(0).unwrap(), row.get(1).unwrap())),
-            )
-            .map_err(|_| Status::not_found(format!("User: \"{identity}\" is not registered.")))?;
-        let ik = parse_verifying_key(&ik).unwrap();
-        let spk = SignedPreKeyProto::decode(&*spk).unwrap();
-        Ok((ik, spk))
+        self.0
+            .call(move |connection| Ok(get_current_keys(&identity, connection)?))
+            .await
+            .map_err(|_| Status::not_found("user not found"))
     }
 
-    fn pop_opk(&self, identity: &str) -> tonic::Result<Option<X25519PublicKey>> {
+    async fn pop_opk(&self, identity: String) -> tonic::Result<Option<X25519PublicKey>> {
         debug!("Popping one time key for user \"{identity}\" from the database.");
 
-        let key: Option<[u8;32]> = match self.connection()?.query_row(
-            "DELETE from pre_key WHERE key = ( SELECT key FROM pre_key WHERE user_identity = ?1 ORDER BY creation_time LIMIT 1) RETURNING key", 
-            [identity.to_owned()],
-            |row| row.get(0)) {
-            Ok(value) => Ok(Some(value)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Status::not_found(format!("failed to query for pre_key: {e}"))),
-        }?;
-
-        Ok(key.map(X25519PublicKey::from))
+        self.0
+            .call(move |connection| Ok(pop_opk(&identity, connection)?))
+            .await
+            .map_err(|e| Status::not_found(format!("failed to query for pre_key: {e}")))
     }
 
-    fn add_message(&self, recipient: &str, message: MessageProto) -> tonic::Result<()> {
+    async fn add_message(&self, recipient: String, message: MessageProto) -> tonic::Result<()> {
         debug!("Enqueueing message for user {recipient} in database.");
 
-        let _: u64 = self
-            .connection()?
-            .query_row(
-                "INSERT INTO message (message, user_identity, creation_time) VALUES (?1, ?2, ?3) RETURNING creation_time",
-                (
-                    message.encode_to_vec(),
-                    recipient,
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
-                ),|row| row.get(0),
-            )
-            .map_err(|_| Status::not_found(format!("Cannot enqueue message for unknown user: {recipient}")))?;
+        self.0
+            .call(move |connection| Ok(add_message(&recipient, message, connection)?))
+            .await
+            .map_err(|e| {
+                Status::not_found(format!("Cannot enqueue message for unknown user: {e}"))
+            })?;
         Ok(())
     }
 
-    fn get_messages(&self, identity: &str) -> tonic::Result<Vec<MessageProto>> {
+    async fn get_messages(&self, identity: String) -> tonic::Result<Vec<MessageProto>> {
         debug!("Retrieving messages for \"{identity}\" from the database.");
 
-        let connection = self.connection()?;
-        let mut stmt = connection
-            .prepare("DELETE from message WHERE user_identity = ?1 RETURNING message")
-            .map_err(|e| {
-                Status::internal(format!("Failed to query message table for {identity}: {e}"))
-            })?;
-        let message_iter = stmt.query_map([identity], |row| row.get(0)).unwrap();
-        let mut ret = Vec::new();
-        for message in message_iter {
-            // TODO wtf is happening here?
-            let message: Vec<u8> = message.unwrap();
-            ret.push(
-                MessageProto::decode(&*message)
-                    .map_err(|_| Status::internal("Failed to deserialize Message proto"))?,
-            );
-        }
-        Ok(ret)
+        self.0
+            .call(move |connection| Ok(query_messages(&identity, connection)?))
+            .await
+            .map_err(|_| Status::internal("Failed to query messages."))
     }
 }
 
@@ -203,59 +257,31 @@ mod tests {
     use client::{memory_client::MemoryClient, X3DHClient};
     use tonic::Code;
 
-    #[test]
-    fn register_user_get_keys_success() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
+    #[tokio::test]
+    async fn register_user_get_keys_success() -> Result<()> {
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
         let alice = MemoryClient::new();
-        let alice_ik = VerifyingKey::from(&alice.get_ik().unwrap());
-        let alice_spk: SignedPreKeyProto = alice.get_spk().unwrap().into();
+        let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
+        let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
+        storage
+            .register_user(String::from("alice"), alice_ik, alice_spk.clone())
+            .await?;
         assert_eq!(
-            storage.register_user(String::from("alice"), alice_ik, alice_spk.clone())?,
-            ()
-        );
-        assert_eq!(storage.get_current_keys("alice")?, (alice_ik, alice_spk));
-        Ok(())
-    }
-
-    #[test]
-    fn get_keys_not_found() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
-        assert_eq!(
-            storage.get_current_keys("alice").err().map(|e| e.code()),
-            Some(Code::NotFound)
+            storage.get_current_keys(String::from("alice")).await?,
+            (alice_ik, alice_spk)
         );
         Ok(())
     }
 
-    #[test]
-    fn pop_empty_opks_none() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
-        assert_eq!(storage.pop_opk("bob")?, None);
-        Ok(())
-    }
-
-    #[test]
-    fn retrieve_opk() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
-        let mut bob = MemoryClient::new();
-        let keys = bob.create_opks(1)?.pre_keys;
-        storage.register_user(
-            String::from("bob"),
-            (&bob.get_ik()?).into(),
-            bob.get_spk()?.into(),
-        )?;
-        storage.add_opks("bob", keys.clone())?;
-        assert_eq!(storage.pop_opk("bob")?, Some(keys[0]));
-        assert_eq!(storage.pop_opk("bob")?, None);
-        Ok(())
-    }
-
-    #[test]
-    fn updating_spk_user_not_found() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
+    #[tokio::test]
+    async fn get_keys_not_found() -> Result<()> {
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
         assert_eq!(
             storage
-                .update_spk("bob", SignedPreKeyProto::default())
+                .get_current_keys(String::from("alice"))
+                .await
                 .err()
                 .map(|e| e.code()),
             Some(Code::NotFound)
@@ -263,27 +289,42 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn update_spk_success() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
-        let mut bob = MemoryClient::new();
-        let bob_ik = VerifyingKey::from(&bob.get_ik().unwrap());
-        let mut bob_spk: SignedPreKeyProto = bob.get_spk().unwrap().into();
-        storage.register_user(String::from("bob"), bob_ik, bob_spk.clone())?;
-
-        bob_spk.pre_key = Some(bob.create_opks(1)?.pre_keys[0].to_bytes().to_vec());
-        storage.update_spk("bob", bob_spk.clone())?;
-
-        assert_eq!(storage.get_current_keys("bob")?, (bob_ik, bob_spk));
+    #[tokio::test]
+    async fn pop_empty_opks_none() -> Result<()> {
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
+        assert_eq!(storage.pop_opk(String::from("bob")).await?, None);
         Ok(())
     }
 
-    #[test]
-    fn add_message_unknown_user() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
+    #[tokio::test]
+    async fn retrieve_opk() -> Result<()> {
+        let bob_name = String::from("bob");
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
+        let mut bob = MemoryClient::new();
+        let keys = bob.create_opks(1).await?.pre_keys;
+        storage
+            .register_user(
+                bob_name.clone(),
+                (&bob.get_ik().await?).into(),
+                bob.get_spk().await?.into(),
+            )
+            .await?;
+        storage.add_opks(bob_name.clone(), keys.clone()).await?;
+        assert_eq!(storage.pop_opk(bob_name.clone()).await?, Some(keys[0]));
+        assert_eq!(storage.pop_opk(bob_name).await?, None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn updating_spk_user_not_found() -> Result<()> {
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
         assert_eq!(
             storage
-                .add_message("bob", MessageProto::default())
+                .update_spk(String::from("bob"), SignedPreKeyProto::default())
+                .await
                 .err()
                 .map(|e| e.code()),
             Some(Code::NotFound)
@@ -291,13 +332,55 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn add_get_message() -> Result<()> {
-        let storage = SqliteStorage::new(Connection::open_in_memory()?)?;
+    #[tokio::test]
+    async fn update_spk_success() -> Result<()> {
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
+        let mut bob = MemoryClient::new();
+        let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
+        let mut bob_spk: SignedPreKeyProto = bob.get_spk().await.unwrap().into();
+        storage
+            .register_user(String::from("bob"), bob_ik, bob_spk.clone())
+            .await?;
+
+        bob_spk.pre_key = Some(bob.create_opks(1).await?.pre_keys[0].to_bytes().to_vec());
+        storage
+            .update_spk(String::from("bob"), bob_spk.clone())
+            .await?;
+
+        assert_eq!(
+            storage.get_current_keys(String::from("bob")).await?,
+            (bob_ik, bob_spk)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn add_message_unknown_user() -> Result<()> {
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
+        assert_eq!(
+            storage
+                .add_message(String::from("bob"), MessageProto::default())
+                .await
+                .err()
+                .map(|e| e.code()),
+            Some(Code::NotFound)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn add_get_message() -> Result<()> {
+        let bob_name = String::from("bob");
+        let storage =
+            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
         let bob = MemoryClient::new();
-        let bob_ik = VerifyingKey::from(&bob.get_ik().unwrap());
-        let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().unwrap();
-        storage.register_user(String::from("bob"), bob_ik, bob_spk.clone().into())?;
+        let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
+        let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().await.unwrap();
+        storage
+            .register_user(bob_name.clone(), bob_ik, bob_spk.clone().into())
+            .await?;
 
         let message_proto = MessageProto {
             sender_identity: Some(String::from("alice")),
@@ -307,8 +390,10 @@ mod tests {
             one_time_key: Some(b"bob one time key".to_vec()),
             ciphertext: Some(b"ciphertext".to_vec()),
         };
-        storage.add_message("bob", message_proto.clone())?;
-        assert_eq!(storage.get_messages("bob")?, vec![message_proto]);
+        storage
+            .add_message(bob_name.clone(), message_proto.clone())
+            .await?;
+        assert_eq!(storage.get_messages(bob_name).await?, vec![message_proto]);
 
         Ok(())
     }

@@ -1,4 +1,5 @@
 use crate::{ClientError, ClientResult, X3DHClient};
+use async_trait::async_trait;
 use chacha20poly1305::aead::OsRng;
 use ed25519_dalek::SigningKey;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
@@ -29,23 +30,24 @@ impl MemoryClient {
     }
 }
 
+#[async_trait]
 impl X3DHClient for MemoryClient {
-    fn fetch_wipe_opk(&mut self, opk: &X25519PublicKey) -> ClientResult<X25519StaticSecret> {
+    async fn fetch_wipe_opk(&mut self, opk: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
         self.opks
-            .remove(opk)
+            .remove(&opk)
             .ok_or_else(|| ClientError::WipeOpk(base64::encode(opk.to_bytes())))
     }
 
-    fn get_ik(&self) -> ClientResult<SigningKey> {
+    async fn get_ik(&self) -> ClientResult<SigningKey> {
         Ok(self.ik.clone())
     }
 
-    fn get_pre_key(&self, _pre_key: &X25519PublicKey) -> ClientResult<X25519StaticSecret> {
+    async fn get_pre_key(&self, _pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
         Ok(self.pre_key.clone())
     }
 
-    fn get_spk(&self) -> ClientResult<SignedPreKey> {
+    async fn get_spk(&self) -> ClientResult<SignedPreKey> {
         Ok(SignedPreKey {
             pre_key: X25519PublicKey::from(&self.pre_key),
             signature: sign_bundle(
@@ -55,7 +57,7 @@ impl X3DHClient for MemoryClient {
         })
     }
 
-    fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys> {
+    async fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys> {
         let opks = create_prekey_bundle(&self.ik, num_keys);
         let pre_keys = opks.bundle.iter().map(|(_, _pub)| *_pub).collect();
         for opk in opks.bundle {

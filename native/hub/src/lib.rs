@@ -3,11 +3,11 @@ use client::{listen, message, register, sqlite_client::SqliteClient};
 use client::{DecryptedMessage, X3DHClient};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
-use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
+use tokio_rusqlite::Connection;
 use tonic::transport::Channel;
 
 mod messages;
@@ -112,7 +112,8 @@ async fn main() {
     let db_path = db_dir.join("keys.sqlite");
     debug_print!("Database Path: {db_path:?}");
     let client = Arc::new(Mutex::new(
-        SqliteClient::new(Connection::open(db_path).expect("open database"))
+        SqliteClient::new(Connection::open(db_path).await.expect("open database"))
+            .await
             .expect("init database"),
     ));
 
