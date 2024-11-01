@@ -26,7 +26,7 @@ pub type CurrentKeys = (VerifyingKey, SignedPreKeyProto);
 pub trait Storage {
     /// Add a new identity to the storage.
     /// For now, repeated calls should not return an error.
-    // TODO(#25) - Return error when attempting to overwrite registration.
+    // TODO(https://github.com/brongan/brongnal/issues/25) - Return error when attempting to overwrite registration.
     async fn register_user(
         &self,
         identity: String,
@@ -35,7 +35,7 @@ pub trait Storage {
     ) -> tonic::Result<()>;
 
     /// Replaces the signed pre key for a given identity.
-    // TODO(#27) -  Implement signed pre key rotation.
+    // TODO(https://github.com/brongan/brongnal/issues/27) -  Implement signed pre key rotation.
     async fn update_spk(&self, identity: String, pre_key: SignedPreKeyProto) -> tonic::Result<()>;
 
     /// Appends new unburnt one time pre keys for others to message a given identity.
@@ -119,6 +119,8 @@ impl BrongnalController {
         let message_proto: MessageProto = request
             .message
             .ok_or(Status::invalid_argument("request missing message"))?;
+        // Do some basic validation on the message before persisting it or sending it to the
+        // recipient.
         let _ = protocol::x3dh::Message::try_from(message_proto.clone())?;
 
         let tx = self
@@ -165,7 +167,7 @@ impl Brongnal for BrongnalController {
 
         let (keys, opk) = tokio::join!(
             self.storage.get_current_keys(request.identity().to_owned()),
-            // TODO(#26) - Prevent one time key pop abuse.
+            // TODO(https://github.com/brongan/brongnal/issues/26) - Prevent one time key pop abuse.
             self.storage.pop_opk(request.identity().to_owned())
         );
         let (ik, spk) = keys?;
