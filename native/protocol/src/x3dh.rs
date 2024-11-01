@@ -42,12 +42,13 @@ pub struct SignedPreKeys {
     pub signature: Signature,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct X3DHSendKeyAgreement {
     pub ek: X25519PublicKey,
     pub sk: [u8; 32],
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Message {
     pub sender_identity: String,
     pub sender_ik: VerifyingKey,
@@ -98,7 +99,7 @@ fn kdf(km: &[u8]) -> [u8; 32] {
     hk.expand(b"Brongnal", &mut okm).unwrap();
     okm
 }
-#[derive(Error, Debug, Serialize, Deserialize)]
+#[derive(Error, Debug, Serialize, Deserialize, PartialEq)]
 pub enum X3DHError {
     #[error("Signature failed to validate.")]
     SignatureValidation,
@@ -121,6 +122,9 @@ fn initiate_send_get_sk(
     opk: Option<X25519PublicKey>,
     sender_ik: &SigningKey,
 ) -> Result<X3DHSendKeyAgreement, X3DHError> {
+    // It might be tempting to observe that mutual authentication and forward secrecy are achieved by the DH calculations, and omit the prekey signature.
+    // However, this would allow a "weak forward secrecy" attack:
+    // A malicious server could provide Alice a prekey bundle with forged prekeys, and later compromise Bob's IKB to calculate SK.
     verify_bundle(&recipient_ik, &[spk.pre_key], &spk.signature)
         .map_err(|_| X3DHError::SignatureValidation)?;
 
@@ -253,6 +257,8 @@ pub fn initiate_recv(
 
 #[cfg(test)]
 mod tests {
+    use crate::x3dh::X3DHError;
+
     use super::PreKeyBundle;
     use super::{
         create_prekey_bundle, initiate_recv, initiate_recv_get_sk, initiate_send,
@@ -394,6 +400,32 @@ mod tests {
         )?;
         assert_eq!(send_sk, recv_sk);
         assert_eq!("Hello Bob!", String::from_utf8(decrypted)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn x3dh_invalid_bundle_signature() -> Result<()> {
+        let bob_spk = create_prekey_bundle(&SigningKey::generate(&mut OsRng), 1);
+        let bob_spk = SignedPreKey {
+            pre_key: bob_spk.bundle[0].1,
+            signature: bob_spk.signature,
+        };
+
+        let bundle = PreKeyBundle {
+            ik: SigningKey::generate(&mut OsRng).verifying_key(),
+            opk: None,
+            spk: bob_spk.clone(),
+        };
+        assert_eq!(
+            initiate_send(
+                bundle,
+                "alice".to_owned(),
+                &SigningKey::generate(&mut OsRng),
+                b"Hello Bob!"
+            ),
+            Err(X3DHError::SignatureValidation)
+        );
 
         Ok(())
     }
