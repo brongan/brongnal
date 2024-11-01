@@ -30,24 +30,37 @@ use x25519_dalek::{
     IKA - Alice's Identity Key
 */
 
+/// A partipant in the X3DH protocol's prekey and the signature over it using their identity key.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKey {
     pub pre_key: X25519PublicKey,
     pub signature: Signature,
 }
 
+/// A signature over multiple signed prekeys. Useful for one-time prekeys.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedPreKeys {
     pub pre_keys: Vec<X25519PublicKey>,
     pub signature: Signature,
 }
 
+/// The X3DH key agreement protocol results in:
+/// * an epheremeral key `ek` that the recipient needs to decrypt encrypted message.
+/// * the 32-bytes shared secret key SK.
 #[derive(Debug, PartialEq)]
 pub struct X3DHSendKeyAgreement {
     pub ek: X25519PublicKey,
     pub sk: [u8; 32],
 }
 
+/// A `Message` in this packages implementation of the X3DH protocol.
+/// This struct is the output of `Alice` sending a message to `Bob`.
+/// * `sender_identity` is the claimed identity of the center. This must be authenticated.
+/// * `sender_ik` is the identity key of the sender.
+/// * `ek` is the ephemeral key generated to encrypt the message.
+/// * `pre_key` is the identifier (currently public key) of Bob's prekey that was used.
+/// * `opk` is Bob's one time prekey that (may) have been used.
+/// * `ciphertext` is the encrypted message.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Message {
     pub sender_identity: String,
@@ -158,6 +171,8 @@ fn initiate_send_get_sk(
         None => kdf(&[dh1.to_bytes(), dh2.to_bytes(), dh3.to_bytes()].concat()),
     };
 
+    // After a successful protocol run Alice and Bob will share a 32-byte secret key SK.
+    // This key may be used within some post-X3DH secure communication protocol.
     Ok(X3DHSendKeyAgreement {
         ek: X25519PublicKey::from(&ek),
         sk,
@@ -168,7 +183,8 @@ fn initiate_send_get_sk(
 //    Alice's identity key IKA
 //    Alice's ephemeral key EKA
 //    Identifiers stating which of Bob's prekeys Alice used
-//    An initial ciphertext encrypted with some AEAD encryption scheme [4] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
+//    An initial ciphertext encrypted with some AEAD encryption scheme [4] using AD as associated data
+//    and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
 pub fn initiate_send(
     prekey_bundle: PreKeyBundle,
     sender_identity: String,
@@ -190,7 +206,8 @@ pub fn initiate_send(
     ]
     .concat();
 
-    // The initial ciphertext is typically the first message in some post-X3DH communication protocol. In other words, this ciphertext typically has two roles, serving as the first message within some post-X3DH protocol, and as part of Alice's X3DH initial message.
+    // The initial ciphertext is typically the first message in some post-X3DH communication protocol.
+    // In other words, this ciphertext typically has two roles, serving as the first message within some post-X3DH protocol, and as part of Alice's X3DH initial message.
     // After sending this, Alice may continue using SK or keys derived from SK within the post-X3DH protocol for communication with Bob
     let ciphertext = encrypt_data(
         Payload {
@@ -225,7 +242,6 @@ fn initiate_recv_get_sk(
     let dh3 = spk.diffie_hellman(&ek);
 
     if let Some(opk) = opk {
-        // Bob deletes any one-time prekey private key that was used, for forward secrecy.
         let dh4 = opk.diffie_hellman(&ek);
         kdf(&[
             dh1.to_bytes(),
@@ -239,8 +255,8 @@ fn initiate_recv_get_sk(
     }
 }
 
-// Caller must delete sk on error.
-// opk must be wiped.
+/// Bob deletes any one-time prekey private key that was used, for forward secrecy.
+/// Caller must delete sk on error and the opk must be wiped.
 pub fn initiate_recv(
     receiver_ik: &SigningKey,
     receiver_spk: &X25519StaticSecret,

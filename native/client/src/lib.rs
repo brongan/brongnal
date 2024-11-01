@@ -189,6 +189,8 @@ pub async fn get_messages(
                 &message.ciphertext,
             )?;
             Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
+                // TODO(https://github.com/brongan/brongnal/issues/15): Don't blindly trust the
+                // sender's claimed identity.
                 sender_identity: message.sender_identity,
                 message: decrypted,
             })
