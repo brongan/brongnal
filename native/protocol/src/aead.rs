@@ -8,7 +8,7 @@ use thiserror::Error;
 const NONCE_LEN: usize = 12;
 const VERSION_TAG: u8 = 1;
 
-#[derive(Error, Debug, Serialize, Deserialize)]
+#[derive(Error, Debug, Serialize, Deserialize, PartialEq)]
 pub enum AeadError {
     #[error("Encryption Failed.")]
     Encrypt,
