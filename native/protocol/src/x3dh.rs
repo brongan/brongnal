@@ -99,6 +99,17 @@ fn kdf(km: &[u8]) -> [u8; 32] {
     hk.expand(b"Brongnal", &mut okm).unwrap();
     okm
 }
+
+/// Convert Ed25519 private key to its birationally equivalent X25519 key.
+fn to_x25519(key: &SigningKey) -> X25519StaticSecret {
+    X25519StaticSecret::from(key.to_scalar_bytes())
+}
+
+/// Convert Ed25519 public key to its birationally equivalent X25519 key.
+fn to_x25519_pub(key: &VerifyingKey) -> X25519PublicKey {
+    X25519PublicKey::from(key.to_montgomery().to_bytes())
+}
+
 #[derive(Error, Debug, Serialize, Deserialize, PartialEq)]
 pub enum X3DHError {
     #[error("Signature failed to validate.")]
@@ -129,10 +140,8 @@ fn initiate_send_get_sk(
         .map_err(|_| X3DHError::SignatureValidation)?;
 
     let ek = X25519ReusableSecret::random();
-    let dh1 = X25519StaticSecret::from(sender_ik.to_scalar_bytes()).diffie_hellman(&spk.pre_key);
-    let dh2 = ek.diffie_hellman(&X25519PublicKey::from(
-        recipient_ik.to_montgomery().to_bytes(),
-    ));
+    let dh1 = to_x25519(sender_ik).diffie_hellman(&spk.pre_key);
+    let dh2 = ek.diffie_hellman(&to_x25519_pub(&recipient_ik));
     let dh3 = ek.diffie_hellman(&spk.pre_key);
 
     let sk = match opk {
@@ -211,8 +220,8 @@ fn initiate_recv_get_sk(
     receiver_ik: &SigningKey,
     spk: &X25519StaticSecret,
 ) -> [u8; 32] {
-    let dh1 = spk.diffie_hellman(&X25519PublicKey::from(sender_ik.to_montgomery().to_bytes()));
-    let dh2 = X25519StaticSecret::from(receiver_ik.to_scalar_bytes()).diffie_hellman(&ek);
+    let dh1 = spk.diffie_hellman(&to_x25519_pub(sender_ik));
+    let dh2 = to_x25519(receiver_ik).diffie_hellman(&ek);
     let dh3 = spk.diffie_hellman(&ek);
 
     if let Some(opk) = opk {
