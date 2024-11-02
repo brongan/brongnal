@@ -1,9 +1,5 @@
-use crate::aead::{decrypt_data, encrypt_data, AeadError};
+use crate::aead::{decrypt_data, encrypt_brongnal, encrypt_data, AeadError};
 use crate::bundle::*;
-use chacha20poly1305::{
-    aead::{KeyInit, Payload},
-    ChaCha20Poly1305,
-};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
@@ -188,6 +184,7 @@ fn initiate_send_get_sk(
 pub fn initiate_send(
     prekey_bundle: PreKeyBundle,
     sender_identity: String,
+    recipient_identity: String,
     sender_ik: &SigningKey,
     message: &[u8],
 ) -> Result<([u8; 32], Message), X3DHError> {
@@ -200,23 +197,18 @@ pub fn initiate_send(
     // Alice then calculates an "associated data" byte sequence AD that contains identity information for both parties:
     //   AD = Encode(IKA) || Encode(IKB)
     // Alice may optionally append additional information to AD, such as Alice and Bob's usernames, certificates, or other identifying information.
-    let associated_data = [
-        sender_ik.verifying_key().to_bytes(),
-        prekey_bundle.ik.to_bytes(),
-    ]
-    .concat();
+    let ciphertext = encrypt_brongnal(
+        &sk,
+        message,
+        &sender_ik.verifying_key().to_bytes(),
+        &prekey_bundle.ik.to_bytes(),
+        &sender_identity,
+        &recipient_identity,
+    )?;
 
     // The initial ciphertext is typically the first message in some post-X3DH communication protocol.
     // In other words, this ciphertext typically has two roles, serving as the first message within some post-X3DH protocol, and as part of Alice's X3DH initial message.
     // After sending this, Alice may continue using SK or keys derived from SK within the post-X3DH protocol for communication with Bob
-    let ciphertext = encrypt_data(
-        Payload {
-            msg: message,
-            aad: &associated_data,
-        },
-        &ChaCha20Poly1305::new_from_slice(&sk).unwrap(),
-    )?;
-
     Ok((
         sk,
         Message {
