@@ -64,6 +64,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
+name = "ary"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "933631ad13c4a74023de0fc68ccfaa69147020ee3ab5d821a4e6d93ba28e3059"
+
+[[package]]
 name = "async-stream"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1404,6 +1410,7 @@ name = "protocol"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ary",
  "base64 0.22.1",
  "blake2",
  "chacha20poly1305",

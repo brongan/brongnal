@@ -483,7 +483,7 @@ mod tests {
                 None,
                 b"invalid ciphertext",
             ),
-            Err(X3DHError::Aead(AeadError::Tag('i' as u8)))
+            Err(X3DHError::Aead(AeadError::Tag(b'i')))
         );
 
         Ok(())
