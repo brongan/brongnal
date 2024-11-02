@@ -282,6 +282,7 @@ pub fn initiate_recv(
 
 #[cfg(test)]
 mod tests {
+    use crate::aead::AeadError;
     use crate::x3dh::X3DHError;
 
     use super::PreKeyBundle;
@@ -450,6 +451,39 @@ mod tests {
                 b"Hello Bob!"
             ),
             Err(X3DHError::SignatureValidation)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn x3dh_invalid_ciphertext() -> Result<()> {
+        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_spk = create_prekey_bundle(&bob_ik, 1);
+        let bob_spk_secret = bob_spk.bundle[0].clone().0;
+        let bob_spk = SignedPreKey {
+            pre_key: bob_spk.bundle[0].1,
+            signature: bob_spk.signature,
+        };
+        let alice_ik = SigningKey::generate(&mut OsRng);
+
+        let bundle = PreKeyBundle {
+            ik: bob_ik.verifying_key(),
+            opk: None,
+            spk: bob_spk.clone(),
+        };
+        let (_, message) = initiate_send(bundle, "alice".to_owned(), &alice_ik, b"Hello Bob!")?;
+
+        assert_eq!(
+            initiate_recv(
+                &bob_ik,
+                &bob_spk_secret,
+                &message.sender_ik,
+                message.ek,
+                None,
+                b"invalid ciphertext",
+            ),
+            Err(X3DHError::Aead(AeadError::Tag('i' as u8)))
         );
 
         Ok(())
