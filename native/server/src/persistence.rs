@@ -57,8 +57,8 @@ impl SqliteStorage {
 
 impl SqliteStorage {
     /// Add a new identity to the storage.
-    /// For now, repeated calls should not return an error.
-    // TODO(https://github.com/brongan/brongnal/issues/25) - Return error when attempting to overwrite registration.
+    /// Attempts to overwrite an identity key returns an error.
+    /// Updates to the user's signed pre key are allowed.
     pub async fn register_user(
         &self,
         identity: String,
@@ -67,15 +67,15 @@ impl SqliteStorage {
     ) -> tonic::Result<()> {
         debug!("Adding user \"{identity}\" to the database.");
 
-        self
+        let persisted_ik = self
             .0
             .call(move |connection| {
                 let identity: &str = &identity;
                 debug!("Adding user \"{identity}\" to the database.");
 
-                let _ = connection.execute(
-                    "INSERT INTO user (identity, key, current_pre_key, creation_time) VALUES (?1, ?2, ?3, ?4)",
-                    (
+                connection.execute(
+                    "INSERT OR IGNORE INTO user (identity, key, current_pre_key, creation_time) VALUES (?1, ?2, ?3, ?4)",
+                    params![
                         identity,
                         ik.to_bytes(),
                         spk.encode_to_vec(),
@@ -83,12 +83,19 @@ impl SqliteStorage {
                             .duration_since(UNIX_EPOCH)
                             .unwrap()
                             .as_secs(),
-                    ),
+                    ],
                 )?;
-                Ok(())
-            }
-            )
-            .await.map_err(|e| Status::internal(format!("Failed to register user: {e}")))
+                let ik: [u8; 32] = connection.query_row("SELECT key FROM user where identity = ?1", params![identity], |row|  row.get(0))?;
+                let ik = parse_verifying_key(&ik).unwrap();
+                Ok(ik)
+            })
+            .await.map_err(|e| Status::internal(format!("Failed to register user: {e}")))?;
+        if ik != persisted_ik {
+            return Err(Status::already_exists(
+                "A user is already registered with username: {identity}",
+            ));
+        }
+        Ok(())
     }
 
     /// Replaces the signed pre key for a given identity.
@@ -261,6 +268,49 @@ mod tests {
             storage.get_current_keys(String::from("alice")).await?,
             (alice_ik, alice_spk)
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn register_user_idempotent() -> Result<()> {
+        let conn = Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn.clone()).await?;
+        let alice = X3DHClient::new(conn).await?;
+        let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
+        let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
+        storage
+            .register_user(String::from("alice"), alice_ik, alice_spk.clone())
+            .await?;
+        storage
+            .register_user(String::from("alice"), alice_ik, alice_spk.clone())
+            .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn register_user_overwrite_fails() -> Result<()> {
+        let conn = Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn.clone()).await?;
+        let alice = X3DHClient::new(conn).await?;
+        let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
+        let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
+        storage
+            .register_user(String::from("alice"), alice_ik, alice_spk.clone())
+            .await?;
+
+        let alice2 = X3DHClient::new(Connection::open_in_memory().await?).await?;
+        let alice2_ik = VerifyingKey::from(&alice2.get_ik().await.unwrap());
+
+        assert_eq!(
+            storage
+                .register_user(String::from("alice"), alice2_ik, alice_spk.clone())
+                .await
+                .err()
+                .map(|e| e.code()),
+            Some(Code::AlreadyExists)
+        );
+
         Ok(())
     }
 
