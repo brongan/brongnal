@@ -20,7 +20,6 @@ use tracing::{debug, error, info, warn};
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use x3dh::{initiate_recv, initiate_send, SignedPreKey, SignedPreKeys};
 
-pub mod memory_client;
 pub mod sqlite_client;
 
 type ClientResult<T> = Result<T, ClientError>;

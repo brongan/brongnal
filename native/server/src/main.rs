@@ -19,7 +19,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 mod brongnal;
 mod gossamer;
-mod memory_brongnal;
 mod sqlite_brongnal;
 
 #[tokio::main]
