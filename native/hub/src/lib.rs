@@ -1,12 +1,9 @@
 use crate::messages::*;
-use client::{listen, message, register, sqlite_client::SqliteClient};
-use client::{DecryptedMessage, X3DHClient};
+use client::{listen, message, register, DecryptedMessage, X3DHClient};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::sync::Mutex;
 use tokio_rusqlite::Connection;
 use tonic::transport::Channel;
 
@@ -45,14 +42,15 @@ async fn await_register_widget() -> Option<String> {
     None
 }
 
-async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<SqliteClient>>) {
+/// Async task that listens to signals from dart for messages and forwards them to the server.
+async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<X3DHClient>) {
     let receiver = SendMessage::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
         debug_print!("Rust received message from flutter!: {}", req.message());
         match message(
             &mut stub,
-            client.clone(),
+            &client,
             req.sender().to_owned(),
             req.receiver(),
             req.message(),
@@ -70,7 +68,7 @@ async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<Mutex<Sqli
 
 async fn decrypt_messages(
     stub: BrongnalClient<Channel>,
-    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
+    x3dh_client: Arc<X3DHClient>,
     name: String,
     tx: Sender<DecryptedMessage>,
 ) {
@@ -111,11 +109,11 @@ async fn main() {
 
     let db_path = db_dir.join("keys.sqlite");
     debug_print!("Database Path: {db_path:?}");
-    let client = Arc::new(Mutex::new(
-        SqliteClient::new(Connection::open(db_path).await.expect("open database"))
+    let client = Arc::new(
+        X3DHClient::new(Connection::open(db_path).await.expect("open database"))
             .await
             .expect("init database"),
-    ));
+    );
 
     while username.is_none() {
         username = await_register_widget().await;
@@ -124,7 +122,7 @@ async fn main() {
     let username = username.unwrap();
 
     debug_print!("Registering with username: {}", username);
-    match register(&mut stub, client.clone(), username.clone()).await {
+    match register(&mut stub, &client.clone(), username.clone()).await {
         Ok(_) => {
             debug_print!("Registered {username}");
             RegisterUserResponse {

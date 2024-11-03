@@ -1,5 +1,4 @@
-use crate::{ClientError, ClientResult, X3DHClient};
-use async_trait::async_trait;
+use crate::{ClientError, ClientResult};
 use chacha20poly1305::aead::OsRng;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
@@ -18,7 +17,7 @@ enum KeyType {
     OneTimePre = 2,
 }
 
-pub struct SqliteClient {
+pub struct X3DHClient {
     connection: tokio_rusqlite::Connection,
 }
 
@@ -131,8 +130,8 @@ fn opk_count(connection: &Connection) -> rusqlite::Result<u32> {
     )
 }
 
-impl SqliteClient {
-    pub async fn new(connection: tokio_rusqlite::Connection) -> ClientResult<SqliteClient> {
+impl X3DHClient {
+    pub async fn new(connection: tokio_rusqlite::Connection) -> ClientResult<X3DHClient> {
         connection
             .call(|connection| {
                 create_key_table(connection)?;
@@ -143,15 +142,14 @@ impl SqliteClient {
             .await
             .map_err(ClientError::TokioSqlite)?;
 
-        let sqlite_client = SqliteClient { connection };
+        let sqlite_client = X3DHClient { connection };
         Ok(sqlite_client)
     }
 }
 
-#[async_trait]
-impl X3DHClient for SqliteClient {
-    async fn fetch_wipe_opk(
-        &mut self,
+impl X3DHClient {
+    pub async fn fetch_wipe_opk(
+        &self,
         one_time_prekey: X25519PublicKey,
     ) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
@@ -171,7 +169,7 @@ impl X3DHClient for SqliteClient {
         Ok(X25519StaticSecret::from(key))
     }
 
-    async fn get_ik(&self) -> ClientResult<SigningKey> {
+    pub async fn get_ik(&self) -> ClientResult<SigningKey> {
         debug!("Loading identity key.");
         self.connection
             .call(|connection| Ok(load_identity_key(connection)?))
@@ -179,7 +177,7 @@ impl X3DHClient for SqliteClient {
             .ok_or(ClientError::GetIdentityKey)
     }
 
-    async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
+    pub async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
         let pubkey = base64::encode(pre_key.to_bytes());
         debug!("Loading pre key: {pubkey}");
@@ -191,7 +189,7 @@ impl X3DHClient for SqliteClient {
         Ok(X25519StaticSecret::from(key))
     }
 
-    async fn get_spk(&self) -> ClientResult<SignedPreKey> {
+    pub async fn get_spk(&self) -> ClientResult<SignedPreKey> {
         self.connection
             .call(|connection| {
                 let pre_key = load_pre_key(connection)?.unwrap();
@@ -210,7 +208,7 @@ impl X3DHClient for SqliteClient {
             .map_err(ClientError::TokioSqlite)
     }
 
-    async fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys> {
+    pub async fn create_opks(&self, num_keys: u32) -> ClientResult<SignedPreKeys> {
         debug!("Creating {num_keys} one time pre keys!");
         let ik: SigningKey = self
             .connection
@@ -240,7 +238,7 @@ impl X3DHClient for SqliteClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::sqlite_client::*;
+    use crate::client::*;
     use anyhow::anyhow;
     use anyhow::Result;
     use rusqlite::Connection;
@@ -296,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn fetch_pre_key() -> Result<()> {
         let connection = tokio_rusqlite::Connection::open_in_memory().await?;
-        let client = SqliteClient::new(connection).await?;
+        let client = X3DHClient::new(connection).await?;
         let spk = client.get_spk().await?;
         client.get_pre_key(spk.pre_key).await?;
         Ok(())
@@ -305,7 +303,7 @@ mod tests {
     #[tokio::test]
     async fn client_stuff() -> Result<()> {
         let conn = tokio_rusqlite::Connection::open_in_memory().await?;
-        let client = SqliteClient::new(conn).await?;
+        let client = X3DHClient::new(conn).await?;
         let _ik = client.get_ik().await?;
         let _spk = client.get_spk().await?;
 
