@@ -1,14 +1,13 @@
 use crate::gossamer::InMemoryGossamer;
 use brongnal::BrongnalController;
+use persistence::SqliteStorage;
 use proto::gossamer::gossamer_server::GossamerServer;
 use proto::service::brongnal_server::BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
 use sentry::ClientInitGuard;
-use sqlite_brongnal::SqliteStorage;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 use tokio_rusqlite::Connection;
 use tonic::transport::Server;
 use tonic_reflection::server::Builder;
@@ -19,7 +18,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 mod brongnal;
 mod gossamer;
-mod sqlite_brongnal;
+mod persistence;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -59,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Database Path: {}", db_path.display());
     let connection = Connection::open(db_path).await?;
-    let controller = BrongnalController::new(Arc::new(SqliteStorage::new(connection).await?));
+    let controller = BrongnalController::new(SqliteStorage::new(connection).await?);
 
     info!("Brongnal Server listening at: {server_addr}");
 

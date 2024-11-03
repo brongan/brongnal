@@ -1,26 +1,22 @@
 use anyhow::Context;
-use async_trait::async_trait;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
-use ed25519_dalek::SigningKey;
+pub use client::X3DHClient;
 use proto::service::brongnal_client::BrongnalClient;
 use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
-use protocol::x3dh::{self, X3DHError};
+use protocol::x3dh::{initiate_recv, initiate_send, Message, X3DHError};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
 use tonic::transport::Channel;
 use tonic::Streaming;
 use tracing::{debug, error, info, warn};
-use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
-use x3dh::{initiate_recv, initiate_send, SignedPreKey, SignedPreKeys};
 
-pub mod sqlite_client;
+pub mod client;
 
 type ClientResult<T> = Result<T, ClientError>;
 
@@ -46,15 +42,6 @@ pub enum ClientError {
     Send(#[from] SendError<DecryptedMessage>),
     #[error("x3dh error: {0}")]
     X3DH(#[from] X3DHError),
-}
-
-#[async_trait]
-pub trait X3DHClient {
-    async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret>;
-    async fn fetch_wipe_opk(&mut self, opk: X25519PublicKey) -> ClientResult<X25519StaticSecret>;
-    async fn get_ik(&self) -> ClientResult<SigningKey>;
-    async fn get_spk(&self) -> ClientResult<SignedPreKey>;
-    async fn create_opks(&mut self, num_keys: u32) -> ClientResult<SignedPreKeys>;
 }
 
 #[allow(dead_code)]
@@ -89,9 +76,11 @@ pub struct DecryptedMessage {
     pub message: Vec<u8>,
 }
 
+/// Should be spawned as an async task that opens a stream of messages from the server, decrypts
+/// them, and sends the decrypted messages to `tx`.
 pub async fn listen(
     mut stub: BrongnalClient<Channel>,
-    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
+    x3dh_client: Arc<X3DHClient>,
     name: String,
     tx: Sender<DecryptedMessage>,
 ) -> ClientResult<()> {
@@ -103,7 +92,7 @@ pub async fn listen(
     if let Err(e) = &stream {
         error!("Failed to retrieve messages: {e}");
     }
-    if let Err(e) = get_messages(stream?.into_inner(), x3dh_client, tx).await {
+    if let Err(e) = get_messages(stream?.into_inner(), &x3dh_client, tx).await {
         error!("get_messages terminated with: {e}");
         return Err(e);
     }
@@ -112,12 +101,11 @@ pub async fn listen(
 
 pub async fn register(
     stub: &mut BrongnalClient<Channel>,
-    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
+    x3dh_client: &X3DHClient,
     name: String,
 ) -> ClientResult<()> {
     debug!("Registering {name}!");
     let request = {
-        let mut x3dh_client = x3dh_client.lock().await;
         let ik = x3dh_client
             .get_ik()
             .await?
@@ -138,7 +126,7 @@ pub async fn register(
 
 pub async fn message(
     stub: &mut BrongnalClient<Channel>,
-    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
+    x3dh_client: &X3DHClient,
     sender_identity: String,
     recipient_identity: &str,
     message: &str,
@@ -151,7 +139,7 @@ pub async fn message(
     let (_sk, message) = initiate_send(
         response.into_inner().try_into()?,
         sender_identity,
-        &x3dh_client.lock().await.get_ik().await?,
+        &x3dh_client.get_ik().await?,
         message,
     )?;
     debug!("Sending message: {message}");
@@ -166,13 +154,12 @@ pub async fn message(
 // TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.
 pub async fn get_messages(
     mut stream: Streaming<MessageProto>,
-    x3dh_client: Arc<Mutex<dyn X3DHClient + Send>>,
+    x3dh_client: &X3DHClient,
     tx: Sender<DecryptedMessage>,
 ) -> ClientResult<()> {
     while let Some(message) = stream.message().await? {
         let res = {
-            let message: x3dh::Message = message.try_into()?;
-            let mut x3dh_client = x3dh_client.lock().await;
+            let message: Message = message.try_into()?;
             debug!("Received Message Proto: {message}");
             let opk = if let Some(opk) = message.opk {
                 Some(x3dh_client.fetch_wipe_opk(opk).await?)

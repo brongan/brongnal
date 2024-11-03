@@ -1,4 +1,4 @@
-use async_trait::async_trait;
+use crate::persistence::SqliteStorage;
 use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_server::Brongnal;
 use proto::service::Message as MessageProto;
@@ -22,47 +22,13 @@ use x25519_dalek::PublicKey as X25519PublicKey;
 
 pub type CurrentKeys = (VerifyingKey, SignedPreKeyProto);
 
-#[async_trait]
-pub trait Storage {
-    /// Add a new identity to the storage.
-    /// For now, repeated calls should not return an error.
-    // TODO(https://github.com/brongan/brongnal/issues/25) - Return error when attempting to overwrite registration.
-    async fn register_user(
-        &self,
-        identity: String,
-        ik: VerifyingKey,
-        spk: SignedPreKeyProto,
-    ) -> tonic::Result<()>;
-
-    /// Replaces the signed pre key for a given identity.
-    // TODO(https://github.com/brongan/brongnal/issues/27) -  Implement signed pre key rotation.
-    async fn update_spk(&self, identity: String, pre_key: SignedPreKeyProto) -> tonic::Result<()>;
-
-    /// Appends new unburnt one time pre keys for others to message a given identity.
-    async fn add_opks(&self, identity: String, pre_keys: Vec<X25519PublicKey>)
-        -> tonic::Result<()>;
-
-    /// Retrieves the identity key and signed pre key for a given identity.
-    /// A client must first invoke this before messaging a peer.
-    async fn get_current_keys(&self, identity: String) -> tonic::Result<CurrentKeys>;
-
-    /// Retrieve a one time pre key for an identity.
-    async fn pop_opk(&self, identity: String) -> tonic::Result<Option<X25519PublicKey>>;
-
-    /// Enqueue a message for a given recipient.
-    async fn add_message(&self, recipient: String, message: MessageProto) -> tonic::Result<()>;
-
-    /// Retrieve enqueued messages for a given identity.
-    async fn get_messages(&self, identity: String) -> tonic::Result<Vec<MessageProto>>;
-}
-
 pub struct BrongnalController {
-    storage: Arc<dyn Storage + Send + Sync + 'static>,
+    storage: SqliteStorage,
     receivers: Arc<Mutex<HashMap<String, Sender<tonic::Result<MessageProto>>>>>,
 }
 
 impl BrongnalController {
-    pub fn new(storage: Arc<dyn Storage + Send + Sync + 'static>) -> BrongnalController {
+    pub fn new(storage: SqliteStorage) -> BrongnalController {
         BrongnalController {
             storage,
             receivers: Arc::new(Mutex::new(HashMap::new())),

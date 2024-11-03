@@ -1,6 +1,4 @@
 use crate::brongnal::CurrentKeys;
-use crate::brongnal::Storage;
-use async_trait::async_trait;
 use ed25519_dalek::VerifyingKey;
 use prost::Message;
 use proto::parse_verifying_key;
@@ -152,9 +150,11 @@ impl SqliteStorage {
     }
 }
 
-#[async_trait]
-impl Storage for SqliteStorage {
-    async fn register_user(
+impl SqliteStorage {
+    /// Add a new identity to the storage.
+    /// For now, repeated calls should not return an error.
+    // TODO(https://github.com/brongan/brongnal/issues/25) - Return error when attempting to overwrite registration.
+    pub async fn register_user(
         &self,
         identity: String,
         ik: VerifyingKey,
@@ -169,7 +169,9 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
-    async fn update_spk(&self, identity: String, spk: SignedPreKeyProto) -> tonic::Result<()> {
+    /// Replaces the signed pre key for a given identity.
+    // TODO(https://github.com/brongan/brongnal/issues/27) -  Implement signed pre key rotation.
+    pub async fn update_spk(&self, identity: String, spk: SignedPreKeyProto) -> tonic::Result<()> {
         debug!("Updating pre key for user \"{identity}\" to the database.");
         let identity_copy = identity.clone();
 
@@ -182,7 +184,12 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
-    async fn add_opks(&self, identity: String, opks: Vec<X25519PublicKey>) -> tonic::Result<()> {
+    /// Appends new unburnt one time pre keys for others to message a given identity.
+    pub async fn add_opks(
+        &self,
+        identity: String,
+        opks: Vec<X25519PublicKey>,
+    ) -> tonic::Result<()> {
         debug!(
             "Adding {} one time keys for user \"{identity}\" to the database.",
             opks.len(),
@@ -210,7 +217,9 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
-    async fn get_current_keys(&self, identity: String) -> tonic::Result<CurrentKeys> {
+    /// Retrieves the identity key and signed pre key for a given identity.
+    /// A client must first invoke this before messaging a peer.
+    pub async fn get_current_keys(&self, identity: String) -> tonic::Result<CurrentKeys> {
         debug!("Retrieving pre keys for user \"{identity}\" from the database.");
 
         self.0
@@ -219,7 +228,8 @@ impl Storage for SqliteStorage {
             .map_err(|_| Status::not_found("user not found"))
     }
 
-    async fn pop_opk(&self, identity: String) -> tonic::Result<Option<X25519PublicKey>> {
+    /// Retrieve a one time pre key for an identity.
+    pub async fn pop_opk(&self, identity: String) -> tonic::Result<Option<X25519PublicKey>> {
         debug!("Popping one time key for user \"{identity}\" from the database.");
 
         self.0
@@ -228,7 +238,8 @@ impl Storage for SqliteStorage {
             .map_err(|e| Status::not_found(format!("failed to query for pre_key: {e}")))
     }
 
-    async fn add_message(&self, recipient: String, message: MessageProto) -> tonic::Result<()> {
+    /// Enqueue a message for a given recipient.
+    pub async fn add_message(&self, recipient: String, message: MessageProto) -> tonic::Result<()> {
         debug!("Enqueueing message for user {recipient} in database.");
 
         self.0
@@ -240,7 +251,8 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
-    async fn get_messages(&self, identity: String) -> tonic::Result<Vec<MessageProto>> {
+    /// Retrieve enqueued messages for a given identity.
+    pub async fn get_messages(&self, identity: String) -> tonic::Result<Vec<MessageProto>> {
         debug!("Retrieving messages for \"{identity}\" from the database.");
 
         self.0
@@ -252,16 +264,16 @@ impl Storage for SqliteStorage {
 
 #[cfg(test)]
 mod tests {
-    use crate::sqlite_brongnal::*;
+    use crate::persistence::*;
     use anyhow::Result;
-    use client::{sqlite_client::SqliteClient, X3DHClient};
+    use client::X3DHClient;
     use tonic::Code;
 
     #[tokio::test]
     async fn register_user_get_keys_success() -> Result<()> {
         let conn = tokio_rusqlite::Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
-        let alice = SqliteClient::new(conn).await?;
+        let alice = X3DHClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
         storage
@@ -302,7 +314,7 @@ mod tests {
         let bob_name = String::from("bob");
         let conn = tokio_rusqlite::Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
-        let mut bob = SqliteClient::new(conn).await?;
+        let bob = X3DHClient::new(conn).await?;
         let keys = bob.create_opks(1).await?.pre_keys;
         storage
             .register_user(
@@ -334,11 +346,9 @@ mod tests {
 
     #[tokio::test]
     async fn update_spk_success() -> Result<()> {
-        let storage =
-            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
         let conn = tokio_rusqlite::Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
-        let mut bob = SqliteClient::new(conn).await?;
+        let bob = X3DHClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
         let mut bob_spk: SignedPreKeyProto = bob.get_spk().await.unwrap().into();
         storage
@@ -377,7 +387,7 @@ mod tests {
         let bob_name = String::from("bob");
         let conn = tokio_rusqlite::Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
-        let bob = SqliteClient::new(conn).await?;
+        let bob = X3DHClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
         let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().await.unwrap();
         storage

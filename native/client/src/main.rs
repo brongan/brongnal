@@ -1,6 +1,5 @@
 use anyhow::Result;
-use client::sqlite_client::SqliteClient;
-use client::{listen, message, register, DecryptedMessage};
+use client::{listen, message, register, DecryptedMessage, X3DHClient};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use proto::service::brongnal_client::BrongnalClient;
@@ -10,7 +9,7 @@ use std::io::BufReader;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::{env, thread};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio_rusqlite::Connection;
 use tracing::{info, Level};
 use tracing_subscriber::filter::Targets;
@@ -57,11 +56,9 @@ async fn main() -> Result<()> {
     let mut stub = BrongnalClient::connect(addr).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
-    let client = Arc::new(Mutex::new(
-        SqliteClient::new(Connection::open(db_path).await?).await?,
-    ));
+    let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
 
-    register(&mut stub, client.clone(), name.clone()).await?;
+    register(&mut stub, &client.clone(), name.clone()).await?;
 
     println!("NAME MESSAGE");
 
@@ -82,18 +79,14 @@ async fn main() -> Result<()> {
         }
     });
 
-    {
-        let stub = stub.clone();
-        let client = client.clone();
-        tokio::spawn(listen(stub, client, name.clone(), tx));
-    }
+    tokio::spawn(listen(stub.clone(), client.clone(), name.clone(), tx));
 
     loop {
         tokio::select! {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        if let Err(e) = message(&mut stub, client.clone(), name.clone(), &command.to, &command.msg)
+                        if let Err(e) = message(&mut stub, &client.clone(), name.clone(), &command.to, &command.msg)
                             .await {
                                 eprintln!("Failed to send message: {e}");
                         }
