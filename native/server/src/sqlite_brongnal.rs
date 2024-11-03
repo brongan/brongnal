@@ -254,14 +254,14 @@ impl Storage for SqliteStorage {
 mod tests {
     use crate::sqlite_brongnal::*;
     use anyhow::Result;
-    use client::{memory_client::MemoryClient, X3DHClient};
+    use client::{sqlite_client::SqliteClient, X3DHClient};
     use tonic::Code;
 
     #[tokio::test]
     async fn register_user_get_keys_success() -> Result<()> {
-        let storage =
-            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
-        let alice = MemoryClient::new();
+        let conn = tokio_rusqlite::Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn.clone()).await?;
+        let alice = SqliteClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
         storage
@@ -300,9 +300,9 @@ mod tests {
     #[tokio::test]
     async fn retrieve_opk() -> Result<()> {
         let bob_name = String::from("bob");
-        let storage =
-            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
-        let mut bob = MemoryClient::new();
+        let conn = tokio_rusqlite::Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn.clone()).await?;
+        let mut bob = SqliteClient::new(conn).await?;
         let keys = bob.create_opks(1).await?.pre_keys;
         storage
             .register_user(
@@ -336,7 +336,9 @@ mod tests {
     async fn update_spk_success() -> Result<()> {
         let storage =
             SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
-        let mut bob = MemoryClient::new();
+        let conn = tokio_rusqlite::Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn.clone()).await?;
+        let mut bob = SqliteClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
         let mut bob_spk: SignedPreKeyProto = bob.get_spk().await.unwrap().into();
         storage
@@ -373,9 +375,9 @@ mod tests {
     #[tokio::test]
     async fn add_get_message() -> Result<()> {
         let bob_name = String::from("bob");
-        let storage =
-            SqliteStorage::new(tokio_rusqlite::Connection::open_in_memory().await?).await?;
-        let bob = MemoryClient::new();
+        let conn = tokio_rusqlite::Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn.clone()).await?;
+        let bob = SqliteClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
         let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().await.unwrap();
         storage
