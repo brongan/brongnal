@@ -16,7 +16,7 @@ use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use tonic::Streaming;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 pub mod client;
 
@@ -147,7 +147,7 @@ pub async fn register(
     x3dh_client: &X3DHClient,
     name: String,
 ) -> ClientResult<()> {
-    debug!("Registering {name}!");
+    info!("Registering {name}!");
     let request = {
         let ik = x3dh_client
             .get_ik()
@@ -185,7 +185,7 @@ pub async fn send_message(
         &x3dh_client.get_ik().await?,
         message,
     )?;
-    debug!("Sending message: {message}");
+    info!("Sending message: {message}");
     let request = tonic::Request::new(SendMessageRequest {
         recipient_identity: Some(recipient_identity.to_owned()),
         message: Some(message.into()),

@@ -5,7 +5,7 @@ use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
 use rusqlite::{params, Connection};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, info};
+use tracing::info;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use x3dh::{SignedPreKey, SignedPreKeys};
 
@@ -88,7 +88,7 @@ fn insert_pre_keys(
         let pre_key = X25519PublicKey::from(key).to_bytes();
         #[allow(deprecated)]
         let pubkey = base64::encode(pre_key);
-        debug!("Inserting pre key: {pubkey}");
+        info!("Inserting pre key: {pubkey}");
         stmt.execute((
             pre_key,
             key.to_bytes(),
@@ -154,7 +154,7 @@ impl X3DHClient {
     ) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
         let pubkey = base64::encode(one_time_prekey.to_bytes());
-        debug!("Using one time pre key '{pubkey}'",);
+        info!("Using one time pre key '{pubkey}'",);
         let key: [u8; 32] = self
             .connection
             .call(move |connection| {
@@ -170,7 +170,7 @@ impl X3DHClient {
     }
 
     pub async fn get_ik(&self) -> ClientResult<SigningKey> {
-        debug!("Loading identity key.");
+        info!("Loading identity key.");
         self.connection
             .call(|connection| Ok(load_identity_key(connection)?))
             .await?
@@ -180,7 +180,7 @@ impl X3DHClient {
     pub async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
         let pubkey = base64::encode(pre_key.to_bytes());
-        debug!("Loading pre key: {pubkey}");
+        info!("Loading pre key: {pubkey}");
         let key: [u8; 32] = self.connection.call(move |connection| {
             Ok(connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1",
                 params![pre_key.to_bytes()],
@@ -195,7 +195,7 @@ impl X3DHClient {
                 let pre_key = load_pre_key(connection)?.unwrap();
                 #[allow(deprecated)]
                 let pubkey = base64::encode(pre_key.to_bytes());
-                debug!("Signing pre key: {pubkey}");
+                info!("Signing pre key: {pubkey}");
                 Ok(SignedPreKey {
                     pre_key: X25519PublicKey::from(&pre_key),
                     signature: sign_bundle(
@@ -209,7 +209,7 @@ impl X3DHClient {
     }
 
     pub async fn create_opks(&self, num_keys: u32) -> ClientResult<SignedPreKeys> {
-        debug!("Creating {num_keys} one time pre keys!");
+        info!("Creating {num_keys} one time pre keys!");
         let ik: SigningKey = self
             .connection
             .call(|connection| Ok(load_identity_key(connection)?))

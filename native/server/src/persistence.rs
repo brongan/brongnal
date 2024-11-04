@@ -8,7 +8,7 @@ use rusqlite::params;
 use rusqlite::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::Status;
-use tracing::debug;
+use tracing::info;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 pub struct SqliteStorage(tokio_rusqlite::Connection);
@@ -65,13 +65,13 @@ impl SqliteStorage {
         ik: VerifyingKey,
         spk: SignedPreKeyProto,
     ) -> tonic::Result<()> {
-        debug!("Adding user \"{identity}\" to the database.");
+        info!("Adding user \"{identity}\" to the database.");
 
         let persisted_ik = self
             .0
             .call(move |connection| {
                 let identity: &str = &identity;
-                debug!("Adding user \"{identity}\" to the database.");
+                info!("Adding user \"{identity}\" to the database.");
 
                 connection.execute(
                     "INSERT OR IGNORE INTO user (identity, key, current_pre_key, creation_time) VALUES (?1, ?2, ?3, ?4)",
@@ -102,7 +102,7 @@ impl SqliteStorage {
     // TODO(https://github.com/brongan/brongnal/issues/27) -  Implement signed pre key rotation.
     #[allow(dead_code)]
     pub async fn update_spk(&self, identity: String, spk: SignedPreKeyProto) -> tonic::Result<()> {
-        debug!("Updating pre key for user \"{identity}\" to the database.");
+        info!("Updating pre key for user \"{identity}\" to the database.");
         let identity_copy = identity.clone();
 
         self.0
@@ -127,7 +127,7 @@ impl SqliteStorage {
         identity: String,
         opks: Vec<X25519PublicKey>,
     ) -> tonic::Result<()> {
-        debug!(
+        info!(
             "Adding {} one time keys for user \"{identity}\" to the database.",
             opks.len(),
         );
@@ -156,7 +156,7 @@ impl SqliteStorage {
     /// Retrieves the identity key and signed pre key for a given identity.
     /// A client must first invoke this before messaging a peer.
     pub async fn get_current_keys(&self, identity: String) -> tonic::Result<CurrentKeys> {
-        debug!("Retrieving pre keys for user \"{identity}\" from the database.");
+        info!("Retrieving pre keys for user \"{identity}\" from the database.");
 
         self.0
             .call(move |connection| {
@@ -176,7 +176,7 @@ impl SqliteStorage {
 
     /// Retrieve a one time pre key for an identity.
     pub async fn pop_opk(&self, identity: String) -> tonic::Result<Option<X25519PublicKey>> {
-        debug!("Popping one time key for user \"{identity}\" from the database.");
+        info!("Popping one time key for user \"{identity}\" from the database.");
 
         self.0
             .call(move |connection| {
@@ -197,7 +197,7 @@ impl SqliteStorage {
 
     /// Enqueue a message for a given recipient.
     pub async fn add_message(&self, recipient: String, message: MessageProto) -> tonic::Result<()> {
-        debug!("Enqueueing message for user {recipient} in database.");
+        info!("Enqueueing message for user {recipient} in database.");
 
         self.0
             .call(move |connection| {
@@ -224,7 +224,7 @@ impl SqliteStorage {
 
     /// Retrieve enqueued messages for a given identity.
     pub async fn get_messages(&self, identity: String) -> tonic::Result<Vec<MessageProto>> {
-        debug!("Retrieving messages for \"{identity}\" from the database.");
+        info!("Retrieving messages for \"{identity}\" from the database.");
 
         self.0
             .call(move |connection| {
