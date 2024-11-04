@@ -56,7 +56,7 @@
             Cmd = [
               "${myServer}/bin/server"
             ];
-            Env = ["RUST_LOG=debug"];
+            Env = ["RUST_LOG=info"];
           };
         };
       in
