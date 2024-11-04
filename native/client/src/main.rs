@@ -1,5 +1,5 @@
 use anyhow::Result;
-use client::{listen, message, register, DecryptedMessage, X3DHClient};
+use client::{get_messages, register, send_message, DecryptedMessage, X3DHClient};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use proto::service::brongnal_client::BrongnalClient;
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::{env, thread};
 use tokio::sync::mpsc;
 use tokio_rusqlite::Connection;
+use tokio_stream::StreamExt;
 use tracing::{info, Level};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
@@ -62,7 +63,6 @@ async fn main() -> Result<()> {
 
     println!("NAME MESSAGE");
 
-    let (tx, mut rx) = mpsc::channel(100);
     let (cli_tx, mut cli_rx) = mpsc::unbounded_channel();
 
     thread::spawn(move || {
@@ -79,14 +79,15 @@ async fn main() -> Result<()> {
         }
     });
 
-    tokio::spawn(listen(stub.clone(), client.clone(), name.clone(), tx));
+    let messages_stream = get_messages(stub.clone(), client.clone(), name.clone());
+    tokio::pin!(messages_stream);
 
     loop {
         tokio::select! {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        if let Err(e) = message(&mut stub, &client.clone(), name.clone(), &command.to, &command.msg)
+                        if let Err(e) = send_message(&mut stub, &client.clone(), name.clone(), &command.to, &command.msg)
                             .await {
                                 eprintln!("Failed to send message: {e}");
                         }
@@ -98,11 +99,14 @@ async fn main() -> Result<()> {
                 }
 
             },
-            msg = rx.recv() => {
+            msg = messages_stream.next() => {
                 match msg {
-                    Some(DecryptedMessage { sender_identity, message }) => {
+                    Some(Ok(DecryptedMessage { sender_identity, message })) => {
                         println!("Received message from {sender_identity}: \"{}\"", String::from_utf8(message).unwrap());
                     },
+                    Some(Err(e)) => {
+                        eprintln!("Failed to receive decrypted message: {e}");
+                    }
                     None =>  {
                         eprintln!("Server terminated connection.");
                         return Ok(())

@@ -1,10 +1,10 @@
 use crate::messages::*;
-use client::{listen, message, register, DecryptedMessage, X3DHClient};
+use client::{get_messages, register, send_message, X3DHClient};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_rusqlite::Connection;
+use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 
 mod messages;
@@ -48,7 +48,7 @@ async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<X3DHClient
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
         debug_print!("Rust received message from flutter!: {}", req.message());
-        match message(
+        match send_message(
             &mut stub,
             &client,
             req.sender().to_owned(),
@@ -66,29 +66,33 @@ async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<X3DHClient
     debug_print!("Lost message connection to flutter!");
 }
 
-async fn decrypt_messages(
+/// Async task that listens messages from the server, decrypts them, and sends them to flutter.
+async fn receive_messages(
     stub: BrongnalClient<Channel>,
     x3dh_client: Arc<X3DHClient>,
     name: String,
-    tx: Sender<DecryptedMessage>,
 ) {
-    if let Err(e) = listen(stub, x3dh_client, name, tx).await {
-        debug_print!("Listen terminated with: {e}");
-    }
-}
-
-async fn send_messages_to_flutter(mut rx: Receiver<DecryptedMessage>) {
-    while let Some(decrypted) = rx.recv().await {
-        let message = String::from_utf8(decrypted.message).ok();
-        if let Some(message) = &message {
-            debug_print!(
-                "[Received Message] {}: {message}",
-                decrypted.sender_identity
-            );
+    let messages = get_messages(stub, x3dh_client, name);
+    tokio::pin!(messages);
+    while let Some(decrypted) = messages.next().await {
+        if let Err(e) = decrypted {
+            debug_print!("[Failed to Decrypt Message]: {e}");
+            continue;
+        }
+        let decrypted = decrypted.unwrap();
+        let sender = decrypted.sender_identity;
+        let message = String::from_utf8(decrypted.message);
+        match &message {
+            Ok(message) => {
+                debug_print!("[Received Message] {sender}: {message}");
+            }
+            Err(_) => {
+                debug_print!("Decrypted message was not UTF-8 encoded.");
+            }
         }
         ReceivedMessage {
-            sender: Some(decrypted.sender_identity),
-            message,
+            sender: Some(sender),
+            message: message.ok(),
         }
         .send_signal_to_dart();
     }
@@ -97,7 +101,7 @@ async fn send_messages_to_flutter(mut rx: Receiver<DecryptedMessage>) {
 
 #[tokio::main]
 async fn main() {
-    // TODO gracefully handle a lack of network connection.
+    // TODO(https://github.com/brongan/brongnal/issues/36): gracefully handle a lack of network connection.
     let mut stub = BrongnalClient::connect("https://signal.brongan.com:443")
         .await
         .unwrap();
@@ -136,11 +140,7 @@ async fn main() {
     }
 
     tokio::spawn(send_messages(stub.clone(), client.clone()));
-
-    // TODO these really should not be separate async tasks.
-    let (tx, rx) = mpsc::channel(100);
-    tokio::spawn(decrypt_messages(stub.clone(), client.clone(), username, tx));
-    tokio::spawn(send_messages_to_flutter(rx));
+    tokio::spawn(receive_messages(stub, client, username));
 
     rinf::dart_shutdown().await;
 }

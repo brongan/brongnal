@@ -1,4 +1,5 @@
 use anyhow::Context;
+use async_stream::try_stream;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
 use proto::service::brongnal_client::BrongnalClient;
@@ -11,7 +12,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
-use tokio::sync::mpsc::Sender;
+use tokio_stream::Stream;
+use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use tonic::Streaming;
 use tracing::{debug, error, info, warn};
@@ -76,27 +78,68 @@ pub struct DecryptedMessage {
     pub message: Vec<u8>,
 }
 
-/// Should be spawned as an async task that opens a stream of messages from the server, decrypts
-/// them, and sends the decrypted messages to `tx`.
-pub async fn listen(
+fn into_message_stream(
+    mut stream: Streaming<MessageProto>,
+) -> impl Stream<Item = ClientResult<Message>> {
+    try_stream! {
+        while let Some(message) = stream.message().await? {
+            let message: Message = message.try_into()?;
+            yield message;
+        }
+    }
+}
+
+/// Takes a Brongnal RPC Client and an X3DH client and returns a stream of decrypted messages.
+pub fn get_messages(
     mut stub: BrongnalClient<Channel>,
     x3dh_client: Arc<X3DHClient>,
     name: String,
-    tx: Sender<DecryptedMessage>,
-) -> ClientResult<()> {
-    let stream = stub
-        .retrieve_messages(RetrieveMessagesRequest {
-            identity: Some(name),
-        })
+) -> impl Stream<Item = ClientResult<DecryptedMessage>> {
+    try_stream! {
+        let stream = stub
+            .retrieve_messages(RetrieveMessagesRequest {
+                identity: Some(name),
+            })
         .await;
-    if let Err(e) = &stream {
-        error!("Failed to retrieve messages: {e}");
+        let messages = into_message_stream(stream?.into_inner());
+        tokio::pin!(messages);
+        while let Some(message) = messages.next().await {
+            if let Err(e) = message {
+                warn!("Message was not validly serialized: {e}");
+                continue;
+            }
+            let message = message.unwrap();
+            let res = {
+                let opk = if let Some(opk) = message.opk {
+                    Some(x3dh_client.fetch_wipe_opk(opk).await?)
+                } else {
+                    None
+                };
+                // TODO: Caller must delete the session keys with the peer on an error.
+                let (_sk, decrypted) = initiate_recv(
+                    &x3dh_client.get_ik().await?,
+                    &x3dh_client.get_pre_key(message.pre_key).await?,
+                    &message.sender_ik,
+                    message.ek,
+                    opk,
+                    &message.ciphertext,
+                )?;
+                Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
+                    // TODO(https://github.com/brongan/brongnal/issues/15): Don't blindly trust the
+                    // sender's claimed identity.
+                    sender_identity: message.sender_identity,
+                    message: decrypted,
+                })
+            };
+            match res {
+                Ok(decrypted) => yield decrypted,
+                Err(e) => {
+                    error!("Failed to decrypt message: {e}");
+                }
+            }
+        }
+        warn!("Server terminated message stream.");
     }
-    if let Err(e) = get_messages(stream?.into_inner(), &x3dh_client, tx).await {
-        error!("get_messages terminated with: {e}");
-        return Err(e);
-    }
-    Ok(())
 }
 
 pub async fn register(
@@ -124,7 +167,7 @@ pub async fn register(
     Ok(())
 }
 
-pub async fn message(
+pub async fn send_message(
     stub: &mut BrongnalClient<Channel>,
     x3dh_client: &X3DHClient,
     sender_identity: String,
@@ -148,46 +191,5 @@ pub async fn message(
         message: Some(message.into()),
     });
     stub.send_message(request).await?;
-    Ok(())
-}
-
-// TODO(https://github.com/brongan/brongnal/issues/23) - Replace with stream of decrypted messages.
-pub async fn get_messages(
-    mut stream: Streaming<MessageProto>,
-    x3dh_client: &X3DHClient,
-    tx: Sender<DecryptedMessage>,
-) -> ClientResult<()> {
-    while let Some(message) = stream.message().await? {
-        let res = {
-            let message: Message = message.try_into()?;
-            debug!("Received Message Proto: {message}");
-            let opk = if let Some(opk) = message.opk {
-                Some(x3dh_client.fetch_wipe_opk(opk).await?)
-            } else {
-                None
-            };
-            let (_sk, decrypted) = initiate_recv(
-                &x3dh_client.get_ik().await?,
-                &x3dh_client.get_pre_key(message.pre_key).await?,
-                &message.sender_ik,
-                message.ek,
-                opk,
-                &message.ciphertext,
-            )?;
-            Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
-                // TODO(https://github.com/brongan/brongnal/issues/15): Don't blindly trust the
-                // sender's claimed identity.
-                sender_identity: message.sender_identity,
-                message: decrypted,
-            })
-        };
-        match res {
-            Ok(decrypted) => tx.send(decrypted).await?,
-            Err(e) => {
-                error!("Failed to decrypt message: {e}");
-            }
-        }
-    }
-    warn!("Server terminated message stream.");
     Ok(())
 }
