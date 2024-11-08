@@ -52,7 +52,7 @@ class ChatScreen extends StatelessWidget {
   }
 }
 
-class SendMessageWidget extends StatelessWidget {
+class SendMessageWidget extends StatefulWidget {
   const SendMessageWidget({
     super.key,
     required this.self,
@@ -64,6 +64,25 @@ class SendMessageWidget extends StatelessWidget {
   final ConversationModel conversationModel;
 
   @override
+  State<SendMessageWidget> createState() => _SendMessageWidgetState();
+}
+
+class _SendMessageWidgetState extends State<SendMessageWidget> {
+  late FocusNode myFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    myFocusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    myFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     TextEditingController messageInput = TextEditingController();
     return Row(
@@ -72,6 +91,7 @@ class SendMessageWidget extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: TextField(
+              focusNode: myFocusNode,
               controller: messageInput,
               decoration: InputDecoration(
                 border:
@@ -85,12 +105,14 @@ class SendMessageWidget extends StatelessWidget {
               textInputAction: TextInputAction.send,
               onSubmitted: (value) {
                 SendMessage(
-                        sender: self,
-                        receiver: peer,
+                        sender: widget.self,
+                        receiver: widget.peer,
                         message: messageInput.text)
                     .sendSignalToRust();
-                conversationModel.addSentMessage(messageInput.text, self, peer);
+                widget.conversationModel.addSentMessage(
+                    messageInput.text, widget.self, widget.peer);
                 messageInput.clear();
+                myFocusNode.requestFocus();
               },
             ),
           ),
