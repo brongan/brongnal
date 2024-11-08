@@ -1,0 +1,2 @@
+upload-keystore.jks filter=git-crypt diff=git-crypt
+android/key.properties filter=git-crypt diff=git-crypt
