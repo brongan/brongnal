@@ -6,6 +6,7 @@ use proto::service::Message as MessageProto;
 use proto::service::SignedPreKey as SignedPreKeyProto;
 use rusqlite::params;
 use rusqlite::Error;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::Status;
 use tracing::info;
@@ -43,6 +44,15 @@ impl SqliteStorage {
                         message BLOB PRIMARY KEY,
                         user_identity STRING NOT NULL,
                         creation_time integer NOT NULL,
+                        FOREIGN KEY(user_identity) REFERENCES user(identity)
+                    )",
+                    (),
+                )?;
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS firebasetoken (
+                        user_identity STRING PRIMARY KEY,
+                        token STRING NOT NULL,
+                        insertion_time integer NOT NULL,
                         FOREIGN KEY(user_identity) REFERENCES user(identity)
                     )",
                     (),
@@ -244,6 +254,51 @@ impl SqliteStorage {
             .await
             .map_err(|_| Status::internal("Failed to query messages."))
     }
+
+    /// Set the current Firebase Cloud Messaging token for a user.
+    pub async fn set_fcm_token(&self, identity: String, token: String) -> tonic::Result<()> {
+        info!("Inserting Firebase Cloud Messaging token: \"{token}\" for \"{identity}\" into the database.");
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        self.0
+            .call(move |connection| {
+                connection.execute("INSERT INTO firebase_token (user_identity, token, insertion_time) VALUES (?1, ?2, ?3)", params![identity, token, now])?;
+                Ok(())
+            }).await
+            .map_err(|_| Status::not_found("user not found"))
+    }
+
+    /// Returns the current Firebase Cloud Messaging token for a user.
+    pub async fn get_fcm_token(
+        &self,
+        identity: String,
+        max_age: Duration,
+    ) -> tonic::Result<Option<String>> {
+        info!("Looking up Firebase Cloud Messaging token for \"{identity}\" in the database.");
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let min_time = now.saturating_sub(max_age.as_secs());
+
+        self.0
+            .call(move |connection| {
+                let token: Option<String> = match connection.query_row(
+                    "SELECT token FROM firebase_token WHERE user_identity = ?1 AND insertion_time > ?2",
+                    params![identity, min_time],
+                    |row| row.get(0),
+                ) {
+                    Ok(value) => Ok(Some(value)),
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                    Err(e) => Err(e),
+                }?;
+                Ok(token)
+            })
+            .await
+            .map_err(|_| Status::internal("Failed to query messages."))
+    }
 }
 
 #[cfg(test)]
@@ -431,6 +486,22 @@ mod tests {
             .await?;
         assert_eq!(storage.get_messages(bob_name).await?, vec![message_proto]);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn set_get_fcm_token() -> Result<()> {
+        let identity = String::from("bob");
+        let token = String::from("abcd123");
+        let conn = Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn).await?;
+        storage.set_fcm_token(identity.clone(), token.clone());
+        assert_eq!(
+            storage
+                .get_fcm_token(identity, Duration::new(2000, 0))
+                .await?,
+            Some(token)
+        );
         Ok(())
     }
 }

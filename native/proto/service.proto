@@ -34,6 +34,9 @@ message RegisterPreKeyBundleRequest {
 	optional SignedPreKey signed_pre_key = 3;
 
 	optional SignedPreKeys one_time_key_bundle = 4;
+
+	// Firebase Cloud Messaging token for notifications.
+	optional string fcmToken = 5;
 }
 
 message RegisterPreKeyBundleResponse {}

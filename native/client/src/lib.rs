@@ -146,6 +146,7 @@ pub async fn register(
     stub: &mut BrongnalClient<Channel>,
     x3dh_client: &X3DHClient,
     name: String,
+    fcm_token: Option<String>,
 ) -> ClientResult<()> {
     info!("Registering {name}!");
     let request = {
@@ -160,6 +161,7 @@ pub async fn register(
             identity: Some(name.clone()),
             signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
             one_time_key_bundle: Some(x3dh_client.create_opks(100).await?.into()),
+            fcm_token,
         })
     };
     stub.register_pre_key_bundle(request).await?;

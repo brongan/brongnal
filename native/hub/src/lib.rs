@@ -24,22 +24,15 @@ async fn await_rust_startup() -> Option<(PathBuf, Option<String>)> {
     None
 }
 
-async fn await_register_widget() -> Option<String> {
+async fn await_register_widget() -> (Option<String>, Option<String>) {
     let receiver = RegisterUserRequest::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let message: RegisterUserRequest = dart_signal.message;
-        match message.username {
-            Some(username) => {
-                debug_print!("Received request to register {username}");
-                return Some(username);
-            }
-            None => {
-                debug_print!("Received empty register request.");
-            }
-        }
+        debug_print!("Received request to register {message:?}");
+        return (message.username, message.fcm_token);
     }
     debug_print!("Lost message connection to flutter!");
-    None
+    (None, None)
 }
 
 /// Async task that listens to signals from dart for messages and forwards them to the server.
@@ -119,14 +112,15 @@ async fn main() {
             .expect("init database"),
     );
 
+    let mut fcm_token: Option<String> = None;
     while username.is_none() {
-        username = await_register_widget().await;
+        (username, fcm_token) = await_register_widget().await;
         debug_print!("Registered from register widget: {username:?}");
     }
     let username = username.unwrap();
 
     debug_print!("Registering with username: {}", username);
-    match register(&mut stub, &client.clone(), username.clone()).await {
+    match register(&mut stub, &client.clone(), username.clone(), fcm_token).await {
         Ok(_) => {
             debug_print!("Registered {username}");
             RegisterUserResponse {

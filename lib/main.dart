@@ -1,3 +1,5 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import './messages/generated.dart';
 import 'dart:io' show Platform, Directory;
 import 'messages/brongnal.pb.dart';
@@ -17,7 +19,25 @@ import 'package:rinf/rinf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xdg_directories/xdg_directories.dart';
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print("Handling a background message: ${message.messageId}");
+  await initializeRust(assignRustSignal);
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  final username = prefs.getString("username");
+
+  Directory databaseDirectory;
+  try {
+    databaseDirectory = Directory(p.join(dataHome.path, "brongnal"));
+  } on StateError catch (_) {
+    databaseDirectory = await getApplicationCacheDirectory();
+  }
+  RustStartup(databaseDirectory: databaseDirectory.path, username: username)
+      .sendSignalToRust();
+}
+
 void main() async {
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   setupWindow();
   await initializeRust(assignRustSignal);
 
@@ -30,6 +50,7 @@ void main() async {
   } on StateError catch (_) {
     databaseDirectory = await getApplicationCacheDirectory();
   }
+
   RustStartup(databaseDirectory: databaseDirectory.path, username: username)
       .sendSignalToRust();
 
@@ -79,6 +100,7 @@ class BrongnalApp extends StatefulWidget {
 class _BrongnalAppState extends State<BrongnalApp> {
   _BrongnalAppState();
   String? username;
+  late String? fcmToken;
   late ClientChannel _channel;
   late BrongnalClient _stub;
 
@@ -93,6 +115,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
     listenForRegister();
+    setupNotifications();
   }
 
   void listenForRegister() async {
@@ -107,11 +130,41 @@ class _BrongnalAppState extends State<BrongnalApp> {
     }
   }
 
+  void setupNotifications() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+
+    print('User granted permission: ${settings.authorizationStatus}');
+    String? token;
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      token = await messaging.getToken();
+      print('Firebase Token: $token');
+      setState(() {
+        fcmToken = token;
+      });
+    }
+  }
+
+  void listenForPushNotifications() async {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('Got a message whilst in the foreground!');
+      print('Message data: ${message.data}');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final Widget child;
     if (username == null) {
-      child = Register(stub: _stub);
+      child = Register(stub: _stub, fcmToken: fcmToken);
     } else {
       child = Consumer<ConversationModel>(
         builder: (_, model, __) => Home(

@@ -71,7 +71,10 @@ impl BrongnalController {
         self.storage
             .register_user(identity.clone(), ik, spk_proto)
             .await?;
-        self.storage.add_opks(identity, pre_keys).await?;
+        self.storage.add_opks(identity.clone(), pre_keys).await?;
+        if let Some(fcm_token) = request.fcm_token {
+            self.storage.set_fcm_token(identity, fcm_token).await?;
+        }
         Ok(RegisterPreKeyBundleResponse {})
     }
 

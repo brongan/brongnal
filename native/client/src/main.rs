@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
 
-    register(&mut stub, &client.clone(), name.clone()).await?;
+    register(&mut stub, &client.clone(), name.clone(), None).await?;
 
     println!("NAME MESSAGE");
 

@@ -3,12 +3,10 @@ import 'package:brongnal_app/messages/brongnal.pb.dart';
 import 'package:flutter/material.dart';
 
 class Register extends StatelessWidget {
-  const Register({
-    super.key,
-    required this.stub,
-  });
+  const Register({super.key, required this.stub, required this.fcmToken});
 
   final BrongnalClient stub;
+  final String? fcmToken;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +41,8 @@ class Register extends StatelessWidget {
                   style: TextStyle(
                       color: Colors.white, fontSize: 36, fontFamily: 'Roboto')),
               onPressed: () async {
-                RegisterUserRequest(username: usernameInput.text)
+                RegisterUserRequest(
+                        username: usernameInput.text, fcmToken: fcmToken)
                     .sendSignalToRust();
               },
             ),

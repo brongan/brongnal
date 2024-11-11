@@ -10,6 +10,8 @@ message RustStartup {
 // [DART-SIGNAL]
 message RegisterUserRequest {
 	optional string username = 1;
+	// Firebase Cloud Messaging Token
+	optional string fcmToken = 2;
 }
 
 // [RUST-SIGNAL]
