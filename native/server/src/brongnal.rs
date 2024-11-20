@@ -1,6 +1,8 @@
 use crate::persistence::SqliteStorage;
+use crate::push_notifications::FirebaseCloudMessagingClient;
 use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
 use ed25519_dalek::{Signature, VerifyingKey};
+use prost::Message as _;
 use proto::service::brongnal_service_server::BrongnalService;
 use proto::service::{
     Message as MessageProto, PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest,
@@ -11,6 +13,7 @@ use proto::{parse_verifying_key, parse_x25519_public_key};
 use protocol::bundle::verify_bundle;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
@@ -21,13 +24,18 @@ use x25519_dalek::PublicKey as X25519PublicKey;
 pub struct BrongnalController {
     storage: SqliteStorage,
     receivers: Arc<Mutex<HashMap<VerifyingKey, Sender<Result<MessageProto>>>>>,
+    fcm_client: Option<FirebaseCloudMessagingClient>,
 }
 
 impl BrongnalController {
-    pub fn new(storage: SqliteStorage) -> BrongnalController {
+    pub fn new(
+        storage: SqliteStorage,
+        fcm_client: Option<FirebaseCloudMessagingClient>,
+    ) -> BrongnalController {
         BrongnalController {
             storage,
             receivers: Arc::new(Mutex::new(HashMap::new())),
+            fcm_client,
         }
     }
 
@@ -50,35 +58,60 @@ impl BrongnalController {
         })
     }
 
-    #[instrument(name="", skip(self, ik, spk, pre_keys), fields(ik = base64.encode(ik)))]
+    #[instrument(name="", skip(self, ik, spk, pre_keys), fields(ik = base64.encode(ik), pre_keys = pre_keys.len()))]
     async fn handle_register_pre_key_bundle(
         &self,
         ik: &VerifyingKey,
         spk: SignedPreKeyProto,
         pre_keys: Vec<X25519PublicKey>,
+        fcm_token: Option<String>,
     ) -> Result<RegisterPreKeyBundleResponse> {
         self.storage.add_user(ik, spk).await?;
         self.storage.add_opks(ik, pre_keys).await?;
+        if let Some(fcm_token) = fcm_token {
+            self.storage.set_fcm_token(ik, fcm_token).await?;
+        }
         let num_keys = Some(self.storage.get_one_time_prekey_count(ik).await?);
         info!("Registered Device");
         Ok(RegisterPreKeyBundleResponse { num_keys })
     }
 
-    #[instrument(name="",skip(self, message), fields(ik = base64.encode(recipient)))]
+    #[instrument(name="",skip(self, recipient, message), fields(ik = base64.encode(recipient)))]
     async fn handle_send_message(
         &self,
         recipient: &VerifyingKey,
         message: MessageProto,
     ) -> Result<()> {
+        info!("Sending message.");
         let tx = self.receivers.lock().unwrap().get(&recipient).cloned();
         if let Some(tx) = tx {
             match tx.send(Ok(message.clone())).await {
                 Ok(_) => {
-                    info!("Delivered message.");
+                    info!("Delivered message to cached peer.");
                     return Ok(());
                 }
                 Err(_) => warn!("Failed to deliver message to cached peer."),
             }
+        }
+
+        let two_weeks = Duration::new(2 * 7 * 24 * 60 * 60, 0);
+
+        // TODO: write to database and hit push notification API in parralel?
+        match (
+            self.storage.get_fcm_token(recipient, two_weeks).await?,
+            &self.fcm_client,
+        ) {
+            (Some(fcm_token), Some(fcm_client)) => {
+                match fcm_client
+                    .notify(&fcm_token, &message.encode_to_vec())
+                    .await
+                {
+                    Ok(()) => info!("Delivered Push Notification"),
+                    Err(e) => error!("Failed to send push notification to FCM API: {e}"),
+                }
+            }
+            (None, _) => info!("Recipient device does not have an active FCM token."),
+            (_, None) => info!("Cannot notify: GOOGLE_APPLICATION_CREDENTIALS is unset"),
         }
 
         self.storage.add_message(&recipient, message).await?;
@@ -144,8 +177,9 @@ impl BrongnalService for BrongnalController {
         verify_bundle(&ik, &pre_keys, &signature).map_err(|_| {
             Status::unauthenticated("failed to validate one time prekey bundle signature")
         })?;
+        let fcm_token = request.fcm_token;
         let response = self
-            .handle_register_pre_key_bundle(&ik, spk_proto, pre_keys)
+            .handle_register_pre_key_bundle(&ik, spk_proto, pre_keys, fcm_token)
             .await
             .inspect_err(|e| error!(%e, "Failed to register pre key bundle"))?;
         Ok(Response::new(response))

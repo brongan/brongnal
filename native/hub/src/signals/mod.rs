@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct RustStartup {
     pub database_directory: String,
     pub username: Option<String>,
+    pub fcm_token: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]

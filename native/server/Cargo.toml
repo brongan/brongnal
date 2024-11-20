@@ -9,12 +9,15 @@ base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
+futures = "0.3.30"
+gcp_auth = { version = "0.12.3", features = ["webpki-roots"] }
 prost = "0.12.6"
 proto = { path = "../proto/" }
 protocol = { path = "../protocol/" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
 rusqlite = { version = "0.32.1", features = [] }
 sentry = { version = "0.34.0", default-features = false, features = ["reqwest", "rustls", "backtrace", "contexts", "panic"] }
+serde_json = "1.0.140"
 tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros"] }
 tokio-rusqlite = { version = "0.6.0", features = [] }
 tokio-stream = "0.1.17"
