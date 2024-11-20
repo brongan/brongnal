@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
     info!("Registering {name} with key={ik_str} at {addr}");
-    let user = User::new(brongnal, gossamer, client, name.clone()).await?;
+    let user = User::new(brongnal, gossamer, client, name.clone(), None).await?;
 
     println!("NAME MESSAGE");
 

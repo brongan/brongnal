@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "961697365248",
+    "project_id": "brongnal",
+    "storage_bucket": "brongnal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:961697365248:android:128f976c6b217c0cefc7e5",
+        "android_client_info": {
+          "package_name": "com.brongan.brongnal_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQ4AnEz45sLAWmCfBzX1d-YjjijVnuT5k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

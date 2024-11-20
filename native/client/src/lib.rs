@@ -200,9 +200,10 @@ impl User {
         mut gossamer: GossamerClient,
         x3dh: Arc<X3DHClient>,
         username: String,
+        fcm_token: Option<String>,
     ) -> ClientResult<Self> {
         register_username(&mut gossamer, x3dh.get_ik(), username.clone()).await?;
-        register_device(&mut brongnal, &x3dh).await?;
+        register_device(&mut brongnal, &x3dh, fcm_token).await?;
         Ok(User {
             brongnal,
             gossamer,
@@ -289,7 +290,11 @@ async fn register_username(
     Ok(())
 }
 
-async fn register_device(stub: &mut BrongnalClient, x3dh_client: &X3DHClient) -> ClientResult<()> {
+async fn register_device(
+    stub: &mut BrongnalClient,
+    x3dh_client: &X3DHClient,
+    fcm_token: Option<String>,
+) -> ClientResult<()> {
     let ik = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
     #[allow(deprecated)]
     let ik_str = base64::encode(&ik);
@@ -299,6 +304,7 @@ async fn register_device(stub: &mut BrongnalClient, x3dh_client: &X3DHClient) ->
         identity_key: Some(ik.clone()),
         signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
         one_time_key_bundle: Some(x3dh_client.create_opks(0).await?.into()),
+        fcm_token,
     });
     let res = stub.register_pre_key_bundle(request).await?.into_inner();
     info!("Registered. {} keys remaining!", res.num_keys());
@@ -308,6 +314,7 @@ async fn register_device(stub: &mut BrongnalClient, x3dh_client: &X3DHClient) ->
             identity_key: Some(ik),
             signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
             one_time_key_bundle: Some(x3dh_client.create_opks(100).await?.into()),
+            fcm_token: None,
         });
         stub.register_pre_key_bundle(request).await?.into_inner();
     }

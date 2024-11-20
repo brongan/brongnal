@@ -1,4 +1,5 @@
 use crate::gossamer::InMemoryGossamer;
+use crate::push_notifications::FirebaseCloudMessagingClient;
 use brongnal::BrongnalController;
 use persistence::SqliteStorage;
 use proto::gossamer::gossamer_service_server::GossamerServiceServer as GossamerServer;
@@ -18,6 +19,7 @@ use tracing_subscriber::EnvFilter;
 mod brongnal;
 mod gossamer;
 mod persistence;
+mod push_notifications;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,6 +55,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
     let server_addr = (IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080).into();
 
+    let fcm_client: Option<FirebaseCloudMessagingClient> =
+        if let Ok(service_account_key) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
+            info!("Creating Firebase Cloud Messaging Client");
+            Some(FirebaseCloudMessagingClient::new(&service_account_key).await?)
+        } else {
+            warn!("GOOGLE_APPLICATION_CREDENTIALS is unset. Push notifications are unsupported.");
+            None
+        };
+
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path: PathBuf = if let Ok(db_dir) = std::env::var("DB") {
         [&db_dir, "brongnal.db3"].iter().collect()
@@ -61,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Database Path: {}", db_path.display());
     let connection = Connection::open(db_path).await?;
-    let controller = BrongnalController::new(SqliteStorage::new(connection).await?);
+    let controller = BrongnalController::new(SqliteStorage::new(connection).await?, fcm_client);
 
     info!("Brongnal Server listening at: {server_addr}");
 

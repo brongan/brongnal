@@ -33,6 +33,9 @@ message RegisterPreKeyBundleRequest {
 
   // Optional - Appends the one time key bundle for this `identity_key`.
   optional SignedPreKeys one_time_key_bundle = 3;
+
+  // Firebase Cloud Messaging Token
+  optional string fcmToken = 4;
 }
 
 message RegisterPreKeyBundleResponse {
