@@ -43,6 +43,10 @@ impl BrongnalController {
             .identity
             .clone()
             .ok_or(Status::invalid_argument("request missing identity"))?;
+        if identity.len() > 48 {
+            return Err(Status::invalid_argument("Username too long."));
+        }
+
         let ik = parse_verifying_key(request.identity_key())
             .map_err(|_| Status::invalid_argument("request has invalid identity_key"))?;
         let spk_proto = request
