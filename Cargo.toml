@@ -1,4 +1,3 @@
 [workspace]
 members = ["./native/*", "native/proto"]
 resolver = "2"
-
