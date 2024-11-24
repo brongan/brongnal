@@ -1,5 +1,4 @@
 use ed25519_dalek::{Signature, VerifyingKey};
-use prost::Message;
 use thiserror::Error;
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -22,10 +21,10 @@ pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, KeyError> 
     Ok(X25519PublicKey::from(key))
 }
 pub mod gossamer {
-    tonic::include_proto!("gossamer");
+    tonic::include_proto!("gossamer.v1");
 }
 pub mod service {
-    tonic::include_proto!("service");
+    tonic::include_proto!("service.v1");
 }
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("service_descriptor");
 
@@ -78,7 +77,6 @@ impl TryFrom<MessageProto> for X3DHMessage {
     type Error = tonic::Status;
 
     fn try_from(value: MessageProto) -> Result<Self, Self::Error> {
-        let sender_identity = value.sender_identity().to_owned();
         let sender_ik = parse_verifying_key(value.sender_identity_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid sender_identity_key: {e}")))?;
 
@@ -97,8 +95,7 @@ impl TryFrom<MessageProto> for X3DHMessage {
             None
         };
         Ok(X3DHMessage {
-            sender_identity,
-            sender_ik,
+            ik: sender_ik,
             ek,
             pre_key,
             opk,
@@ -113,8 +110,7 @@ impl TryFrom<MessageProto> for X3DHMessage {
 impl From<X3DHMessage> for MessageProto {
     fn from(val: X3DHMessage) -> Self {
         MessageProto {
-            sender_identity: Some(val.sender_identity),
-            sender_identity_key: Some(val.sender_ik.to_bytes().to_vec()),
+            sender_identity_key: Some(val.ik.to_bytes().to_vec()),
             ephemeral_key: Some(val.ek.to_bytes().to_vec()),
             pre_key: Some(val.pre_key.to_bytes().to_vec()),
             one_time_key: val.opk.map(|opk| opk.to_bytes().to_vec()),
@@ -152,7 +148,7 @@ impl TryInto<PreKeyBundle> for PreKeyBundleProto {
 struct SignedMessage {
     message: gossamer::Message,
     signature: Signature,
-    provider: String,
+    provider: Vec<u8>,
     public_key: VerifyingKey,
 }
 

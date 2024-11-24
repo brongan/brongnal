@@ -1,8 +1,10 @@
 use anyhow::Result;
-use client::{get_messages, register, send_message, DecryptedMessage, X3DHClient};
+use client::{get_keys, get_messages, register, send_message, DecryptedMessage, X3DHClient};
+use ed25519_dalek::VerifyingKey;
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
-use proto::service::brongnal_client::BrongnalClient;
+use proto::gossamer::gossamer_service_client::GossamerServiceClient;
+use proto::service::brongnal_service_client::BrongnalServiceClient;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -54,7 +56,8 @@ async fn main() -> Result<()> {
 
     info!("Registering {name} at {addr}");
 
-    let mut stub = BrongnalClient::connect(addr).await?;
+    let mut stub = BrongnalServiceClient::connect(addr.clone()).await?;
+    let mut gossamer = GossamerServiceClient::connect(addr).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
@@ -79,7 +82,9 @@ async fn main() -> Result<()> {
         }
     });
 
-    let messages_stream = get_messages(stub.clone(), client.clone(), name.clone());
+    let self_key = VerifyingKey::from(&client.get_ik().await?);
+
+    let messages_stream = get_messages(stub.clone(), client.clone(), self_key);
     tokio::pin!(messages_stream);
 
     loop {
@@ -87,9 +92,11 @@ async fn main() -> Result<()> {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        if let Err(e) = send_message(&mut stub, &client.clone(), name.clone(), &command.to, &command.msg)
+                        for key in get_keys(&mut gossamer, &command.to).await? {
+                            if let Err(e) = send_message(&mut stub, &client.clone(), name.clone(), &key, &command.msg)
                             .await {
                                 eprintln!("Failed to send message: {e}");
+                            }
                         }
                     },
                     None => {

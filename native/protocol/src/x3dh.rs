@@ -55,16 +55,14 @@ pub struct X3DHSendKeyAgreement {
 
 /// A `Message` in this packages implementation of the X3DH protocol.
 /// This struct is the output of `Alice` sending a message to `Bob`.
-/// * `sender_identity` is the claimed identity of the center. This must be authenticated.
-/// * `sender_ik` is the identity key of the sender.
+/// * `ik` is the identity key of the sender.
 /// * `ek` is the ephemeral key generated to encrypt the message.
 /// * `pre_key` is the identifier (currently public key) of Bob's prekey that was used.
 /// * `opk` is Bob's one time prekey that (may) have been used.
 /// * `ciphertext` is the encrypted message.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Message {
-    pub sender_identity: String,
-    pub sender_ik: VerifyingKey,
+    pub ik: VerifyingKey,
     pub ek: X25519PublicKey,
     pub pre_key: X25519PublicKey,
     pub opk: Option<X25519PublicKey>,
@@ -76,11 +74,10 @@ impl std::fmt::Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "From: {} with key: {}\n\
+            "From key: {}\n\
             Keys: {}    {}\n\
             Payload: {}\n",
-            self.sender_identity,
-            base64::encode(self.sender_ik),
+            base64::encode(self.ik),
             base64::encode(self.ek),
             self.opk
                 .map(base64::encode)
@@ -187,7 +184,6 @@ fn initiate_send_get_sk(
 //    and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
 pub fn initiate_send(
     prekey_bundle: PreKeyBundle,
-    sender_identity: String,
     sender_ik: &SigningKey,
     message: &[u8],
 ) -> Result<([u8; 32], Message), X3DHError> {
@@ -220,8 +216,7 @@ pub fn initiate_send(
     Ok((
         sk,
         Message {
-            sender_identity,
-            sender_ik: sender_ik.verifying_key(),
+            ik: sender_ik.verifying_key(),
             ek,
             pre_key: prekey_bundle.spk.pre_key,
             opk: prekey_bundle.opk,
@@ -376,14 +371,13 @@ mod tests {
             opk: Some(bob_opk_pub),
             spk: bob_spk.clone(),
         };
-        let (send_sk, message) =
-            initiate_send(bundle, "alice".to_owned(), &alice_ik, plaintext.as_bytes())?;
+        let (send_sk, message) = initiate_send(bundle, &alice_ik, plaintext.as_bytes())?;
 
         // 3. Bob receives and processes Alice's initial message.
         let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
-            &message.sender_ik,
+            &message.ik,
             message.ek,
             Some(bob_opk_priv),
             &message.ciphertext,
@@ -412,14 +406,13 @@ mod tests {
             opk: None,
             spk: bob_spk.clone(),
         };
-        let (send_sk, message) =
-            initiate_send(bundle, "alice".to_owned(), &alice_ik, b"Hello Bob!")?;
+        let (send_sk, message) = initiate_send(bundle, &alice_ik, b"Hello Bob!")?;
 
         // 3. Bob receives and processes Alice's initial message.
         let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
-            &message.sender_ik,
+            &message.ik,
             message.ek,
             None,
             &message.ciphertext,
@@ -444,12 +437,7 @@ mod tests {
             spk: bob_spk.clone(),
         };
         assert_eq!(
-            initiate_send(
-                bundle,
-                "alice".to_owned(),
-                &SigningKey::generate(&mut OsRng),
-                b"Hello Bob!"
-            ),
+            initiate_send(bundle, &SigningKey::generate(&mut OsRng), b"Hello Bob!"),
             Err(X3DHError::SignatureValidation)
         );
 
@@ -472,13 +460,13 @@ mod tests {
             opk: None,
             spk: bob_spk.clone(),
         };
-        let (_, message) = initiate_send(bundle, "alice".to_owned(), &alice_ik, b"Hello Bob!")?;
+        let (_, message) = initiate_send(bundle, &alice_ik, b"Hello Bob!")?;
 
         assert_eq!(
             initiate_recv(
                 &bob_ik,
                 &bob_spk_secret,
-                &message.sender_ik,
+                &message.ik,
                 message.ek,
                 None,
                 b"invalid ciphertext",
