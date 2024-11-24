@@ -2,12 +2,14 @@ use anyhow::Context;
 use async_stream::try_stream;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
+use ed25519_dalek::VerifyingKey;
 use proto::service::brongnal_client::BrongnalClient;
 use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
 use protocol::x3dh::{initiate_recv, initiate_send, Message, X3DHError};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -15,7 +17,7 @@ use tokio::sync::mpsc::error::SendError;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tonic::transport::Channel;
-use tonic::Streaming;
+use tonic::{Request, Streaming};
 use tracing::{error, info, warn};
 
 pub mod client;
@@ -93,12 +95,12 @@ fn into_message_stream(
 pub fn get_messages(
     mut stub: BrongnalClient<Channel>,
     x3dh_client: Arc<X3DHClient>,
-    name: String,
+    peer: VerifyingKey,
 ) -> impl Stream<Item = ClientResult<DecryptedMessage>> {
     try_stream! {
         let stream = stub
             .retrieve_messages(RetrieveMessagesRequest {
-                identity: Some(name),
+                identity_key: Some(peer.to_bytes().to_vec()),
             })
         .await;
         let messages = into_message_stream(stream?.into_inner());
@@ -119,7 +121,7 @@ pub fn get_messages(
                 let (_sk, decrypted) = initiate_recv(
                     &x3dh_client.get_ik().await?,
                     &x3dh_client.get_pre_key(message.pre_key).await?,
-                    &message.sender_ik,
+                    &message.ik,
                     message.ek,
                     opk,
                     &message.ciphertext,
@@ -127,7 +129,7 @@ pub fn get_messages(
                 Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
                     // TODO(https://github.com/brongan/brongnal/issues/15): Don't blindly trust the
                     // sender's claimed identity.
-                    sender_identity: message.sender_identity,
+                    sender_identity: String::from(""),
                     message: decrypted,
                 })
             };
@@ -155,9 +157,8 @@ pub async fn register(
             .verifying_key()
             .as_bytes()
             .to_vec();
-        tonic::Request::new(RegisterPreKeyBundleRequest {
+        Request::new(RegisterPreKeyBundleRequest {
             identity_key: Some(ik),
-            identity: Some(name.clone()),
             signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
             one_time_key_bundle: Some(x3dh_client.create_opks(100).await?.into()),
         })
@@ -167,29 +168,32 @@ pub async fn register(
     Ok(())
 }
 
+// Get the key from the mapping.
+// Get the PrekeyBundle for the key.
+// Send da message
 pub async fn send_message(
     stub: &mut BrongnalClient<Channel>,
     x3dh_client: &X3DHClient,
     sender_identity: String,
-    recipient_identity: &str,
+    recipient: &VerifyingKey,
     message: &str,
 ) -> ClientResult<()> {
     let message = message.as_bytes();
-    let request = tonic::Request::new(RequestPreKeysRequest {
-        identity: Some(recipient_identity.to_owned()),
+    let sender_identity: Vec<u8> = Sha256::digest(&sender_identity).to_vec();
+    let request = Request::new(RequestPreKeysRequest {
+        identity_key: Some(recipient.to_bytes().to_vec()),
     });
-    let response = stub.request_pre_keys(request).await?;
-    let (_sk, message) = initiate_send(
-        response.into_inner().try_into()?,
-        sender_identity,
-        &x3dh_client.get_ik().await?,
-        message,
-    )?;
-    info!("Sending message: {message}");
-    let request = tonic::Request::new(SendMessageRequest {
-        recipient_identity: Some(recipient_identity.to_owned()),
-        message: Some(message.into()),
-    });
-    stub.send_message(request).await?;
+    let response = stub.request_pre_keys(request).await?.into_inner();
+    for bundle in response.bundles {
+        let (_sk, message) =
+            initiate_send(bundle.try_into()?, &x3dh_client.get_ik().await?, message)?;
+        info!("Sending message: {message}");
+        let request = Request::new(SendMessageRequest {
+            claimed_sender_identity: Some(sender_identity.clone()),
+            recipient_identity_key: Some(recipient.to_bytes().to_vec()),
+            message: Some(message.into()),
+        });
+        stub.send_message(request).await?;
+    }
     Ok(())
 }
