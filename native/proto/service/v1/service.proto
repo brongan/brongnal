@@ -2,38 +2,37 @@ syntax = "proto2";
 package service.v1;
 
 service BrongnalService {
-	rpc RegisterPreKeyBundle (RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
-	rpc RequestPreKeys (RequestPreKeysRequest) returns (PreKeyBundle);
-	rpc SendMessage (SendMessageRequest) returns (SendMessageResponse);
-	rpc RetrieveMessages (RetrieveMessagesRequest) returns (stream Message);
+  rpc RegisterPreKeyBundle(RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
+  rpc RequestPreKeys(RequestPreKeysRequest) returns (RequestPreKeyBundleResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc RetrieveMessages(RetrieveMessagesRequest) returns (stream Message);
 }
 
 message SignedPreKey {
-	// X25519 public key
-	optional bytes pre_key = 1;
+  // X25519 public key
+  optional bytes pre_key = 1;
 
-	// ED25519 signature
-	optional bytes signature = 2;
+  // ED25519 signature
+  optional bytes signature = 2;
 }
 
 message SignedPreKeys {
-	// X25519 public keys
-	repeated bytes pre_keys = 1;
+  // X25519 public keys
+  repeated bytes pre_keys = 1;
 
-	// ED25519 signature
-	optional bytes signature = 2;
+  // ED25519 signature over pre_keys.length() || pre_keys
+  optional bytes signature = 2;
 }
 
 message RegisterPreKeyBundleRequest {
-	// Human readable string
-	optional string identity = 1;
+  // ED25519 public key
+  optional bytes identity_key = 1;
 
-	// ED25519 public key
-	optional bytes identity_key = 2;
+  // The current signed pre key associated with `identity_key`.
+  optional SignedPreKey signed_pre_key = 2;
 
-	optional SignedPreKey signed_pre_key = 3;
-
-	optional SignedPreKeys one_time_key_bundle = 4;
+  // Optional - Appends the one time key bundle for this `identity_key`.
+  optional SignedPreKeys one_time_key_bundle = 3;
 }
 
 message RegisterPreKeyBundleResponse {
@@ -41,45 +40,53 @@ message RegisterPreKeyBundleResponse {
 }
 
 message RequestPreKeysRequest {
-	// Human readable string
-	optional string identity = 1;
+  // ED25519 public key
+  optional bytes identity_key = 1;
 }
 
 message PreKeyBundle {
-	// ED25519 public key
-	optional bytes identity_key = 1;
+  // ED25519 public key
+  optional bytes identity_key = 1;
 
-	// X25519 public key
-	optional bytes one_time_key = 2;
+  // X25519 public key
+  optional bytes one_time_key = 2;
 
-	optional SignedPreKey signed_pre_key = 3;
+  optional SignedPreKey signed_pre_key = 3;
+}
+
+message RequestPreKeyBundleResponse {
+  repeated PreKeyBundle bundles = 1;
 }
 
 message Message {
-	// ED25519 public key
-	optional bytes sender_identity_key = 2;
+  // ED25519 public key
+  optional bytes sender_identity_key = 1;
 
-	// X25519 public key
-	optional bytes ephemeral_key = 3;
+  // X25519 public key
+  optional bytes ephemeral_key = 2;
 
-	// X25519 public key
-	optional bytes pre_key = 4;
+  // X25519 public key
+  optional bytes pre_key = 3;
 
-	// X25519 public key (Optional)
-	optional bytes one_time_key = 5;
+  // X25519 public key (Optional)
+  optional bytes one_time_key = 4;
 
-	// binary
-	optional bytes ciphertext = 6;
+  // binary
+  optional bytes ciphertext = 5;
 }
 
 message SendMessageRequest {
-	optional string recipient_identity = 1;
-	optional Message message = 2;
+  optional Message message = 1;
+
+  // Ed25519 public key
+  optional bytes recipient_identity_key = 2;
 }
 
 message SendMessageResponse {}
 
 message RetrieveMessagesRequest {
-	optional string identity = 1;
-}
+  // Recipients identity key.
+  optional bytes identity_key = 1;
 
+  // TODO(https://github.com/brongan/brongnal/issues/14) - Add proof of possession.
+}

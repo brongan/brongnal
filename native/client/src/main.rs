@@ -1,7 +1,11 @@
 use anyhow::Result;
-use client::{get_messages, register, send_message, DecryptedMessage, X3DHClient};
+use client::{
+    get_keys, get_messages, register_device, register_username, send_message, DecryptedMessage,
+    X3DHClient,
+};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
+use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use std::io::stdin;
 use std::io::BufRead;
@@ -52,14 +56,19 @@ async fn main() -> Result<()> {
         .with(filter)
         .try_init()?;
 
-    info!("Registering {name} at {addr}");
-
-    let mut stub = BrongnalClient::connect(addr).await?;
+    let mut brongnal = BrongnalClient::connect(addr.clone()).await?;
+    let mut gossamer = GossamerClient::connect(addr.clone()).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
+    let ik = client.get_ik();
 
-    register(&mut stub, &client.clone(), name.clone()).await?;
+    #[allow(deprecated)]
+    let ik_str = base64::encode(ik.verifying_key().as_bytes());
+    info!("Registering {name} with key={ik_str} at {addr}");
+
+    register_username(&mut gossamer, ik, name.clone()).await?;
+    register_device(&mut brongnal, &client.clone()).await?;
 
     println!("NAME MESSAGE");
 
@@ -79,7 +88,7 @@ async fn main() -> Result<()> {
         }
     });
 
-    let messages_stream = get_messages(stub.clone(), client.clone(), name.clone());
+    let messages_stream = get_messages(brongnal.clone(), client.clone());
     tokio::pin!(messages_stream);
 
     loop {
@@ -87,9 +96,11 @@ async fn main() -> Result<()> {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        if let Err(e) = send_message(&mut stub, &client.clone(), &command.to, &command.msg)
+                        for key in get_keys(&mut gossamer, &command.to).await? {
+                            if let Err(e) = send_message(&mut brongnal, &client.clone(), &key, &command.msg)
                             .await {
                                 eprintln!("Failed to send message: {e}");
+                            }
                         }
                     },
                     None => {
@@ -101,8 +112,8 @@ async fn main() -> Result<()> {
             },
             msg = messages_stream.next() => {
                 match msg {
-                    Some(Ok(DecryptedMessage { sender_identity, message })) => {
-                        println!("Received message from {sender_identity}: \"{}\"", String::from_utf8(message).unwrap());
+                    Some(Ok(DecryptedMessage { message })) => {
+                        println!("Received message from unknown: \"{}\"", String::from_utf8(message).unwrap());
                     },
                     Some(Err(e)) => {
                         eprintln!("Failed to receive decrypted message: {e}");

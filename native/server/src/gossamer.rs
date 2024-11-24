@@ -1,14 +1,12 @@
 use ed25519_dalek::VerifyingKey;
 use proto::gossamer::gossamer_service_server::GossamerService;
-use proto::gossamer::GetLedgerRequest;
-use proto::gossamer::Ledger;
-use proto::gossamer::User;
-use proto::gossamer::{ActionRequest, ActionResponse, SignedMessage};
+use proto::gossamer::{
+    ActionRequest, ActionResponse, GetLedgerRequest, Ledger, SignedMessage, User,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tonic::{Request, Response, Status};
-use tracing::error;
-use tracing::info;
+use tracing::{error, info};
 
 pub struct InMemoryGossamer {
     provider: Arc<Mutex<HashMap<Vec<u8>, VerifyingKey>>>,
