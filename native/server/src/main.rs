@@ -1,8 +1,8 @@
 use crate::gossamer::InMemoryGossamer;
 use brongnal::BrongnalController;
 use persistence::SqliteStorage;
-use proto::gossamer::gossamer_server::GossamerServer;
-use proto::service::brongnal_server::BrongnalServer;
+use proto::gossamer::gossamer_service_server::GossamerServiceServer;
+use proto::service::brongnal_service_server::BrongnalServiceServer;
 use proto::FILE_DESCRIPTOR_SET;
 use sentry::ClientInitGuard;
 use std::net::{IpAddr, Ipv4Addr};
@@ -63,8 +63,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Brongnal Server listening at: {server_addr}");
 
     Server::builder()
-        .add_service(BrongnalServer::new(controller))
-        .add_service(GossamerServer::new(InMemoryGossamer::default()))
+        .add_service(BrongnalServiceServer::new(controller))
+        .add_service(GossamerServiceServer::new(InMemoryGossamer::default()))
         .add_service(reflection_service)
         .serve(server_addr)
         .await?;

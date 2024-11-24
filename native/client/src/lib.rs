@@ -3,7 +3,10 @@ use async_stream::try_stream;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
 use ed25519_dalek::VerifyingKey;
-use proto::service::brongnal_client::BrongnalClient;
+use proto::gossamer::gossamer_service_client::GossamerServiceClient;
+use proto::gossamer::{GetLedgerRequest, Ledger};
+use proto::parse_verifying_key;
+use proto::service::brongnal_service_client::BrongnalServiceClient;
 use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest,
@@ -93,14 +96,14 @@ fn into_message_stream(
 
 /// Takes a Brongnal RPC Client and an X3DH client and returns a stream of decrypted messages.
 pub fn get_messages(
-    mut stub: BrongnalClient<Channel>,
+    mut stub: BrongnalServiceClient<Channel>,
     x3dh_client: Arc<X3DHClient>,
-    peer: VerifyingKey,
+    key: VerifyingKey,
 ) -> impl Stream<Item = ClientResult<DecryptedMessage>> {
     try_stream! {
         let stream = stub
             .retrieve_messages(RetrieveMessagesRequest {
-                identity_key: Some(peer.to_bytes().to_vec()),
+                identity_key: Some(key.to_bytes().to_vec()),
             })
         .await;
         let messages = into_message_stream(stream?.into_inner());
@@ -145,7 +148,7 @@ pub fn get_messages(
 }
 
 pub async fn register(
-    stub: &mut BrongnalClient<Channel>,
+    stub: &mut BrongnalServiceClient<Channel>,
     x3dh_client: &X3DHClient,
     name: String,
 ) -> ClientResult<()> {
@@ -172,7 +175,7 @@ pub async fn register(
 // Get the PrekeyBundle for the key.
 // Send da message
 pub async fn send_message(
-    stub: &mut BrongnalClient<Channel>,
+    stub: &mut BrongnalServiceClient<Channel>,
     x3dh_client: &X3DHClient,
     sender_identity: String,
     recipient: &VerifyingKey,
@@ -196,4 +199,30 @@ pub async fn send_message(
         stub.send_message(request).await?;
     }
     Ok(())
+}
+
+pub async fn get_ledger(stub: &mut GossamerServiceClient<Channel>) -> ClientResult<Ledger> {
+    let request = Request::new(GetLedgerRequest {});
+    let ledger = stub.get_ledger(request).await?.into_inner();
+    Ok(ledger)
+}
+
+pub async fn get_keys(
+    stub: &mut GossamerServiceClient<Channel>,
+    peer_username: &str,
+) -> ClientResult<Vec<VerifyingKey>> {
+    let recipient_user_id: Vec<u8> = Sha256::digest(peer_username).to_vec();
+    let ledger = get_ledger(stub).await?;
+    Ok(ledger
+        .users
+        .into_iter()
+        .filter(|user| user.provider() == recipient_user_id)
+        .map(|user| {
+            user.public_keys
+                .into_iter()
+                .map(|key| parse_verifying_key(&key).unwrap())
+                .collect::<Vec<_>>()
+        })
+        .flatten()
+        .collect::<Vec<_>>())
 }

@@ -1,5 +1,4 @@
 use ed25519_dalek::{Signature, VerifyingKey};
-use prost::Message;
 use thiserror::Error;
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -149,7 +148,7 @@ impl TryInto<PreKeyBundle> for PreKeyBundleProto {
 struct SignedMessage {
     message: gossamer::Message,
     signature: Signature,
-    provider: String,
+    provider: Vec<u8>,
     public_key: VerifyingKey,
 }
 

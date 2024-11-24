@@ -5,6 +5,8 @@ package gossamer.v1;
 // provider is the human readable form of an identity.
 service GossamerService {
   rpc Action(ActionRequest) returns (ActionResponse);
+
+  rpc GetLedger(GetLedgerRequest) returns (Ledger);
 }
 
 message AppendKey {
@@ -13,17 +15,17 @@ message AppendKey {
     KEY_PURPOSE_IDENTITY_KEY = 1;
     KEY_PURPOSE_PRE_KEY = 2;
   }
-  optional string provider = 1;
+  optional bytes provider = 1;
   optional bytes public_key = 2;
   optional KeyPurpose key_purpose = 3;
 }
 
 message RevokeKey {
-  optional string provider = 1;
+  optional bytes provider = 1;
   optional bytes public_key = 2;
 }
 
-message Message {
+message GossamerMessage {
   oneof action {
     AppendKey append_key = 1;
     RevokeKey revoke_key = 2;
@@ -31,11 +33,10 @@ message Message {
 }
 
 message SignedMessage {
-  // Serialized `Message`.
+  // Serialized `GossamerMessage`.
   optional bytes contents = 1;
   optional bytes signature = 2;
-  optional string provider = 3;
-  optional bytes public_key = 4;
+  optional bytes public_key = 3;
 }
 
 message ActionRequest {
@@ -43,3 +44,15 @@ message ActionRequest {
 }
 
 message ActionResponse {}
+
+message GetLedgerRequest {}
+
+message User {
+  optional bytes provider = 1;
+  repeated bytes public_keys = 2;
+}
+
+message Ledger {
+  repeated User users = 1;
+}
+

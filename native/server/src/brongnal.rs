@@ -1,6 +1,6 @@
 use crate::persistence::SqliteStorage;
 use ed25519_dalek::{Signature, VerifyingKey};
-use proto::service::brongnal_server::Brongnal;
+use proto::service::brongnal_service_server::BrongnalService;
 use proto::service::Message as MessageProto;
 use proto::service::PreKeyBundle as PreKeyBundleProto;
 use proto::service::RequestPreKeyBundleResponse;
@@ -107,7 +107,7 @@ impl BrongnalController {
 }
 
 #[tonic::async_trait]
-impl Brongnal for BrongnalController {
+impl BrongnalService for BrongnalController {
     async fn register_pre_key_bundle(
         &self,
         request: Request<RegisterPreKeyBundleRequest>,
