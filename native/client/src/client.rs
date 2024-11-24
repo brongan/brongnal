@@ -155,7 +155,7 @@ impl X3DHClient {
     ) -> ClientResult<X25519StaticSecret> {
         #[allow(deprecated)]
         let pubkey = base64::encode(one_time_prekey.to_bytes());
-        info!("Using one time pre key '{pubkey}'",);
+        info!("Attempting to consume one time pre key '{pubkey}'",);
         let key: [u8; 32] = self
             .connection
             .call(move |connection| {
@@ -187,7 +187,7 @@ impl X3DHClient {
     }
 
     pub async fn get_spk(&self) -> ClientResult<SignedPreKey> {
-        let ik = self.get_ik();
+        let ik = self.ik.clone();
         self.connection
             .call(move |connection| {
                 let pre_key = load_pre_key(connection)?.unwrap();

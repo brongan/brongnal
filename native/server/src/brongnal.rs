@@ -3,7 +3,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_service_server::BrongnalService;
 use proto::service::Message as MessageProto;
 use proto::service::PreKeyBundle as PreKeyBundleProto;
-use proto::service::SignedPreKey as SignedPreKeyProto;
+use proto::service::RequestPreKeyBundleResponse;
 use proto::service::{
     RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
@@ -20,11 +20,9 @@ use tracing::error;
 use tracing::info;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
-pub type CurrentKeys = (VerifyingKey, SignedPreKeyProto);
-
 pub struct BrongnalController {
     storage: SqliteStorage,
-    receivers: Arc<Mutex<HashMap<String, Sender<tonic::Result<MessageProto>>>>>,
+    receivers: Arc<Mutex<HashMap<VerifyingKey, Sender<tonic::Result<MessageProto>>>>>,
 }
 
 impl BrongnalController {
@@ -39,14 +37,6 @@ impl BrongnalController {
         &self,
         request: RegisterPreKeyBundleRequest,
     ) -> tonic::Result<RegisterPreKeyBundleResponse> {
-        let identity: String = request
-            .identity
-            .clone()
-            .ok_or(Status::invalid_argument("request missing identity"))?;
-        if identity.len() > 48 {
-            return Err(Status::invalid_argument("Username too long."));
-        }
-
         let ik = parse_verifying_key(request.identity_key())
             .map_err(|_| Status::invalid_argument("request has invalid identity_key"))?;
         let spk_proto = request
@@ -72,11 +62,9 @@ impl BrongnalController {
             Status::unauthenticated("failed to validate one time prekey bundle signature")
         })?;
 
-        self.storage
-            .register_user(identity.clone(), ik, spk_proto)
-            .await?;
-        self.storage.add_opks(identity.clone(), pre_keys).await?;
-        let num_keys = Some(self.storage.get_one_time_prekey_count(identity).await?);
+        self.storage.add_user(ik, spk_proto).await?;
+        self.storage.add_opks(&ik, pre_keys).await?;
+        let num_keys = Some(self.storage.get_one_time_prekey_count(&ik).await?);
         Ok(RegisterPreKeyBundleResponse { num_keys })
     }
 
@@ -84,31 +72,33 @@ impl BrongnalController {
         &self,
         request: SendMessageRequest,
     ) -> tonic::Result<SendMessageResponse> {
-        let recipient_identity = request.recipient_identity.ok_or(Status::invalid_argument(
-            "request missing recipient_identity",
-        ))?;
         let message_proto: MessageProto = request
             .message
             .ok_or(Status::invalid_argument("request missing message"))?;
+
+        let recipient = parse_verifying_key(
+            &request
+                .recipient_identity_key
+                .ok_or(Status::invalid_argument("missing recipient identity key"))?,
+        )
+        .map_err(|_| Status::invalid_argument("invalid recipient identity key"))?;
+
         // Do some basic validation on the message before persisting it or sending it to the
         // recipient.
-        let _ = protocol::x3dh::Message::try_from(message_proto.clone())?;
+        let _message = protocol::x3dh::Message::try_from(message_proto.clone())?;
 
-        let tx = self
-            .receivers
-            .lock()
-            .unwrap()
-            .get(&recipient_identity)
-            .cloned();
+        #[allow(deprecated)]
+        let addr = base64::encode(recipient.as_bytes());
+        info!("Received request to send message to: \"{}\".", addr);
+
+        let tx = self.receivers.lock().unwrap().get(&recipient).cloned();
         if let Some(tx) = tx {
             if let Ok(()) = tx.send(Ok(message_proto.clone())).await {
                 return Ok(SendMessageResponse {});
             }
         }
 
-        self.storage
-            .add_message(recipient_identity, message_proto)
-            .await?;
+        self.storage.add_message(&recipient, message_proto).await?;
 
         Ok(SendMessageResponse {})
     }
@@ -121,7 +111,7 @@ impl BrongnalService for BrongnalController {
         request: Request<RegisterPreKeyBundleRequest>,
     ) -> tonic::Result<Response<RegisterPreKeyBundleResponse>> {
         let request = request.into_inner();
-        info!("Registering PreKeyBundle for \"{}\".", request.identity());
+        info!("Registering PreKeyBundle");
         let response = self
             .handle_register_pre_key_bundle(request)
             .await
@@ -132,22 +122,34 @@ impl BrongnalService for BrongnalController {
     async fn request_pre_keys(
         &self,
         request: Request<RequestPreKeysRequest>,
-    ) -> tonic::Result<Response<PreKeyBundleProto>> {
+    ) -> tonic::Result<Response<RequestPreKeyBundleResponse>> {
         let request = request.into_inner();
-        info!("Retrieving PreKeyBundle for \"{}\".", request.identity());
 
-        let (keys, opk) = tokio::join!(
-            self.storage.get_current_keys(request.identity().to_owned()),
+        let ik = parse_verifying_key(
+            &request
+                .identity_key
+                .ok_or(Status::invalid_argument("missing recipient identity key"))?,
+        )
+        .map_err(|_| Status::invalid_argument("invalid recipient identity key"))?;
+        #[allow(deprecated)]
+        let ik_str = base64::encode(ik.as_bytes());
+
+        info!("Retrieving PreKeyBundle for \"{}\".", ik_str);
+
+        let (spk, opk) = tokio::join!(
+            self.storage.get_current_spk(&ik),
             // TODO(https://github.com/brongan/brongnal/issues/26) - Prevent one time key pop abuse.
-            self.storage.pop_opk(request.identity().to_owned())
+            self.storage.pop_opk(&ik)
         );
-        let (ik, spk) = keys?;
+        let spk = spk?;
         let opk = opk?;
 
-        let reply = PreKeyBundleProto {
-            identity_key: Some(ik.as_bytes().into()),
-            one_time_key: opk.map(|opk| opk.as_bytes().into()),
-            signed_pre_key: Some(spk),
+        let reply = RequestPreKeyBundleResponse {
+            bundles: vec![PreKeyBundleProto {
+                identity_key: Some(ik.as_bytes().into()),
+                one_time_key: opk.map(|opk| opk.as_bytes().into()),
+                signed_pre_key: Some(spk),
+            }],
         };
         Ok(Response::new(reply))
     }
@@ -157,10 +159,6 @@ impl BrongnalService for BrongnalController {
         request: Request<SendMessageRequest>,
     ) -> tonic::Result<Response<SendMessageResponse>> {
         let request = request.into_inner();
-        info!(
-            "Received request to send message to: \"{}\".",
-            request.recipient_identity()
-        );
         let response = self
             .handle_send_message(request)
             .await
@@ -175,25 +173,31 @@ impl BrongnalService for BrongnalController {
         request: Request<RetrieveMessagesRequest>,
     ) -> tonic::Result<Response<Self::RetrieveMessagesStream>> {
         let request = request.into_inner();
-        info!("Retrieving \"{}\"'s messages.", request.identity());
 
-        let identity = request
-            .identity
-            .ok_or(Status::invalid_argument("request missing identity"))
-            .inspect_err(|e| error!("Failed to retrieve messages: {e}"))?;
+        let ik = parse_verifying_key(
+            &request
+                .identity_key
+                .ok_or(Status::invalid_argument("missing recipient identity key"))?,
+        )
+        .map_err(|_| Status::invalid_argument("invalid recipient identity key"))?;
+
+        #[allow(deprecated)]
+        let ik_str = base64::encode(ik.as_bytes());
+        info!("Retrieving key=\"{ik_str}\"'s messages.");
+
         let (tx, rx) = mpsc::channel(100);
 
         // TODO(#14) - RetrieveMessages requires proof of possession
         for message in self
             .storage
-            .get_messages(identity.clone())
+            .get_messages(&ik)
             .await
             .inspect_err(|e| error!("Failed to retrieve messages from storage: {e}"))?
         {
             // TODO handle result.
             let _ = tx.send(Ok(message)).await;
         }
-        self.receivers.lock().unwrap().insert(identity, tx);
+        self.receivers.lock().unwrap().insert(ik, tx);
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }

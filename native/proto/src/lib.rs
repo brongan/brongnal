@@ -97,7 +97,7 @@ impl TryFrom<MessageProto> for X3DHMessage {
             None
         };
         Ok(X3DHMessage {
-            sender_ik,
+            ik: sender_ik,
             ek,
             pre_key,
             opk,
@@ -112,7 +112,7 @@ impl TryFrom<MessageProto> for X3DHMessage {
 impl From<X3DHMessage> for MessageProto {
     fn from(val: X3DHMessage) -> Self {
         MessageProto {
-            sender_identity_key: Some(val.sender_ik.to_bytes().to_vec()),
+            sender_identity_key: Some(val.ik.to_bytes().to_vec()),
             ephemeral_key: Some(val.ek.to_bytes().to_vec()),
             pre_key: Some(val.pre_key.to_bytes().to_vec()),
             one_time_key: val.opk.map(|opk| opk.to_bytes().to_vec()),

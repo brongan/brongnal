@@ -55,14 +55,14 @@ pub struct X3DHSendKeyAgreement {
 
 /// A `Message` in this packages implementation of the X3DH protocol.
 /// This struct is the output of `Alice` sending a message to `Bob`.
-/// * `sender_ik` is the identity key of the sender.
+/// * `ik` is the identity key of the sender.
 /// * `ek` is the ephemeral key generated to encrypt the message.
 /// * `pre_key` is the identifier (currently public key) of Bob's prekey that was used.
 /// * `opk` is Bob's one time prekey that (may) have been used.
 /// * `ciphertext` is the encrypted message.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Message {
-    pub sender_ik: VerifyingKey,
+    pub ik: VerifyingKey,
     pub ek: X25519PublicKey,
     pub pre_key: X25519PublicKey,
     pub opk: Option<X25519PublicKey>,
@@ -74,11 +74,11 @@ impl std::fmt::Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "From:   {}\n\
-            EK:      {}\n\
-            OPK:     {}\n\
-            Payload: {}\n",
-            base64::encode(self.sender_ik),
+            "sender_ik:  {}\n\
+             ek:         {}\n\
+             pre_key:    {}\n\
+             Payload:    {}\n",
+            base64::encode(self.ik),
             base64::encode(self.ek),
             self.opk
                 .map(base64::encode)
@@ -217,7 +217,7 @@ pub fn initiate_send(
     Ok((
         sk,
         Message {
-            sender_ik: sender_ik.verifying_key(),
+            ik: sender_ik.verifying_key(),
             ek,
             pre_key: prekey_bundle.spk.pre_key,
             opk: prekey_bundle.opk,
@@ -378,7 +378,7 @@ mod tests {
         let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
-            &message.sender_ik,
+            &message.ik,
             message.ek,
             Some(bob_opk_priv),
             &message.ciphertext,
@@ -413,7 +413,7 @@ mod tests {
         let (recv_sk, decrypted) = initiate_recv(
             &bob_ik,
             &bob_spk_secret,
-            &message.sender_ik,
+            &message.ik,
             message.ek,
             None,
             &message.ciphertext,
@@ -467,7 +467,7 @@ mod tests {
             initiate_recv(
                 &bob_ik,
                 &bob_spk_secret,
-                &message.sender_ik,
+                &message.ik,
                 message.ek,
                 None,
                 b"invalid ciphertext",

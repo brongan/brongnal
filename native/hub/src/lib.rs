@@ -1,5 +1,8 @@
 use crate::messages::*;
-use client::{get_messages, register, send_message, X3DHClient};
+use client::{
+    get_keys, get_messages, register_device, register_username, send_message, X3DHClient,
+};
+use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use rinf::debug_print;
 use std::{path::PathBuf, sync::Arc};
@@ -43,15 +46,29 @@ async fn await_register_widget() -> Option<String> {
 }
 
 /// Async task that listens to signals from dart for messages and forwards them to the server.
-async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<X3DHClient>) {
+async fn send_messages(
+    mut brongnal: BrongnalClient<Channel>,
+    mut gossamer: GossamerClient<Channel>,
+    client: Arc<X3DHClient>,
+) {
     let receiver = SendMessage::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
         debug_print!("Rust received message from flutter!: {}", req.message());
-        match send_message(&mut stub, &client, req.receiver(), req.message()).await {
-            Ok(_) => {}
+        let keys = match get_keys(&mut gossamer, req.receiver()).await {
+            Ok(keys) => keys,
             Err(e) => {
-                debug_print!("Failed to message: {e}");
+                debug_print!("Failed to query keys for user: {}: {e}", req.receiver());
+                continue;
+            }
+        };
+
+        for key in keys {
+            match send_message(&mut brongnal, &client, &key, req.message()).await {
+                Ok(_) => {}
+                Err(e) => {
+                    debug_print!("Failed to send message: {e}");
+                }
             }
         }
     }
@@ -59,12 +76,8 @@ async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<X3DHClient
 }
 
 /// Async task that listens messages from the server, decrypts them, and sends them to flutter.
-async fn receive_messages(
-    stub: BrongnalClient<Channel>,
-    x3dh_client: Arc<X3DHClient>,
-    name: String,
-) {
-    let messages = get_messages(stub, x3dh_client, name);
+async fn receive_messages(stub: BrongnalClient<Channel>, x3dh_client: Arc<X3DHClient>) {
+    let messages = get_messages(stub, x3dh_client);
     tokio::pin!(messages);
     while let Some(decrypted) = messages.next().await {
         if let Err(e) = decrypted {
@@ -72,19 +85,18 @@ async fn receive_messages(
             continue;
         }
         let decrypted = decrypted.unwrap();
-        let sender = decrypted.sender_identity;
         let message = String::from_utf8(decrypted.message);
         match &message {
             Ok(message) => {
-                debug_print!("[Received Message] {sender}: {message}");
+                debug_print!("[Received Message] from unknown: {message}");
             }
             Err(_) => {
                 debug_print!("Decrypted message was not UTF-8 encoded.");
             }
         }
         ReceivedMessage {
-            sender: Some(sender),
             message: message.ok(),
+            sender: Some(String::from("Unknown")),
         }
         .send_signal_to_dart();
     }
@@ -94,9 +106,9 @@ async fn receive_messages(
 #[tokio::main]
 async fn main() {
     // TODO(https://github.com/brongan/brongnal/issues/36): gracefully handle a lack of network connection.
-    let mut stub = BrongnalClient::connect("https://signal.brongan.com:443")
-        .await
-        .unwrap();
+    let addr = "https://signal.brongan.com:443";
+    let mut brongnal = BrongnalClient::connect(addr).await.unwrap();
+    let mut gossamer = GossamerClient::connect(addr).await.unwrap();
 
     let (db_dir, mut username) = await_rust_startup()
         .await
@@ -113,12 +125,21 @@ async fn main() {
 
     while username.is_none() {
         username = await_register_widget().await;
-        debug_print!("Registered from register widget: {username:?}");
+        let ik = client.get_ik();
+        // TODO gracefully handle failure here >.<
+        match register_username(&mut gossamer, ik, username.clone().unwrap()).await {
+            Ok(_) => {
+                debug_print!("Registered from register widget: {username:?}");
+            }
+            Err(e) => {
+                debug_print!("Failed to register username: {e}");
+            }
+        }
     }
     let username = username.unwrap();
 
     debug_print!("Registering with username: {}", username);
-    match register(&mut stub, &client.clone(), username.clone()).await {
+    match register_device(&mut brongnal, &client.clone()).await {
         Ok(_) => {
             debug_print!("Registered {username}");
             RegisterUserResponse {
@@ -131,8 +152,8 @@ async fn main() {
         }
     }
 
-    tokio::spawn(send_messages(stub.clone(), client.clone()));
-    tokio::spawn(receive_messages(stub, client, username));
+    tokio::spawn(send_messages(brongnal.clone(), gossamer, client.clone()));
+    tokio::spawn(receive_messages(brongnal, client));
 
     rinf::dart_shutdown().await;
 }
