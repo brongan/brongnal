@@ -28,7 +28,7 @@
             pkgs.pkgsStatic.stdenv;
         };
         inherit (pkgs) lib;
-        toolchain = pkgs.rust-bin.nightly.latest.default.override {
+        toolchain = pkgs.pkgsMusl.rust-bin.nightly.latest.default.override {
           targets = [ "x86_64-unknown-linux-musl" ];
         };
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
@@ -38,15 +38,15 @@
           version = "0.1.0";
           strictDeps = true;
           nativeBuildInputs = with pkgs; [ pkg-config protobuf ];
-		  CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
           CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
           buildInputs = [ sqliteStatic ];
 		  pname = "server";
         };
         nativeArtifacts = craneLib.buildDepsOnly args;
         myServer = craneLib.buildPackage (args // {
-		  cargoExtraArgs = "--package=server";
-          cargoArtifacts = nativeArtifacts;
+            cargoExtraArgs = "--package=server";
+            cargoArtifacts = nativeArtifacts;
         });
         dockerImage = pkgs.dockerTools.streamLayeredImage {
           name = "brongnal";

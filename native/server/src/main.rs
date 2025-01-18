@@ -8,9 +8,7 @@ use sentry::ClientInitGuard;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::str::FromStr;
-use tokio_rusqlite::Connection;
 use tonic::transport::Server;
-use tonic_reflection::server::Builder;
 use tracing::{info, warn, Level};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
@@ -44,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    let reflection_service = Builder::configure()
+    let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
         .build()
         .unwrap();
@@ -57,8 +55,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         xdg_dirs.place_data_file("brongnal_server.db3").unwrap()
     };
     info!("Database Path: {}", db_path.display());
-    let connection = Connection::open(db_path).await?;
-    let controller = BrongnalController::new(SqliteStorage::new(connection).await?);
+    let db = libsql::Builder::new_local(db_path).build().await?;
+    let controller = BrongnalController::new(SqliteStorage::new(db.connect()?).await?);
 
     info!("Brongnal Server listening at: {server_addr}");
 
