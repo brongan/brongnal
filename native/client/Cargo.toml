@@ -10,6 +10,7 @@ base64 = "0.22.1"
 chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
 futures = "0.3.30"
+libsql = { version = "0.6.0", default-features = false, features = ["core"] }
 nom = "7.1.3"
 proto = { path = "../proto/" }
 protocol = { path = "../protocol/" }

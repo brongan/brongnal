@@ -27,17 +27,15 @@ pub enum ClientError {
     #[error("failed to load identity key")]
     GetIdentityKey,
     #[error("failed to save identity key")]
-    InsertIdentityKey(rusqlite::Error),
-    #[error("rusqlite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
-    #[error("tokio_rusqlite error: {0}")]
-    TokioSqlite(#[from] tokio_rusqlite::Error),
+    InsertIdentityKey(libsql::Error),
+    #[error("libsql error: {0}")]
+    Sqlite(#[from] libsql::Error),
     #[error("failed to insert pre keys: {0}")]
-    InsertPreKey(rusqlite::Error),
+    InsertPreKey(libsql::Error),
     #[error("failed to retrieve OPK private key for pubkey: {0}")]
     WipeOpk(String),
     #[error("failed to retrieve pre key")]
-    GetPreKey(rusqlite::Error),
+    GetPreKey(libsql::Error),
     #[error("grpc error: {0}")]
     Grpc(#[from] tonic::Status),
     #[error("send decrypted message error: {0}")]

@@ -3,7 +3,6 @@ use client::{get_messages, register, send_message, X3DHClient};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
 use std::{path::PathBuf, sync::Arc};
-use tokio_rusqlite::Connection;
 use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 
@@ -113,8 +112,9 @@ async fn main() {
 
     let db_path = db_dir.join("keys.sqlite");
     debug_print!("Database Path: {db_path:?}");
+    let db = libsql::Builder::new_local(db_path).build().await.unwrap();
     let client = Arc::new(
-        X3DHClient::new(Connection::open(db_path).await.expect("open database"))
+        X3DHClient::new(db.connect().unwrap())
             .await
             .expect("init database"),
     );

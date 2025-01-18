@@ -10,7 +10,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{env, thread};
 use tokio::sync::mpsc;
-use tokio_rusqlite::Connection;
 use tokio_stream::StreamExt;
 use tracing::{info, Level};
 use tracing_subscriber::filter::Targets;
@@ -57,7 +56,9 @@ async fn main() -> Result<()> {
     let mut stub = BrongnalClient::connect(addr).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
-    let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
+    info!("Database Path: {}", db_path.display());
+    let db = libsql::Builder::new_local(db_path).build().await?;
+    let client = Arc::new(X3DHClient::new(db.connect()?).await?);
 
     register(&mut stub, &client.clone(), name.clone()).await?;
 
