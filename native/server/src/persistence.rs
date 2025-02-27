@@ -66,11 +66,11 @@ impl SqliteStorage {
         spk: SignedPreKeyProto,
     ) -> tonic::Result<()> {
         info!("Adding user \"{identity}\" to the database.");
+        let username = identity.clone();
 
         let persisted_ik = self
             .0
             .call(move |connection| {
-                let identity: &str = &identity;
                 info!("Adding user \"{identity}\" to the database.");
 
                 connection.execute(
@@ -91,9 +91,9 @@ impl SqliteStorage {
             })
             .await.map_err(|e| Status::internal(format!("Failed to register user: {e}")))?;
         if ik != persisted_ik {
-            return Err(Status::already_exists(
-                "A user is already registered with username: {identity}",
-            ));
+            return Err(Status::already_exists(format!(
+                "A user is already registered with username: {username}"
+            )));
         }
         Ok(())
     }
@@ -243,6 +243,26 @@ impl SqliteStorage {
             })
             .await
             .map_err(|_| Status::internal("Failed to query messages."))
+    }
+
+    pub async fn get_one_time_prekey_count(&self, identity: String) -> tonic::Result<u32> {
+        info!("Retrieving opk count for \"{identity}\" from the database.");
+
+        self.0
+            .call(move |connection| {
+                let identity: &str = &identity;
+                match connection.query_row(
+                    "SELECT COUNT(*) FROM pre_key WHERE user_identity = $1",
+                    [identity.to_owned()],
+                    |row| row.get(0),
+                ) {
+                    Ok(value) => Ok(value),
+                    Err(Error::QueryReturnedNoRows) => Ok(0),
+                    Err(e) => Err(tokio_rusqlite::Error::Rusqlite(e)),
+                }
+            })
+            .await
+            .map_err(|_| Status::internal("Failed to query opk count."))
     }
 }
 
