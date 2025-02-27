@@ -75,8 +75,9 @@ impl BrongnalController {
         self.storage
             .register_user(identity.clone(), ik, spk_proto)
             .await?;
-        self.storage.add_opks(identity, pre_keys).await?;
-        Ok(RegisterPreKeyBundleResponse {})
+        self.storage.add_opks(identity.clone(), pre_keys).await?;
+        let num_keys = Some(self.storage.get_one_time_prekey_count(identity).await?);
+        Ok(RegisterPreKeyBundleResponse { num_keys })
     }
 
     async fn handle_send_message(

@@ -36,8 +36,9 @@ message RegisterPreKeyBundleRequest {
 	optional SignedPreKeys one_time_key_bundle = 4;
 }
 
-message RegisterPreKeyBundleResponse {}
-
+message RegisterPreKeyBundleResponse {
+	optional uint32 num_keys = 1;
+}
 
 message RequestPreKeysRequest {
 	// Human readable string
