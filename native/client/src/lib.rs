@@ -148,22 +148,31 @@ pub async fn register(
     name: String,
 ) -> ClientResult<()> {
     info!("Registering {name}!");
-    let request = {
-        let ik = x3dh_client
-            .get_ik()
-            .await?
-            .verifying_key()
-            .as_bytes()
-            .to_vec();
-        tonic::Request::new(RegisterPreKeyBundleRequest {
+    let ik = x3dh_client
+        .get_ik()
+        .await?
+        .verifying_key()
+        .as_bytes()
+        .to_vec();
+
+    let request = tonic::Request::new(RegisterPreKeyBundleRequest {
+        identity_key: Some(ik.clone()),
+        identity: Some(name.clone()),
+        signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
+        one_time_key_bundle: Some(x3dh_client.create_opks(0).await?.into()),
+    });
+    let res = stub.register_pre_key_bundle(request).await?.into_inner();
+    info!("Registered: {}. {} keys remaining!", name, res.num_keys());
+    if res.num_keys() < 100 {
+        info!("Adding 100 keys!");
+        let request = tonic::Request::new(RegisterPreKeyBundleRequest {
             identity_key: Some(ik),
             identity: Some(name.clone()),
             signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
             one_time_key_bundle: Some(x3dh_client.create_opks(100).await?.into()),
-        })
-    };
-    stub.register_pre_key_bundle(request).await?;
-    info!("Registered: {}!", name);
+        });
+        stub.register_pre_key_bundle(request).await?.into_inner();
+    }
     Ok(())
 }
 
