@@ -1,5 +1,15 @@
 use ed25519_dalek::{Signature, VerifyingKey};
 use prost::Message as _;
+use protocol::gossamer::Message;
+use protocol::gossamer::SignedMessage as GossamerSignedMessage;
+use protocol::x3dh::Message as X3DHMessage;
+use protocol::x3dh::PreKeyBundle;
+use protocol::x3dh::SignedPreKey;
+use protocol::x3dh::SignedPreKeys;
+use service::Message as MessageProto;
+use service::PreKeyBundle as PreKeyBundleProto;
+use service::SignedPreKey as SignedPreKeyProto;
+use service::SignedPreKeys as SignedPreKeysProto;
 use thiserror::Error;
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -28,15 +38,6 @@ pub mod service {
     tonic::include_proto!("service.v1");
 }
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("service_descriptor");
-
-use protocol::x3dh::Message as X3DHMessage;
-use protocol::x3dh::PreKeyBundle;
-use protocol::x3dh::SignedPreKey;
-use protocol::x3dh::SignedPreKeys;
-use service::Message as MessageProto;
-use service::PreKeyBundle as PreKeyBundleProto;
-use service::SignedPreKey as SignedPreKeyProto;
-use service::SignedPreKeys as SignedPreKeysProto;
 
 impl From<SignedPreKey> for SignedPreKeyProto {
     fn from(val: SignedPreKey) -> Self {
@@ -145,13 +146,6 @@ impl TryInto<PreKeyBundle> for PreKeyBundleProto {
     }
 }
 
-#[allow(dead_code)]
-struct Message {
-    provider: Vec<u8>,
-    public_key: VerifyingKey,
-    action: gossamer::Action,
-}
-
 impl TryInto<Message> for gossamer::Message {
     type Error = tonic::Status;
 
@@ -159,7 +153,11 @@ impl TryInto<Message> for gossamer::Message {
         let public_key = parse_verifying_key(self.public_key()).map_err(|e| {
             Status::invalid_argument(format!("AppendKey has invalid public_key: {e}"))
         })?;
-        let action = self.action();
+
+        let action = (self.action() as i32).try_into().map_err(|_| {
+            Status::invalid_argument(format!("invalid action: {}", self.action().as_str_name()))
+        })?;
+
         let provider = self
             .provider
             .ok_or(Status::invalid_argument("message missing provider"))?;
@@ -172,16 +170,25 @@ impl TryInto<Message> for gossamer::Message {
     }
 }
 
-#[allow(dead_code)]
-struct SignedMessage {
-    message: Message,
-    signature: Signature,
-    identity_key: VerifyingKey,
+impl From<Message> for gossamer::Message {
+    fn from(
+        Message {
+            provider,
+            public_key,
+            action,
+        }: Message,
+    ) -> Self {
+        Self {
+            provider: Some(provider),
+            public_key: Some(public_key.as_bytes().to_vec()),
+            action: Some(action as i32),
+        }
+    }
 }
 
-impl TryInto<SignedMessage> for gossamer::SignedMessage {
+impl TryInto<GossamerSignedMessage> for gossamer::SignedMessage {
     type Error = tonic::Status;
-    fn try_into(self) -> Result<SignedMessage, Self::Error> {
+    fn try_into(self) -> Result<GossamerSignedMessage, Self::Error> {
         let signature = Signature::from_slice(self.signature()).map_err(|_| {
             Status::invalid_argument("SignedMessage has an invalid X25519 Signature")
         })?;
@@ -204,10 +211,21 @@ impl TryInto<SignedMessage> for gossamer::SignedMessage {
                 )
             })?;
 
-        Ok(SignedMessage {
+        Ok(GossamerSignedMessage {
             message,
             identity_key,
             signature,
         })
+    }
+}
+
+impl From<GossamerSignedMessage> for gossamer::SignedMessage {
+    fn from(val: GossamerSignedMessage) -> Self {
+        let contents: gossamer::Message = val.message.into();
+        Self {
+            contents: Some(contents.encode_to_vec()),
+            signature: Some(val.signature.to_vec()),
+            identity_key: Some(val.identity_key.as_bytes().to_vec()),
+        }
     }
 }

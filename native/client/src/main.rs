@@ -1,5 +1,5 @@
 use anyhow::Result;
-use client::{get_keys, get_messages, register, send_message, DecryptedMessage, X3DHClient};
+use client::{get_keys, get_messages, register_device, send_message, DecryptedMessage, X3DHClient};
 use ed25519_dalek::VerifyingKey;
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
 
-    register(&mut stub, &client.clone(), name.clone()).await?;
+    register_device(&mut stub, &client.clone(), name.clone()).await?;
 
     println!("NAME MESSAGE");
 

@@ -1,11 +1,6 @@
-use ed25519_dalek::{Signature, VerifyingKey};
-use prost::Message;
+use ed25519_dalek::VerifyingKey;
 use proto::gossamer::gossamer_service_server::GossamerService;
-use proto::gossamer::{
-    ActionRequest, ActionResponse, AppendKey, GetLedgerRequest, GossamerMessage, Ledger, RevokeKey,
-    SignedMessage,
-};
-use proto::parse_verifying_key;
+use proto::gossamer::{ActionRequest, ActionResponse, GetLedgerRequest, Ledger, SignedMessage};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tonic::{Request, Response, Status};
@@ -27,38 +22,17 @@ impl Default for InMemoryGossamer {
 
 impl InMemoryGossamer {
     fn handle_action(&self, message: SignedMessage) -> tonic::Result<()> {
-        if message.contents().len() == 0 {
-            return Err(Status::invalid_argument("empty action contents"));
-        }
+        let signed_message: protocol::gossamer::SignedMessage = message.try_into()?;
 
-        let signature = Signature::from_slice(&message.signature())
-            .map_err(|_| Status::invalid_argument("invalid signature"))?;
-
-        let public_key = parse_verifying_key(message.public_key())
-            .map_err(|_| Status::invalid_argument("invalid public key"))?;
-
-        public_key
-            .verify_strict(message.contents(), &signature)
-            .map_err(|_| Status::invalid_argument("signature error"))?;
-
-        let message = GossamerMessage::decode(&*message.contents())?;
-        let action = match message.action {
-            Some(action) => action,
-            None => return Err(Status::invalid_argument("empty message")),
-        };
-        match action {
-            AppendKey(provider, public_key, key_purpose) => {
-                if provider.len() == 32 {
-                    return Err(Status::invalid_argument("invalid action provider"));
-                }
-                todo!();
+        match signed_message.message.action {
+            protocol::gossamer::Action::AppendKey => {
+                // Verify username is not claimed or if it is, the signer is already registered.
             }
-            RevokeKey(provider, public_key, public_key) => {
-                todo!();
+            protocol::gossamer::Action::RevokeKey => {
+                // Verify key is claimed by key?
             }
         }
-
-        Ok(())
+        todo!()
     }
 }
 

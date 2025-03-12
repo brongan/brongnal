@@ -250,15 +250,18 @@ impl SqliteStorage {
             .map_err(|e| Status::internal(format!("Failed to query messages: {e}")))
     }
 
-    pub async fn get_one_time_prekey_count(&self, identity: String) -> tonic::Result<u32> {
-        info!("Retrieving opk count for \"{identity}\" from the database.");
+    pub async fn get_one_time_prekey_count(&self, ik: &VerifyingKey) -> tonic::Result<u32> {
+        info!(
+            "Retrieving opk count for \"{}\" from the database.",
+            base64.encode(ik)
+        );
+        let ik = ik.to_bytes();
 
         self.0
             .call(move |connection| {
-                let identity: &str = &identity;
                 match connection.query_row(
-                    "SELECT COUNT(*) FROM pre_key WHERE user_identity = $1",
-                    [identity.to_owned()],
+                    "SELECT COUNT(*) FROM opk_queue WHERE ik = $1",
+                    [ik],
                     |row| row.get(0),
                 ) {
                     Ok(value) => Ok(value),
@@ -282,7 +285,7 @@ mod tests {
     use tonic::Code;
 
     #[tokio::test]
-    async fn register_user_get_keys_success() -> Result<()> {
+    async fn add_user_get_keys_success() -> Result<()> {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let alice = X3DHClient::new(conn).await?;
@@ -294,7 +297,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn register_user_idempotent() -> Result<()> {
+    async fn add_user_idempotent() -> Result<()> {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let alice = X3DHClient::new(conn).await?;
@@ -307,7 +310,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn register_user_overwrite_fails() -> Result<()> {
+    async fn add_user_overwrite_fails() -> Result<()> {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let alice = X3DHClient::new(conn).await?;

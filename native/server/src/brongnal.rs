@@ -62,11 +62,9 @@ impl BrongnalController {
             Status::unauthenticated("failed to validate one time prekey bundle signature")
         })?;
 
-        self.storage
-            .register_user(identity.clone(), ik, spk_proto)
-            .await?;
-        self.storage.add_opks(identity.clone(), pre_keys).await?;
-        let num_keys = Some(self.storage.get_one_time_prekey_count(identity).await?);
+        self.storage.add_user(ik, spk_proto).await?;
+        self.storage.add_opks(&ik, pre_keys).await?;
+        let num_keys = Some(self.storage.get_one_time_prekey_count(&ik).await?);
         Ok(RegisterPreKeyBundleResponse { num_keys })
     }
 

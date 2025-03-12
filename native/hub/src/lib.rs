@@ -1,5 +1,5 @@
 use crate::messages::*;
-use client::{get_messages, register, send_message, X3DHClient};
+use client::{get_messages, register_device, send_message, X3DHClient};
 use proto::service::brongnal_client::BrongnalClient;
 use rinf::debug_print;
 use std::{path::PathBuf, sync::Arc};
@@ -126,7 +126,7 @@ async fn main() {
     let username = username.unwrap();
 
     debug_print!("Registering with username: {}", username);
-    match register(&mut stub, &client.clone(), username.clone()).await {
+    match register_device(&mut stub, &client.clone(), username.clone()).await {
         Ok(_) => {
             debug_print!("Registered {username}");
             RegisterUserResponse {

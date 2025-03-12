@@ -36,7 +36,7 @@ message RegisterPreKeyBundleRequest {
 }
 
 message RegisterPreKeyBundleResponse {
-  // TODO - Consider returning the number of otks this identity_key has.
+	optional uint32 num_keys = 1;
 }
 
 message RequestPreKeysRequest {
