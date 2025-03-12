@@ -1,4 +1,5 @@
 use ed25519_dalek::{Signature, VerifyingKey};
+use prost::Message as _;
 use thiserror::Error;
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -145,11 +146,37 @@ impl TryInto<PreKeyBundle> for PreKeyBundleProto {
 }
 
 #[allow(dead_code)]
-struct SignedMessage {
-    message: gossamer::Message,
-    signature: Signature,
+struct Message {
     provider: Vec<u8>,
     public_key: VerifyingKey,
+    action: gossamer::Action,
+}
+
+impl TryInto<Message> for gossamer::Message {
+    type Error = tonic::Status;
+
+    fn try_into(self) -> Result<Message, Self::Error> {
+        let public_key = parse_verifying_key(self.public_key()).map_err(|e| {
+            Status::invalid_argument(format!("AppendKey has invalid public_key: {e}"))
+        })?;
+        let action = self.action();
+        let provider = self
+            .provider
+            .ok_or(Status::invalid_argument("message missing provider"))?;
+
+        Ok(Message {
+            provider,
+            public_key,
+            action,
+        })
+    }
+}
+
+#[allow(dead_code)]
+struct SignedMessage {
+    message: Message,
+    signature: Signature,
+    identity_key: VerifyingKey,
 }
 
 impl TryInto<SignedMessage> for gossamer::SignedMessage {
@@ -158,26 +185,29 @@ impl TryInto<SignedMessage> for gossamer::SignedMessage {
         let signature = Signature::from_slice(self.signature()).map_err(|_| {
             Status::invalid_argument("SignedMessage has an invalid X25519 Signature")
         })?;
-        let public_key = parse_verifying_key(self.public_key()).map_err(|e| {
+        let identity_key = parse_verifying_key(self.identity_key()).map_err(|e| {
             Status::invalid_argument(format!(
                 "SignedMessage has invalid sender_identity_key: {e}"
             ))
         })?;
         let contents = self.contents();
-        public_key
+        identity_key
             .verify_strict(contents, &signature)
             .map_err(|_| Status::unauthenticated("SignedMessage signature invalid."))?;
 
         let message = gossamer::Message::decode(contents)
-            .map_err(|_| Status::invalid_argument("contents are not serialized message."))?;
+            .map_err(|_| Status::invalid_argument("contents are not serialized signed message."))?
+            .try_into()
+            .map_err(|_| {
+                Status::invalid_argument(
+                    "signed message does not contain correctly serialized message",
+                )
+            })?;
 
         Ok(SignedMessage {
             message,
-            public_key,
+            identity_key,
             signature,
-            provider: self
-                .provider
-                .ok_or(Status::invalid_argument("Missing provider."))?,
         })
     }
 }
