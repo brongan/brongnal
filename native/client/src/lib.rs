@@ -4,11 +4,14 @@ use blake2::{Blake2b, Digest};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use futures::StreamExt;
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient;
+use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger, SignedMessage};
 use proto::service::brongnal_service_client::BrongnalServiceClient;
+use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use proto::service::{
     Message as MessageProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
     RetrieveMessagesRequest, SendMessageRequest,
@@ -235,6 +238,27 @@ pub async fn send_message(
         message: Some(message.into()),
     }]));
     stub.send_message(request).await?;
+    Ok(())
+}
+
+pub async fn send_message_user(
+    brongnal: &mut BrongnalClient<Channel>,
+    gossamer: &mut GossamerClient<Channel>,
+    x3dh_client: &X3DHClient,
+    recipient: &str,
+    message: ApplicationMessage,
+) -> ClientResult<()> {
+    let message = message.into();
+    let futures: Vec<_> = get_keys(gossamer, &recipient)
+        .await?
+        .into_iter()
+        .map(|key| tokio::spawn(send_message(brongnal, &x3dh_client, &key, &message)))
+        .collect();
+
+    let mut res = Vec::with_capacity(futures.len());
+    for f in futures.into_iter() {
+        res.push(f.await);
+    }
     Ok(())
 }
 

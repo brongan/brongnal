@@ -1,7 +1,9 @@
 use crate::messages::*;
 use client::{
-    get_keys, get_messages, register_device, register_username, send_message, X3DHClient,
+    get_keys, get_messages, register_device, register_username, send_message, send_message_user,
+    X3DHClient,
 };
+use proto::application::contents::ContentType;
 use proto::application::{Contents, Message as ApplicationMessageProto, Sender};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
@@ -58,23 +60,28 @@ async fn send_messages(
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
         debug_print!("Rust received message from flutter!: {}", req.message());
-        let keys = match get_keys(&mut gossamer, req.receiver()).await {
-            Ok(keys) => keys,
-            Err(e) => {
-                debug_print!("Failed to query keys for user: {}: {e}", req.receiver());
-                continue;
-            }
-        };
 
         let msg = ApplicationMessageProto {
             sender: Some(Sender {
                 username: Some(name.clone()),
             }),
             contents: Some(Contents {
-                content_type: Some(proto::application::contents::ContentType::Text(
-                    req.message.unwrap(),
-                )),
+                content_type: Some(ContentType::Text(req.message.unwrap())),
             }),
+        };
+
+        let msg = ApplicationMessage {
+            claimed_sender: name,
+            text: req.message.unwrap(),
+        };
+
+        match send_message_user(&mut brongnal, &mut gossamer, &client, req.receiver(), &msg);
+        let keys = match get_keys(&mut gossamer, req.receiver()).await {
+            Ok(keys) => keys,
+            Err(e) => {
+                debug_print!("Failed to query keys for user: {}: {e}", req.receiver());
+                continue;
+            }
         };
 
         for key in keys {

@@ -4,6 +4,7 @@ use client::{
 };
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
+use proto::application::contents::ContentType;
 use proto::application::{Contents, Message as ApplicationMessageProto, Sender};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
@@ -100,7 +101,7 @@ async fn main() -> Result<()> {
                     Some(command) => {
                         let msg = ApplicationMessageProto {
                             sender: Some(Sender {username: Some(name.clone())}),
-                            contents: Some(Contents {content_type: Some(proto::application::contents::ContentType::Text(command.msg))})
+                            contents: Some(Contents {content_type: Some(ContentType::Text(command.msg))})
                         };
                         for key in get_keys(&mut gossamer, &command.to).await? {
                             if let Err(e) = send_message(&mut brongnal, &client.clone(), &key, &msg)
