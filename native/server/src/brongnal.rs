@@ -1,27 +1,25 @@
 use crate::persistence::SqliteStorage;
 use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_service_server::BrongnalService;
-use proto::service::Message as MessageProto;
-use proto::service::PreKeyBundle as PreKeyBundleProto;
 use proto::service::{
-    PreKeyBundleRequest, RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse,
-    RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
+    Message as MessageProto, PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest,
+    RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RetrieveMessagesRequest,
+    SendMessageRequest, SendMessageResponse,
 };
 use proto::{parse_verifying_key, parse_x25519_public_key};
 use protocol::bundle::verify_bundle;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Request, Response, Status};
-use tracing::error;
-use tracing::info;
+use tokio_stream::StreamExt;
+use tonic::{Request, Response, Result, Status, Streaming};
+use tracing::{error, info};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 pub struct BrongnalController {
     storage: SqliteStorage,
-    receivers: Arc<Mutex<HashMap<VerifyingKey, Sender<tonic::Result<MessageProto>>>>>,
+    receivers: Arc<Mutex<HashMap<VerifyingKey, Sender<Result<MessageProto>>>>>,
 }
 
 impl BrongnalController {
@@ -35,7 +33,7 @@ impl BrongnalController {
     async fn handle_register_pre_key_bundle(
         &self,
         request: RegisterPreKeyBundleRequest,
-    ) -> tonic::Result<RegisterPreKeyBundleResponse> {
+    ) -> Result<RegisterPreKeyBundleResponse> {
         let ik = parse_verifying_key(request.identity_key())
             .map_err(|_| Status::invalid_argument("request has invalid identity_key"))?;
         let spk_proto = request
@@ -52,7 +50,7 @@ impl BrongnalController {
             .pre_keys
             .iter()
             .map(|key| parse_x25519_public_key(key))
-            .collect::<tonic::Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|_| Status::invalid_argument("invalid prekey bundle"))?;
         let signature = Signature::from_slice(opks.signature()).map_err(|_e| {
             Status::invalid_argument("one time prekey bundle signature is invalid")
@@ -67,10 +65,7 @@ impl BrongnalController {
         Ok(RegisterPreKeyBundleResponse { num_keys })
     }
 
-    async fn handle_send_message(
-        &self,
-        request: SendMessageRequest,
-    ) -> tonic::Result<SendMessageResponse> {
+    async fn handle_send_message(&self, request: SendMessageRequest) -> Result<()> {
         let message_proto: MessageProto = request
             .message
             .ok_or(Status::invalid_argument("request missing message"))?;
@@ -93,13 +88,12 @@ impl BrongnalController {
         let tx = self.receivers.lock().unwrap().get(&recipient).cloned();
         if let Some(tx) = tx {
             if let Ok(()) = tx.send(Ok(message_proto.clone())).await {
-                return Ok(SendMessageResponse {});
+                return Ok(());
             }
         }
 
         self.storage.add_message(&recipient, message_proto).await?;
-
-        Ok(SendMessageResponse {})
+        Ok(())
     }
 }
 
@@ -108,7 +102,7 @@ impl BrongnalService for BrongnalController {
     async fn register_pre_key_bundle(
         &self,
         request: Request<RegisterPreKeyBundleRequest>,
-    ) -> tonic::Result<Response<RegisterPreKeyBundleResponse>> {
+    ) -> Result<Response<RegisterPreKeyBundleResponse>> {
         let request = request.into_inner();
         info!("Registering PreKeyBundle");
         let response = self
@@ -121,7 +115,7 @@ impl BrongnalService for BrongnalController {
     async fn request_pre_keys(
         &self,
         request: Request<PreKeyBundleRequest>,
-    ) -> tonic::Result<Response<PreKeyBundleProto>> {
+    ) -> Result<Response<PreKeyBundleProto>> {
         let request = request.into_inner();
 
         let ik = parse_verifying_key(
@@ -153,22 +147,23 @@ impl BrongnalService for BrongnalController {
 
     async fn send_message(
         &self,
-        request: Request<SendMessageRequest>,
-    ) -> tonic::Result<Response<SendMessageResponse>> {
-        let request = request.into_inner();
-        let response = self
-            .handle_send_message(request)
-            .await
-            .inspect_err(|e| error!("Failed to send message: {e}"))?;
-
-        Ok(Response::new(response))
+        request: Request<Streaming<SendMessageRequest>>,
+    ) -> Result<Response<SendMessageResponse>> {
+        let mut stream = request.into_inner();
+        while let Some(request) = stream.next().await {
+            let request = request.inspect_err(|e| error!("SendMessageRequest failed: {e}"))?;
+            self.handle_send_message(request)
+                .await
+                .inspect_err(|e| error!("Failed to send message: {e}"))?;
+        }
+        Ok(Response::new(SendMessageResponse {}))
     }
 
-    type RetrieveMessagesStream = ReceiverStream<tonic::Result<MessageProto>>;
+    type RetrieveMessagesStream = ReceiverStream<Result<MessageProto>>;
     async fn retrieve_messages(
         &self,
         request: Request<RetrieveMessagesRequest>,
-    ) -> tonic::Result<Response<Self::RetrieveMessagesStream>> {
+    ) -> Result<Response<Self::RetrieveMessagesStream>> {
         let request = request.into_inner();
 
         let ik = parse_verifying_key(
