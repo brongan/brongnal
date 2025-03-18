@@ -1,8 +1,6 @@
 use crate::messages::*;
-use client::{
-    get_keys, get_messages, register_device, register_username, send_message, X3DHClient,
-};
-use proto::application::{Contents, Message as ApplicationMessageProto, Sender};
+use client::{get_messages, register_device, register_username, send_message, X3DHClient};
+use ed25519_dalek::SigningKey;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use proto::ApplicationMessage;
@@ -51,39 +49,25 @@ async fn await_register_widget() -> Option<String> {
 async fn send_messages(
     mut brongnal: BrongnalClient<Channel>,
     mut gossamer: GossamerClient<Channel>,
-    client: Arc<X3DHClient>,
+    ik: SigningKey,
     name: String,
 ) {
     let receiver = SendMessage::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
-        debug_print!("Rust received message from flutter!: {}", req.message());
-        let keys = match get_keys(&mut gossamer, req.receiver()).await {
-            Ok(keys) => keys,
-            Err(e) => {
-                debug_print!("Failed to query keys for user: {}: {e}", req.receiver());
-                continue;
-            }
+        let message = req.message.unwrap();
+        let recipient = req.receiver.unwrap();
+        debug_print!("Rust received message from flutter!: {}", &message);
+
+        let msg = ApplicationMessage {
+            claimed_sender: name.clone(),
+            text: message,
         };
 
-        let msg = ApplicationMessageProto {
-            sender: Some(Sender {
-                username: Some(name.clone()),
-            }),
-            contents: Some(Contents {
-                content_type: Some(proto::application::contents::ContentType::Text(
-                    req.message.unwrap(),
-                )),
-            }),
-        };
-
-        for key in keys {
-            match send_message(&mut brongnal, &client, &key, &msg).await {
-                Ok(_) => {}
-                Err(e) => {
-                    debug_print!("Failed to send message: {e}");
-                }
-            }
+        if let Err(e) =
+            send_message(&mut brongnal, &mut gossamer, ik.clone(), &recipient, msg).await
+        {
+            debug_print!("Failed to query keys for user: {recipient}: {e}");
         }
     }
     debug_print!("Lost message connection to flutter!");
@@ -132,6 +116,7 @@ async fn main() {
             .await
             .expect("init database"),
     );
+    let ik = client.get_ik();
 
     while username.is_none() {
         username = await_register_widget().await;
@@ -162,12 +147,7 @@ async fn main() {
         }
     }
 
-    tokio::spawn(send_messages(
-        brongnal.clone(),
-        gossamer,
-        client.clone(),
-        username,
-    ));
+    tokio::spawn(send_messages(brongnal.clone(), gossamer, ik, username));
     tokio::spawn(receive_messages(brongnal, client));
 
     rinf::dart_shutdown().await;

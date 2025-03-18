@@ -1,10 +1,7 @@
 use anyhow::Result;
-use client::{
-    get_keys, get_messages, register_device, register_username, send_message, X3DHClient,
-};
+use client::{get_messages, register_device, register_username, send_message, X3DHClient};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
-use proto::application::{Contents, Message as ApplicationMessageProto, Sender};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use proto::ApplicationMessage;
@@ -68,7 +65,7 @@ async fn main() -> Result<()> {
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
     info!("Registering {name} with key={ik_str} at {addr}");
 
-    register_username(&mut gossamer, ik, name.clone()).await?;
+    register_username(&mut gossamer, ik.clone(), name.clone()).await?;
     register_device(&mut brongnal, &client.clone()).await?;
 
     println!("NAME MESSAGE");
@@ -97,15 +94,13 @@ async fn main() -> Result<()> {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        let msg = ApplicationMessageProto {
-                            sender: Some(Sender {username: Some(name.clone())}),
-                            contents: Some(Contents {content_type: Some(proto::application::contents::ContentType::Text(command.msg))})
+                        let message = ApplicationMessage {
+                            claimed_sender: name.clone(),
+                            text: command.msg,
                         };
-                        for key in get_keys(&mut gossamer, &command.to).await? {
-                            if let Err(e) = send_message(&mut brongnal, &client.clone(), &key, &msg)
-                            .await {
+
+                        if let Err(e) = send_message(&mut brongnal, &mut gossamer, ik.clone(), &command.to, message).await {
                                 eprintln!("Failed to send message: {e}");
-                            }
                         }
                     },
                     None => {
