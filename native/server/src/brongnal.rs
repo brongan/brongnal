@@ -3,9 +3,8 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use proto::service::brongnal_service_server::BrongnalService;
 use proto::service::Message as MessageProto;
 use proto::service::PreKeyBundle as PreKeyBundleProto;
-use proto::service::RequestPreKeyBundleResponse;
 use proto::service::{
-    RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RequestPreKeysRequest,
+    PreKeyBundleRequest, RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse,
     RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
 };
 use proto::{parse_verifying_key, parse_x25519_public_key};
@@ -121,8 +120,8 @@ impl BrongnalService for BrongnalController {
 
     async fn request_pre_keys(
         &self,
-        request: Request<RequestPreKeysRequest>,
-    ) -> tonic::Result<Response<RequestPreKeyBundleResponse>> {
+        request: Request<PreKeyBundleRequest>,
+    ) -> tonic::Result<Response<PreKeyBundleProto>> {
         let request = request.into_inner();
 
         let ik = parse_verifying_key(
@@ -144,12 +143,10 @@ impl BrongnalService for BrongnalController {
         let spk = spk?;
         let opk = opk?;
 
-        let reply = RequestPreKeyBundleResponse {
-            bundles: vec![PreKeyBundleProto {
-                identity_key: Some(ik.as_bytes().into()),
-                one_time_key: opk.map(|opk| opk.as_bytes().into()),
-                signed_pre_key: Some(spk),
-            }],
+        let reply = PreKeyBundleProto {
+            identity_key: Some(ik.as_bytes().into()),
+            one_time_key: opk.map(|opk| opk.as_bytes().into()),
+            signed_pre_key: Some(spk),
         };
         Ok(Response::new(reply))
     }
