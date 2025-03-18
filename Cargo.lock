@@ -892,6 +892,7 @@ name = "hub"
 version = "0.1.0"
 dependencies = [
  "client",
+ "ed25519-dalek",
  "prost",
  "proto",
  "rinf",
