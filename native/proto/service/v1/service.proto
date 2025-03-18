@@ -4,7 +4,7 @@ package service.v1;
 service BrongnalService {
   rpc RegisterPreKeyBundle(RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
   rpc RequestPreKeys(PreKeyBundleRequest) returns (PreKeyBundle);
-  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc SendMessage(stream SendMessageRequest) returns (SendMessageResponse);
   rpc RetrieveMessages(RetrieveMessagesRequest) returns (stream Message);
 }
 

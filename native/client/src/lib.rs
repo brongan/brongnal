@@ -228,10 +228,10 @@ pub async fn send_message(
             Recipient: {recipient_str}"
     );
 
-    let request = Request::new(SendMessageRequest {
+    let request = Request::new(tokio_stream::iter([SendMessageRequest {
         recipient_identity_key: Some(recipient),
         message: Some(message.into()),
-    });
+    }]));
     stub.send_message(request).await?;
     Ok(())
 }
