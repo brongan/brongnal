@@ -3,7 +3,7 @@ package service.v1;
 
 service BrongnalService {
   rpc RegisterPreKeyBundle(RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
-  rpc RequestPreKeys(RequestPreKeysRequest) returns (RequestPreKeyBundleResponse);
+  rpc RequestPreKeys(PreKeyBundleRequest) returns (PreKeyBundle);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc RetrieveMessages(RetrieveMessagesRequest) returns (stream Message);
 }
@@ -39,7 +39,7 @@ message RegisterPreKeyBundleResponse {
 	optional uint32 num_keys = 1;
 }
 
-message RequestPreKeysRequest {
+message PreKeyBundleRequest {
   // ED25519 public key
   optional bytes identity_key = 1;
 }
@@ -52,10 +52,6 @@ message PreKeyBundle {
   optional bytes one_time_key = 2;
 
   optional SignedPreKey signed_pre_key = 3;
-}
-
-message RequestPreKeyBundleResponse {
-  repeated PreKeyBundle bundles = 1;
 }
 
 message Message {
