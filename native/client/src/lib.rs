@@ -5,14 +5,15 @@ use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use prost::Message as _;
+use proto::application::Message as ApplicationMessageProto;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient;
 use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger, SignedMessage};
-use proto::parse_verifying_key;
 use proto::service::brongnal_service_client::BrongnalServiceClient;
 use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
+use proto::{parse_verifying_key, ApplicationMessage};
 use protocol::x3dh::{initiate_recv, initiate_send, Message as X3DHMessage, X3DHError};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,9 +48,11 @@ pub enum ClientError {
     #[error("grpc error: {0}")]
     Grpc(#[from] tonic::Status),
     #[error("send decrypted message error: {0}")]
-    Send(#[from] SendError<DecryptedMessage>),
+    Send(#[from] SendError<ApplicationMessageProto>),
     #[error("x3dh error: {0}")]
     X3DH(#[from] X3DHError),
+    #[error("decode error: {0}")]
+    Decode(#[from] prost::DecodeError),
 }
 
 #[allow(dead_code)]
@@ -79,10 +82,6 @@ impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
     }
 }
 
-pub struct DecryptedMessage {
-    pub message: Vec<u8>,
-}
-
 fn into_message_stream(
     mut stream: Streaming<MessageProto>,
 ) -> impl Stream<Item = ClientResult<X3DHMessage>> {
@@ -98,7 +97,7 @@ fn into_message_stream(
 pub fn get_messages(
     mut stub: BrongnalServiceClient<Channel>,
     x3dh_client: Arc<X3DHClient>,
-) -> impl Stream<Item = ClientResult<DecryptedMessage>> {
+) -> impl Stream<Item = ClientResult<ApplicationMessage>> {
     try_stream! {
         let key = x3dh_client.get_ik().await?.verifying_key().as_bytes().to_vec();
         let stream = stub
@@ -129,9 +128,8 @@ pub fn get_messages(
                     opk,
                     &message.ciphertext,
                 )?;
-                Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
-                    message: decrypted,
-                })
+                let message: ApplicationMessage = ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
+                Ok::<ApplicationMessage, ClientError>(message)
             };
             match res {
                 Ok(decrypted) => yield decrypted,
@@ -212,16 +210,18 @@ pub async fn send_message(
     stub: &mut BrongnalServiceClient<Channel>,
     x3dh_client: &X3DHClient,
     recipient: &VerifyingKey,
-    message: &str,
+    message: &ApplicationMessageProto,
 ) -> ClientResult<()> {
-    let message = message.as_bytes();
     let request = Request::new(RequestPreKeysRequest {
         identity_key: Some(recipient.to_bytes().to_vec()),
     });
     let response = stub.request_pre_keys(request).await?.into_inner();
     for bundle in response.bundles {
-        let (_sk, message) =
-            initiate_send(bundle.try_into()?, &x3dh_client.get_ik().await?, message)?;
+        let (_sk, message) = initiate_send(
+            bundle.try_into()?,
+            &x3dh_client.get_ik().await?,
+            &message.encode_to_vec(),
+        )?;
         let recipient = recipient.to_bytes().to_vec();
 
         #[allow(deprecated)]
