@@ -78,11 +78,8 @@ message Message {
 message SendMessageRequest {
   optional Message message = 1;
 
-  // Clients gotta verify this somehow oofies.
-  optional bytes claimed_sender_identity = 2;
-
   // Ed25519 public key
-  optional bytes recipient_identity_key = 3;
+  optional bytes recipient_identity_key = 2;
 }
 
 message SendMessageResponse {}

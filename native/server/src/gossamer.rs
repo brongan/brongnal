@@ -1,20 +1,22 @@
 use ed25519_dalek::VerifyingKey;
 use proto::gossamer::gossamer_service_server::GossamerService;
-use proto::gossamer::{ActionRequest, ActionResponse, GetLedgerRequest, Ledger, SignedMessage};
+use proto::gossamer::{
+    ActionRequest, ActionResponse, GetLedgerRequest, Ledger, SignedMessage, User,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tonic::{Request, Response, Status};
 use tracing::{error, info};
 
 pub struct InMemoryGossamer {
-    _provider: Arc<Mutex<HashMap<String, VerifyingKey>>>,
+    provider: Arc<Mutex<HashMap<Vec<u8>, VerifyingKey>>>,
     messages: Arc<Mutex<Vec<SignedMessage>>>,
 }
 
 impl Default for InMemoryGossamer {
     fn default() -> Self {
         Self {
-            _provider: Arc::new(Mutex::new(HashMap::new())),
+            provider: Arc::new(Mutex::new(HashMap::new())),
             messages: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -22,17 +24,48 @@ impl Default for InMemoryGossamer {
 
 impl InMemoryGossamer {
     fn handle_action(&self, message: SignedMessage) -> tonic::Result<()> {
-        let signed_message: protocol::gossamer::SignedMessage = message.try_into()?;
+        let signed_message: protocol::gossamer::SignedMessage = message.clone().try_into()?;
+
+        let mut providers = self.provider.lock().unwrap();
+        if signed_message.identity_key != signed_message.message.public_key {
+            return Err(Status::unimplemented(
+                "Multiple identity keys for a given username is not yet supported.",
+            ));
+        }
 
         match signed_message.message.action {
             protocol::gossamer::Action::AppendKey => {
-                // Verify username is not claimed or if it is, the signer is already registered.
+                if let Some(key) = providers.get(&signed_message.message.provider) {
+                    if key != &signed_message.message.public_key {
+                        return Err(Status::already_exists(format!(
+                            "Provider: {:?} is already registered.",
+                            &signed_message.message.provider
+                        )));
+                    }
+                }
+                providers.insert(
+                    signed_message.message.provider,
+                    signed_message.message.public_key,
+                );
             }
             protocol::gossamer::Action::RevokeKey => {
-                // Verify key is claimed by key?
+                if let Some(ik) = providers.get(&signed_message.message.provider) {
+                    if ik == &signed_message.message.public_key {
+                        providers.remove(&signed_message.message.provider);
+                    } else {
+                        return Err(Status::permission_denied(
+                            "this key does not own the entry for this username",
+                        ));
+                    }
+                } else {
+                    return Err(Status::failed_precondition(
+                        "Cannot revoke key that is not registered.",
+                    ));
+                }
             }
         }
-        todo!()
+        self.messages.lock().unwrap().push(message);
+        Ok(())
     }
 }
 
@@ -59,9 +92,17 @@ impl GossamerService for InMemoryGossamer {
         request: Request<GetLedgerRequest>,
     ) -> Result<Response<Ledger>, Status> {
         let request = request.into_inner();
-        info!("Received Ledger Request: {request:?}");
+        info!("Received Ledger Request for: {request:?}");
 
-        // TODO return ledger
-        Ok(Response::new(Ledger { users: Vec::new() }))
+        let providers = self.provider.lock().unwrap();
+        let users = providers
+            .iter()
+            .map(|(provider, key)| User {
+                provider: Some(provider.to_owned()),
+                public_keys: vec![key.to_bytes().to_vec()],
+            })
+            .collect();
+
+        Ok(Response::new(Ledger { users }))
     }
 }

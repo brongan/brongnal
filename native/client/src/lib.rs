@@ -80,7 +80,6 @@ impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
 }
 
 pub struct DecryptedMessage {
-    pub sender_identity: String,
     pub message: Vec<u8>,
 }
 
@@ -99,12 +98,12 @@ fn into_message_stream(
 pub fn get_messages(
     mut stub: BrongnalServiceClient<Channel>,
     x3dh_client: Arc<X3DHClient>,
-    key: VerifyingKey,
 ) -> impl Stream<Item = ClientResult<DecryptedMessage>> {
     try_stream! {
+        let key = x3dh_client.get_ik().await?.verifying_key().as_bytes().to_vec();
         let stream = stub
             .retrieve_messages(RetrieveMessagesRequest {
-                identity_key: Some(key.to_bytes().to_vec()),
+                identity_key: Some(key),
             })
         .await;
         let messages = into_message_stream(stream?.into_inner());
@@ -131,9 +130,6 @@ pub fn get_messages(
                     &message.ciphertext,
                 )?;
                 Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
-                    // TODO(https://github.com/brongan/brongnal/issues/15): Don't blindly trust the
-                    // sender's claimed identity.
-                    sender_identity: String::from(""),
                     message: decrypted,
                 })
             };
@@ -170,7 +166,7 @@ pub async fn register_username(
         signature: Some(signature.to_vec()),
     };
     let request = Request::new(ActionRequest {
-        message: Some(signed_message.into()),
+        message: Some(signed_message),
     });
     stub.action(request).await?;
     Ok(())
@@ -179,15 +175,16 @@ pub async fn register_username(
 pub async fn register_device(
     stub: &mut BrongnalServiceClient<Channel>,
     x3dh_client: &X3DHClient,
-    name: String,
 ) -> ClientResult<()> {
-    info!("Registering {name}!");
     let ik = x3dh_client
         .get_ik()
         .await?
         .verifying_key()
         .as_bytes()
         .to_vec();
+    #[allow(deprecated)]
+    let ik_str = base64::encode(&ik);
+    info!("Registering {ik_str}!",);
 
     let request = Request::new(RegisterPreKeyBundleRequest {
         identity_key: Some(ik.clone()),
@@ -195,7 +192,7 @@ pub async fn register_device(
         one_time_key_bundle: Some(x3dh_client.create_opks(0).await?.into()),
     });
     let res = stub.register_pre_key_bundle(request).await?.into_inner();
-    info!("Registered: {}. {} keys remaining!", name, res.num_keys());
+    info!("Registered. {} keys remaining!", res.num_keys());
     if res.num_keys() < 100 {
         info!("Adding 100 keys!");
         let request = Request::new(RegisterPreKeyBundleRequest {
@@ -214,13 +211,10 @@ pub async fn register_device(
 pub async fn send_message(
     stub: &mut BrongnalServiceClient<Channel>,
     x3dh_client: &X3DHClient,
-    sender_identity: String,
     recipient: &VerifyingKey,
     message: &str,
 ) -> ClientResult<()> {
     let message = message.as_bytes();
-    let sender_identity: Vec<u8> =
-        Blake2b::<blake2::digest::typenum::U32>::digest(sender_identity.as_bytes()).to_vec();
     let request = Request::new(RequestPreKeysRequest {
         identity_key: Some(recipient.to_bytes().to_vec()),
     });
@@ -228,10 +222,17 @@ pub async fn send_message(
     for bundle in response.bundles {
         let (_sk, message) =
             initiate_send(bundle.try_into()?, &x3dh_client.get_ik().await?, message)?;
-        info!("Sending message: {message}");
+        let recipient = recipient.to_bytes().to_vec();
+
+        #[allow(deprecated)]
+        let recipient_str = base64::encode(&recipient);
+        info!(
+            "Sending message:\n{message}\n\
+            Recipient: {recipient_str}"
+        );
+
         let request = Request::new(SendMessageRequest {
-            claimed_sender_identity: Some(sender_identity.clone()),
-            recipient_identity_key: Some(recipient.to_bytes().to_vec()),
+            recipient_identity_key: Some(recipient),
             message: Some(message.into()),
         });
         stub.send_message(request).await?;
@@ -256,12 +257,11 @@ pub async fn get_keys(
         .users
         .into_iter()
         .filter(|user| user.provider() == recipient_user_id)
-        .map(|user| {
+        .flat_map(|user| {
             user.public_keys
                 .into_iter()
                 .map(|key| parse_verifying_key(&key).unwrap())
                 .collect::<Vec<_>>()
         })
-        .flatten()
         .collect::<Vec<_>>())
 }

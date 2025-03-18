@@ -74,9 +74,10 @@ impl std::fmt::Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "From key: {}\n\
-            Keys: {}    {}\n\
-            Payload: {}\n",
+            "sender_ik:  {}\n\
+             ek:         {}\n\
+             pre_key:    {}\n\
+             Payload:    {}\n",
             base64::encode(self.ik),
             base64::encode(self.ek),
             self.opk

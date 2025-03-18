@@ -75,12 +75,7 @@ impl BrongnalController {
         let message_proto: MessageProto = request
             .message
             .ok_or(Status::invalid_argument("request missing message"))?;
-        let claimed_sender_identity = request
-            .claimed_sender_identity
-            .ok_or(Status::invalid_argument("request missing sender identity"))?;
-        if !claimed_sender_identity.len() == 32 {
-            return Err(Status::invalid_argument("invalid sender identity"));
-        }
+
         let recipient = parse_verifying_key(
             &request
                 .recipient_identity_key
@@ -90,11 +85,13 @@ impl BrongnalController {
 
         // Do some basic validation on the message before persisting it or sending it to the
         // recipient.
-        let message = protocol::x3dh::Message::try_from(message_proto.clone())?;
+        let _message = protocol::x3dh::Message::try_from(message_proto.clone())?;
 
-        info!("Received request to send message to: \"{:?}\".", recipient);
+        #[allow(deprecated)]
+        let addr = base64::encode(recipient.as_bytes());
+        info!("Received request to send message to: \"{}\".", addr);
 
-        let tx = self.receivers.lock().unwrap().get(&message.ik).cloned();
+        let tx = self.receivers.lock().unwrap().get(&recipient).cloned();
         if let Some(tx) = tx {
             if let Ok(()) = tx.send(Ok(message_proto.clone())).await {
                 return Ok(SendMessageResponse {});
@@ -134,8 +131,10 @@ impl BrongnalService for BrongnalController {
                 .ok_or(Status::invalid_argument("missing recipient identity key"))?,
         )
         .map_err(|_| Status::invalid_argument("invalid recipient identity key"))?;
+        #[allow(deprecated)]
+        let ik_str = base64::encode(ik.as_bytes());
 
-        info!("Retrieving PreKeyBundle for \"{:?}\".", ik);
+        info!("Retrieving PreKeyBundle for \"{}\".", ik_str);
 
         let (spk, opk) = tokio::join!(
             self.storage.get_current_spk(&ik),
@@ -182,7 +181,9 @@ impl BrongnalService for BrongnalController {
         )
         .map_err(|_| Status::invalid_argument("invalid recipient identity key"))?;
 
-        info!("Retrieving \"{ik:?}\"'s messages.");
+        #[allow(deprecated)]
+        let ik_str = base64::encode(ik.as_bytes());
+        info!("Retrieving key=\"{ik_str}\"'s messages.");
 
         let (tx, rx) = mpsc::channel(100);
 
