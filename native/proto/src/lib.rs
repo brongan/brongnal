@@ -1,3 +1,5 @@
+use application::contents::ContentType;
+use application::{Contents, Sender};
 use ed25519_dalek::{Signature, VerifyingKey};
 use prost::Message as _;
 use protocol::gossamer::Message;
@@ -31,12 +33,19 @@ pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, KeyError> 
     let key: [u8; 32] = key.try_into().map_err(|_| KeyError::InvalidX25519Key)?;
     Ok(X25519PublicKey::from(key))
 }
+
 pub mod gossamer {
     tonic::include_proto!("gossamer.v1");
 }
+
 pub mod service {
     tonic::include_proto!("service.v1");
 }
+
+pub mod application {
+    tonic::include_proto!("application.v1");
+}
+
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("service_descriptor");
 
 impl From<SignedPreKey> for SignedPreKeyProto {
@@ -226,6 +235,50 @@ impl From<GossamerSignedMessage> for gossamer::SignedMessage {
             contents: Some(contents.encode_to_vec()),
             signature: Some(val.signature.to_vec()),
             identity_key: Some(val.identity_key.as_bytes().to_vec()),
+        }
+    }
+}
+
+pub struct ApplicationMessage {
+    pub claimed_sender: String,
+    pub text: String,
+}
+
+impl TryInto<ApplicationMessage> for application::Message {
+    type Error = tonic::Status;
+    fn try_into(self) -> Result<ApplicationMessage, Self::Error> {
+        let sender =
+            self.sender
+                .and_then(|sender| sender.username)
+                .ok_or(Status::invalid_argument(
+                    "ApplicationMessage missing sender.",
+                ))?;
+        let contents = self
+            .contents
+            .and_then(|contents| contents.content_type)
+            .ok_or(Status::invalid_argument(
+                "ApplicationMessage missing contents.",
+            ))?;
+        let text = match contents {
+            ContentType::Text(text) => text,
+            _ => return Err(Status::unimplemented("Only text is supported.")),
+        };
+        Ok(ApplicationMessage {
+            claimed_sender: sender,
+            text,
+        })
+    }
+}
+
+impl From<ApplicationMessage> for application::Message {
+    fn from(val: ApplicationMessage) -> Self {
+        Self {
+            sender: Some(Sender {
+                username: Some(val.claimed_sender),
+            }),
+            contents: Some(Contents {
+                content_type: Some(ContentType::Text(val.text)),
+            }),
         }
     }
 }

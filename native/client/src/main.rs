@@ -1,12 +1,13 @@
 use anyhow::Result;
 use client::{
-    get_keys, get_messages, register_device, register_username, send_message, DecryptedMessage,
-    X3DHClient,
+    get_keys, get_messages, register_device, register_username, send_message, X3DHClient,
 };
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
+use proto::application::{Contents, Message as ApplicationMessageProto, Sender};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
+use proto::ApplicationMessage;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -96,8 +97,12 @@ async fn main() -> Result<()> {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
+                        let msg = ApplicationMessageProto {
+                            sender: Some(Sender {username: Some(name.clone())}),
+                            contents: Some(Contents {content_type: Some(proto::application::contents::ContentType::Text(command.msg))})
+                        };
                         for key in get_keys(&mut gossamer, &command.to).await? {
-                            if let Err(e) = send_message(&mut brongnal, &client.clone(), &key, &command.msg)
+                            if let Err(e) = send_message(&mut brongnal, &client.clone(), &key, &msg)
                             .await {
                                 eprintln!("Failed to send message: {e}");
                             }
@@ -112,8 +117,8 @@ async fn main() -> Result<()> {
             },
             msg = messages_stream.next() => {
                 match msg {
-                    Some(Ok(DecryptedMessage { message })) => {
-                        println!("Received message from unknown: \"{}\"", String::from_utf8(message).unwrap());
+                    Some(Ok(ApplicationMessage {claimed_sender, text})) => {
+                        println!("Received message from (claimed) {claimed_sender}: {text:?}");
                     },
                     Some(Err(e)) => {
                         eprintln!("Failed to receive decrypted message: {e}");
