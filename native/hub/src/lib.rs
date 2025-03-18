@@ -2,8 +2,10 @@ use crate::messages::*;
 use client::{
     get_keys, get_messages, register_device, register_username, send_message, X3DHClient,
 };
+use proto::application::{Contents, Message as ApplicationMessageProto, Sender};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
+use proto::ApplicationMessage;
 use rinf::debug_print;
 use std::{path::PathBuf, sync::Arc};
 use tokio_rusqlite::Connection;
@@ -50,6 +52,7 @@ async fn send_messages(
     mut brongnal: BrongnalClient<Channel>,
     mut gossamer: GossamerClient<Channel>,
     client: Arc<X3DHClient>,
+    name: String,
 ) {
     let receiver = SendMessage::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
@@ -63,8 +66,19 @@ async fn send_messages(
             }
         };
 
+        let msg = ApplicationMessageProto {
+            sender: Some(Sender {
+                username: Some(name.clone()),
+            }),
+            contents: Some(Contents {
+                content_type: Some(proto::application::contents::ContentType::Text(
+                    req.message.unwrap(),
+                )),
+            }),
+        };
+
         for key in keys {
-            match send_message(&mut brongnal, &client, &key, req.message()).await {
+            match send_message(&mut brongnal, &client, &key, &msg).await {
                 Ok(_) => {}
                 Err(e) => {
                     debug_print!("Failed to send message: {e}");
@@ -84,19 +98,15 @@ async fn receive_messages(stub: BrongnalClient<Channel>, x3dh_client: Arc<X3DHCl
             debug_print!("[Failed to Decrypt Message]: {e}");
             continue;
         }
-        let decrypted = decrypted.unwrap();
-        let message = String::from_utf8(decrypted.message);
-        match &message {
-            Ok(message) => {
-                debug_print!("[Received Message] from unknown: {message}");
-            }
-            Err(_) => {
-                debug_print!("Decrypted message was not UTF-8 encoded.");
-            }
-        }
+        let ApplicationMessage {
+            claimed_sender,
+            text,
+        } = decrypted.unwrap();
+        debug_print!("[Received Message] from (claimed) {claimed_sender}: {text}",);
+        // TODO validate sender claim
         ReceivedMessage {
-            message: message.ok(),
-            sender: Some(String::from("Unknown")),
+            message: Some(text),
+            sender: Some(claimed_sender),
         }
         .send_signal_to_dart();
     }
@@ -152,7 +162,12 @@ async fn main() {
         }
     }
 
-    tokio::spawn(send_messages(brongnal.clone(), gossamer, client.clone()));
+    tokio::spawn(send_messages(
+        brongnal.clone(),
+        gossamer,
+        client.clone(),
+        username,
+    ));
     tokio::spawn(receive_messages(brongnal, client));
 
     rinf::dart_shutdown().await;

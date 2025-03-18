@@ -1,0 +1,20 @@
+syntax = "proto2";
+package application.v1;
+
+message Sender {
+	optional string username = 1;
+}
+message Contents {
+	oneof content_type {
+		string text = 1;
+
+		bytes image = 2; 
+		// TODO() - Readd receipts.
+	}
+}
+
+message Message {
+  optional Sender sender = 1;
+
+  optional Contents contents = 2;
+}
