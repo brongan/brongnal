@@ -10,7 +10,7 @@ use proto::gossamer::gossamer_service_client::GossamerServiceClient;
 use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger, SignedMessage};
 use proto::service::brongnal_service_client::BrongnalServiceClient;
 use proto::service::{
-    Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
+    Message as MessageProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
 use proto::{parse_verifying_key, ApplicationMessage};
@@ -209,32 +209,30 @@ pub async fn send_message(
     recipient: &VerifyingKey,
     message: &ApplicationMessageProto,
 ) -> ClientResult<()> {
-    let request = Request::new(RequestPreKeysRequest {
+    let request = Request::new(PreKeyBundleRequest {
         identity_key: Some(recipient.to_bytes().to_vec()),
     });
 
     let response = stub.request_pre_keys(request).await?.into_inner();
-    for bundle in response.bundles {
-        let (_sk, message) = initiate_send(
-            bundle.try_into()?,
-            &x3dh_client.get_ik(),
-            &message.encode_to_vec(),
-        )?;
-        let recipient = recipient.to_bytes().to_vec();
+    let (_sk, message) = initiate_send(
+        response.try_into()?,
+        &x3dh_client.get_ik(),
+        &message.encode_to_vec(),
+    )?;
+    let recipient = recipient.to_bytes().to_vec();
 
-        #[allow(deprecated)]
-        let recipient_str = base64::encode(&recipient);
-        info!(
-            "Sending message:\n{message}\n\
+    #[allow(deprecated)]
+    let recipient_str = base64::encode(&recipient);
+    info!(
+        "Sending message:\n{message}\n\
             Recipient: {recipient_str}"
-        );
+    );
 
-        let request = Request::new(SendMessageRequest {
-            recipient_identity_key: Some(recipient),
-            message: Some(message.into()),
-        });
-        stub.send_message(request).await?;
-    }
+    let request = Request::new(SendMessageRequest {
+        recipient_identity_key: Some(recipient),
+        message: Some(message.into()),
+    });
+    stub.send_message(request).await?;
     Ok(())
 }
 
