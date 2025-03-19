@@ -8,7 +8,7 @@ use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient;
-use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger, SignedMessage};
+use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger as LedgerProto, SignedMessage};
 use proto::service::brongnal_service_client::BrongnalServiceClient;
 use proto::service::{
     Message as MessageProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
@@ -105,10 +105,48 @@ pub struct User {
     username: String,
 }
 
+pub trait Ledger {
+    fn validate_username(&self, username: &str, ik: &VerifyingKey) -> bool;
+}
+
+struct HashLedger(HashMap<Vec<u8>, Vec<VerifyingKey>>);
+
+impl From<LedgerProto> for HashLedger {
+    fn from(ledger: LedgerProto) -> Self {
+        HashLedger(
+            ledger
+                .users
+                .into_iter()
+                .map(|user| {
+                    (
+                        user.provider.unwrap(),
+                        user.public_keys
+                            .into_iter()
+                            .map(|key| parse_verifying_key(&key).unwrap())
+                            .collect(),
+                    )
+                })
+                .collect(),
+        )
+    }
+}
+
+impl Ledger for HashLedger {
+    fn validate_username(&self, username: &str, ik: &VerifyingKey) -> bool {
+        let provider =
+            Blake2b::<blake2::digest::typenum::U32>::digest(username.as_bytes()).to_vec();
+        match self.0.get(&provider) {
+            Some(cached) => cached.contains(ik),
+            None => false,
+        }
+    }
+}
+
 pub struct MessageSubscriber {
     stream: Streaming<MessageProto>,
     ik: SigningKey,
     x3dh: Arc<X3DHClient>,
+    ledger: Box<dyn Ledger>,
 }
 
 impl MessageSubscriber {
@@ -137,8 +175,12 @@ impl MessageSubscriber {
                         opk,
                         &message.ciphertext,
                     )?;
-                    let message: ApplicationMessage = ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
-                    Ok::<ApplicationMessage, ClientError>(message)
+                    let application_message: ApplicationMessage = ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
+                    if !self.ledger.validate_username(&application_message.sender, &message.ik) {
+                        warn!("Message failed username validation. Claimed sender: {}", &application_message.sender);
+                        continue;
+                    }
+                    Ok::<ApplicationMessage, ClientError>(application_message)
                 };
                 match res {
                     Ok(decrypted) => yield decrypted,
@@ -171,6 +213,7 @@ impl User {
 
     pub async fn get_messages(&self) -> ClientResult<MessageSubscriber> {
         let mut brongnal = self.brongnal.clone();
+        let mut gossamer = self.gossamer.clone();
         let ik = self.x3dh.get_ik();
         let stream = brongnal
             .retrieve_messages(RetrieveMessagesRequest {
@@ -178,10 +221,12 @@ impl User {
             })
             .await?
             .into_inner();
+        let ledger: Box<HashLedger> = Box::new(get_ledger(&mut gossamer).await?.into());
         Ok(MessageSubscriber {
             stream,
             ik,
             x3dh: self.x3dh.clone(),
+            ledger,
         })
     }
 
@@ -189,7 +234,7 @@ impl User {
         let mut brongnal = self.brongnal.clone();
         let mut gossamer = self.gossamer.clone();
         let message = ApplicationMessage {
-            claimed_sender: self.username.clone(),
+            sender: self.username.clone(),
             text: message,
         };
         let ik = self.x3dh.get_ik();
@@ -216,7 +261,7 @@ impl User {
 }
 
 async fn register_username(
-    stub: &mut GossamerServiceClient<Channel>,
+    stub: &mut GossamerClient,
     ik: SigningKey,
     name: String,
 ) -> ClientResult<()> {
@@ -244,10 +289,7 @@ async fn register_username(
     Ok(())
 }
 
-async fn register_device(
-    stub: &mut BrongnalServiceClient<Channel>,
-    x3dh_client: &X3DHClient,
-) -> ClientResult<()> {
+async fn register_device(stub: &mut BrongnalClient, x3dh_client: &X3DHClient) -> ClientResult<()> {
     let ik = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
     #[allow(deprecated)]
     let ik_str = base64::encode(&ik);
@@ -303,14 +345,14 @@ fn send_message_requests(
     }
 }
 
-async fn get_ledger(stub: &mut GossamerServiceClient<Channel>) -> ClientResult<Ledger> {
+async fn get_ledger(stub: &mut GossamerClient) -> ClientResult<LedgerProto> {
     let request = Request::new(GetLedgerRequest {});
     let ledger = stub.get_ledger(request).await?.into_inner();
     Ok(ledger)
 }
 
 async fn get_keys(
-    stub: &mut GossamerServiceClient<Channel>,
+    stub: &mut GossamerClient,
     peer_username: &str,
 ) -> ClientResult<Vec<VerifyingKey>> {
     let recipient_user_id =
