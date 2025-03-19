@@ -30,5 +30,3 @@ tracing-subscriber = "0.3.19"
 x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
 xdg = "2.5.2"
 
-[dev-dependencies]
-tempdir = "0.3"
