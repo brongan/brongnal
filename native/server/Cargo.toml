@@ -4,25 +4,25 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.81"
+anyhow = "1.0.97"
 base64 = "0.22.1"
 blake2 = "0.10.6"
 chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
-futures = "0.3.30"
-prost = "0.12.4"
+futures = "0.3.31"
+prost = "0.12.6"
 proto = { path = "../proto/" }
 protocol = { path = "../protocol/" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
-rusqlite = { version = "0.32.0", features = [] }
+rusqlite = { version = "0.32.1", features = [] }
 sentry = { version = "0.34.0", default-features = false, features = ["reqwest", "rustls", "backtrace", "contexts", "panic"] }
-tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros"] }
 tokio-rusqlite = { version = "0.6.0", features = [] }
-tokio-stream = "0.1.15"
+tokio-stream = "0.1.17"
 tonic = "0.11.0"
 tonic-reflection = { version = "0.11.0", features = ["server"] }
-tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
 x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
 xdg = "2.5.2"
 
