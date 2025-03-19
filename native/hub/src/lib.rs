@@ -100,13 +100,13 @@ async fn main() {
             match decrypted {
                 Some(Ok(msg)) => {
                     let ApplicationMessage {
-                        claimed_sender,
+                        sender,
                         text,
                     } = msg;
-                    debug_print!("[Received Message] from (claimed) {claimed_sender}: {text}",);
+                    debug_print!("[Received Message] from {sender}: {text}",);
                     ReceivedMessage {
                         message: Some(text),
-                        sender: Some(claimed_sender),
+                        sender: Some(sender),
                     }
                     .send_signal_to_dart();
 

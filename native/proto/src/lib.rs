@@ -240,7 +240,7 @@ impl From<GossamerSignedMessage> for gossamer::SignedMessage {
 }
 
 pub struct ApplicationMessage {
-    pub claimed_sender: String,
+    pub sender: String,
     pub text: String,
 }
 
@@ -263,10 +263,7 @@ impl TryInto<ApplicationMessage> for application::Message {
             ContentType::Text(text) => text,
             _ => return Err(Status::unimplemented("Only text is supported.")),
         };
-        Ok(ApplicationMessage {
-            claimed_sender: sender,
-            text,
-        })
+        Ok(ApplicationMessage { sender, text })
     }
 }
 
@@ -274,7 +271,7 @@ impl From<ApplicationMessage> for application::Message {
     fn from(val: ApplicationMessage) -> Self {
         Self {
             sender: Some(Sender {
-                username: Some(val.claimed_sender),
+                username: Some(val.sender),
             }),
             contents: Some(Contents {
                 content_type: Some(ContentType::Text(val.text)),
