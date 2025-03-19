@@ -98,57 +98,125 @@ fn into_message_stream(
     }
 }
 
-/// Takes a Brongnal RPC Client and an X3DH client and returns a stream of decrypted messages.
-pub fn get_messages(
-    mut stub: BrongnalClient,
-    x3dh_client: Arc<X3DHClient>,
-) -> impl Stream<Item = ClientResult<ApplicationMessage>> {
-    let key = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
-    try_stream! {
-        let stream = stub
-            .retrieve_messages(RetrieveMessagesRequest {
-                identity_key: Some(key),
-            })
-        .await;
-        let messages = into_message_stream(stream?.into_inner());
-        tokio::pin!(messages);
-        while let Some(message) = messages.next().await {
-            if let Err(e) = message {
-                warn!("Message was not validly serialized: {e}");
-                continue;
-            }
-            let message = message.unwrap();
-            let res = {
-                let opk = if let Some(opk) = message.opk {
-                    Some(x3dh_client.fetch_wipe_opk(opk).await?)
-                } else {
-                    None
+pub struct User {
+    brongnal: BrongnalClient,
+    gossamer: GossamerClient,
+    x3dh: Arc<X3DHClient>,
+    username: String,
+}
+
+pub struct MessageSubscriber {
+    stream: Streaming<MessageProto>,
+    ik: SigningKey,
+    x3dh: Arc<X3DHClient>,
+}
+
+impl MessageSubscriber {
+    pub fn into_stream(self) -> impl Stream<Item = ClientResult<ApplicationMessage>> {
+        try_stream! {
+            let messages = into_message_stream(self.stream);
+            tokio::pin!(messages);
+            while let Some(message) = messages.next().await {
+                if let Err(e) = message {
+                    warn!("Message was not validly serialized: {e}");
+                    continue;
+                }
+                let message = message.unwrap();
+                let res = {
+                    let opk = if let Some(opk) = message.opk {
+                        Some(self.x3dh.fetch_wipe_opk(opk).await?)
+                    } else {
+                        None
+                    };
+                    // TODO: Caller must delete the session keys with the peer on an error.
+                    let (_sk, decrypted) = initiate_recv(
+                        &self.ik,
+                        &self.x3dh.get_pre_key(message.pre_key).await?,
+                        &message.ik,
+                        message.ek,
+                        opk,
+                        &message.ciphertext,
+                    )?;
+                    let message: ApplicationMessage = ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
+                    Ok::<ApplicationMessage, ClientError>(message)
                 };
-                // TODO: Caller must delete the session keys with the peer on an error.
-                let (_sk, decrypted) = initiate_recv(
-                    &x3dh_client.get_ik(),
-                    &x3dh_client.get_pre_key(message.pre_key).await?,
-                    &message.ik,
-                    message.ek,
-                    opk,
-                    &message.ciphertext,
-                )?;
-                let message: ApplicationMessage = ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
-                Ok::<ApplicationMessage, ClientError>(message)
-            };
-            match res {
-                Ok(decrypted) => yield decrypted,
-                Err(e) => {
-                    error!("Failed to decrypt message: {e}");
+                match res {
+                    Ok(decrypted) => yield decrypted,
+                    Err(e) => {
+                        error!("Failed to decrypt message: {e}");
+                    }
                 }
             }
+            warn!("Server terminated message stream.");
         }
-        warn!("Server terminated message stream.");
     }
 }
 
-pub async fn register_username(
-    stub: &mut GossamerClient,
+impl User {
+    pub async fn new(
+        mut brongnal: BrongnalClient,
+        mut gossamer: GossamerClient,
+        x3dh: Arc<X3DHClient>,
+        username: String,
+    ) -> ClientResult<Self> {
+        register_username(&mut gossamer, x3dh.get_ik(), username.clone()).await?;
+        register_device(&mut brongnal, &x3dh).await?;
+        Ok(User {
+            brongnal,
+            gossamer,
+            x3dh,
+            username,
+        })
+    }
+
+    pub async fn get_messages(&self) -> ClientResult<MessageSubscriber> {
+        let mut brongnal = self.brongnal.clone();
+        let ik = self.x3dh.get_ik();
+        let stream = brongnal
+            .retrieve_messages(RetrieveMessagesRequest {
+                identity_key: Some(ik.verifying_key().as_bytes().to_vec()),
+            })
+            .await?
+            .into_inner();
+        Ok(MessageSubscriber {
+            stream,
+            ik,
+            x3dh: self.x3dh.clone(),
+        })
+    }
+
+    pub async fn send_message(&self, peer_username: &str, message: String) -> ClientResult<()> {
+        let mut brongnal = self.brongnal.clone();
+        let mut gossamer = self.gossamer.clone();
+        let message = ApplicationMessage {
+            claimed_sender: self.username.clone(),
+            text: message,
+        };
+        let ik = self.x3dh.get_ik();
+        let keys = get_keys(&mut gossamer, peer_username).await?;
+        let mut bundles = Vec::with_capacity(keys.len());
+        for key in keys {
+            let recipient = key.as_bytes().to_vec();
+            let request = Request::new(PreKeyBundleRequest {
+                identity_key: Some(recipient),
+            });
+            bundles.push(
+                brongnal
+                    .request_pre_keys(request)
+                    .await?
+                    .into_inner()
+                    .try_into()?,
+            );
+        }
+        let requests = send_message_requests(bundles, ik, message);
+
+        brongnal.send_message(Request::new(requests)).await?;
+        Ok(())
+    }
+}
+
+async fn register_username(
+    stub: &mut GossamerServiceClient<Channel>,
     ik: SigningKey,
     name: String,
 ) -> ClientResult<()> {
@@ -176,8 +244,8 @@ pub async fn register_username(
     Ok(())
 }
 
-pub async fn register_device(
-    stub: &mut BrongnalClient,
+async fn register_device(
+    stub: &mut BrongnalServiceClient<Channel>,
     x3dh_client: &X3DHClient,
 ) -> ClientResult<()> {
     let ik = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
@@ -212,6 +280,7 @@ fn send_message_requests(
     let message: ApplicationMessageProto = message.into();
     stream! {
         for bundle in bundles {
+            let recipient_identity_key = Some(bundle.ik.as_bytes().to_vec());
             let (_sk, message) = match initiate_send(
                 bundle,
                 &ik,
@@ -227,40 +296,11 @@ fn send_message_requests(
             info!("Sending message:\n{message}\n");
 
             yield SendMessageRequest {
-                recipient_identity_key: Some(ik.verifying_key().as_bytes().to_vec()),
+                recipient_identity_key,
                 message: Some(message.into()),
             };
         }
     }
-}
-
-pub async fn send_message(
-    brongnal: &mut BrongnalClient,
-    gossamer: &mut GossamerClient,
-    ik: SigningKey,
-    recipient: &str,
-    message: ApplicationMessage,
-) -> ClientResult<()> {
-    let message = message.into();
-    let keys = get_keys(gossamer, &recipient).await?;
-    let mut bundles = Vec::with_capacity(keys.len());
-    for key in keys {
-        let recipient = key.as_bytes().to_vec();
-        let request = Request::new(PreKeyBundleRequest {
-            identity_key: Some(recipient),
-        });
-        bundles.push(
-            brongnal
-                .request_pre_keys(request)
-                .await?
-                .into_inner()
-                .try_into()?,
-        );
-    }
-    let requests = send_message_requests(bundles, ik, message);
-
-    brongnal.send_message(Request::new(requests)).await?;
-    Ok(())
 }
 
 async fn get_ledger(stub: &mut GossamerServiceClient<Channel>) -> ClientResult<Ledger> {

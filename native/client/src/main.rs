@@ -1,5 +1,5 @@
 use anyhow::Result;
-use client::{get_messages, register_device, register_username, send_message, X3DHClient};
+use client::{User, X3DHClient};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
@@ -54,8 +54,8 @@ async fn main() -> Result<()> {
         .with(filter)
         .try_init()?;
 
-    let mut brongnal = BrongnalClient::connect(addr.clone()).await?;
-    let mut gossamer = GossamerClient::connect(addr.clone()).await?;
+    let brongnal = BrongnalClient::connect(addr.clone()).await?;
+    let gossamer = GossamerClient::connect(addr.clone()).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
@@ -64,9 +64,7 @@ async fn main() -> Result<()> {
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
     info!("Registering {name} with key={ik_str} at {addr}");
-
-    register_username(&mut gossamer, ik.clone(), name.clone()).await?;
-    register_device(&mut brongnal, &client.clone()).await?;
+    let user = User::new(brongnal, gossamer, client, name.clone()).await?;
 
     println!("NAME MESSAGE");
 
@@ -86,20 +84,16 @@ async fn main() -> Result<()> {
         }
     });
 
-    let messages_stream = get_messages(brongnal.clone(), client.clone());
-    tokio::pin!(messages_stream);
+    let subscriber = user.get_messages().await?;
+    let message_stream = subscriber.into_stream();
+    tokio::pin!(message_stream);
 
     loop {
         tokio::select! {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        let message = ApplicationMessage {
-                            claimed_sender: name.clone(),
-                            text: command.msg,
-                        };
-
-                        if let Err(e) = send_message(&mut brongnal, &mut gossamer, ik.clone(), &command.to, message).await {
+                        if let Err(e) = user.send_message(&command.to, command.msg).await {
                                 eprintln!("Failed to send message: {e}");
                         }
                     },
@@ -110,7 +104,7 @@ async fn main() -> Result<()> {
                 }
 
             },
-            msg = messages_stream.next() => {
+            msg = message_stream.next() => {
                 match msg {
                     Some(Ok(ApplicationMessage {claimed_sender, text})) => {
                         println!("Received message from (claimed) {claimed_sender}: {text:?}");
