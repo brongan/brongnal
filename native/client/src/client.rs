@@ -170,8 +170,8 @@ impl X3DHClient {
         Ok(X25519StaticSecret::from(key))
     }
 
-    pub fn get_ik(&self) -> ClientResult<SigningKey> {
-        Ok(self.ik.clone())
+    pub fn get_ik(&self) -> SigningKey {
+        self.ik.clone()
     }
 
     pub async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
@@ -299,7 +299,7 @@ mod tests {
     async fn client_stuff() -> Result<()> {
         let conn = tokio_rusqlite::Connection::open_in_memory().await?;
         let client = X3DHClient::new(conn).await?;
-        let _ik = client.get_ik().await?;
+        let _ik = client.get_ik();
         let _spk = client.get_spk().await?;
 
         Ok(())

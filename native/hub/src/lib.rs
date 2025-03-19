@@ -116,7 +116,7 @@ async fn main() {
             .await
             .expect("init database"),
     );
-    let ik = client.get_ik().await.unwrap();
+    let ik = client.get_ik();
 
     while username.is_none() {
         username = await_register_widget().await;

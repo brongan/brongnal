@@ -289,7 +289,7 @@ mod tests {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let alice = X3DHClient::new(conn).await?;
-        let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
+        let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
         storage.add_user(alice_ik, alice_spk.clone()).await?;
         assert_eq!(storage.get_current_spk(&alice_ik).await?, alice_spk);
@@ -301,7 +301,7 @@ mod tests {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let alice = X3DHClient::new(conn).await?;
-        let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
+        let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
         storage.add_user(alice_ik, alice_spk.clone()).await?;
         storage.add_user(alice_ik, alice_spk.clone()).await?;
@@ -314,7 +314,7 @@ mod tests {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let alice = X3DHClient::new(conn).await?;
-        let alice_ik = VerifyingKey::from(&alice.get_ik().await.unwrap());
+        let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
         storage.add_user(alice_ik, alice_spk.clone()).await?;
 
@@ -364,10 +364,10 @@ mod tests {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let bob = X3DHClient::new(conn).await?;
-        let bob_ik = VerifyingKey::from(&bob.get_ik().await?);
+        let bob_ik = VerifyingKey::from(&bob.get_ik());
         let keys = bob.create_opks(1).await?.pre_keys;
         storage
-            .add_user((&bob.get_ik().await?).into(), bob.get_spk().await?.into())
+            .add_user((&bob.get_ik()).into(), bob.get_spk().await?.into())
             .await?;
         storage.add_opks(&bob_ik, keys.clone()).await?;
         assert_eq!(storage.pop_opk(&bob_ik).await?, Some(keys[0]));
@@ -395,7 +395,7 @@ mod tests {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let bob = X3DHClient::new(conn).await?;
-        let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
+        let bob_ik = VerifyingKey::from(&bob.get_ik());
         let bob_spk: SignedPreKeyProto = bob.get_spk().await.unwrap().into();
         storage.add_user(bob_ik, bob_spk.clone()).await?;
 
@@ -430,7 +430,7 @@ mod tests {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let bob = X3DHClient::new(conn).await?;
-        let bob_ik = VerifyingKey::from(&bob.get_ik().await.unwrap());
+        let bob_ik = VerifyingKey::from(&bob.get_ik());
         let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().await.unwrap();
         storage.add_user(bob_ik, bob_spk.clone().into()).await?;
 

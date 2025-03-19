@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
 
-    let ik = client.get_ik().await?;
+    let ik = client.get_ik();
 
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());

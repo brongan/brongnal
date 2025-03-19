@@ -104,7 +104,7 @@ pub fn get_messages(
     x3dh_client: Arc<X3DHClient>,
 ) -> impl Stream<Item = ClientResult<ApplicationMessage>> {
     try_stream! {
-        let key = x3dh_client.get_ik().await?.verifying_key().as_bytes().to_vec();
+        let key = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
         let stream = stub
             .retrieve_messages(RetrieveMessagesRequest {
                 identity_key: Some(key),
@@ -126,7 +126,7 @@ pub fn get_messages(
                 };
                 // TODO: Caller must delete the session keys with the peer on an error.
                 let (_sk, decrypted) = initiate_recv(
-                    &x3dh_client.get_ik().await?,
+                    &x3dh_client.get_ik(),
                     &x3dh_client.get_pre_key(message.pre_key).await?,
                     &message.ik,
                     message.ek,
@@ -179,12 +179,7 @@ pub async fn register_device(
     stub: &mut BrongnalServiceClient<Channel>,
     x3dh_client: &X3DHClient,
 ) -> ClientResult<()> {
-    let ik = x3dh_client
-        .get_ik()
-        .await?
-        .verifying_key()
-        .as_bytes()
-        .to_vec();
+    let ik = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
     #[allow(deprecated)]
     let ik_str = base64::encode(&ik);
     info!("Registering {ik_str}!",);
@@ -245,8 +240,7 @@ pub async fn send_message(
     recipient: &str,
     message: ApplicationMessage,
 ) -> ClientResult<()> {
-    let message = message.into();
-    let keys = get_keys(gossamer, &recipient).await?;
+    let keys = get_keys(gossamer, recipient).await?;
     let mut bundles = Vec::with_capacity(keys.len());
     for key in keys {
         let recipient = key.as_bytes().to_vec();
