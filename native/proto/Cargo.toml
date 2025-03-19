@@ -9,9 +9,9 @@ prost = "0.12.6"
 protocol = { path = "../protocol/" }
 thiserror = "1.0.69"
 tonic = "0.11.0"
-tonic-reflection = { version = "0.11.0", features = ["server"] }
 x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
 
 [build-dependencies]
 tonic-build = "0.11.0"
+tonic-reflection = { version = "0.11.0", features = ["server"] }
 
