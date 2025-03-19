@@ -170,7 +170,7 @@ impl X3DHClient {
         Ok(X25519StaticSecret::from(key))
     }
 
-    pub async fn get_ik(&self) -> ClientResult<SigningKey> {
+    pub fn get_ik(&self) -> ClientResult<SigningKey> {
         Ok(self.ik.clone())
     }
 

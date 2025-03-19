@@ -1,10 +1,10 @@
+#![feature(result_flattening)]
 use anyhow::Context;
-use async_stream::try_stream;
+use async_stream::{stream, try_stream};
 use blake2::{Blake2b, Digest};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-use futures::StreamExt;
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient;
@@ -17,7 +17,9 @@ use proto::service::{
     RetrieveMessagesRequest, SendMessageRequest,
 };
 use proto::{parse_verifying_key, ApplicationMessage};
-use protocol::x3dh::{initiate_recv, initiate_send, Message as X3DHMessage, X3DHError};
+use protocol::x3dh::{
+    initiate_recv, initiate_send, Message as X3DHMessage, PreKeyBundle, X3DHError,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -206,69 +208,72 @@ pub async fn register_device(
     Ok(())
 }
 
-// Get the key from the mapping.
-// Get the PrekeyBundle for the key.
-// Send da message
-pub async fn send_message(
-    stub: &mut BrongnalServiceClient<Channel>,
-    x3dh_client: &X3DHClient,
-    recipient: &VerifyingKey,
-    message: &ApplicationMessageProto,
-) -> ClientResult<()> {
-    let request = Request::new(PreKeyBundleRequest {
-        identity_key: Some(recipient.to_bytes().to_vec()),
-    });
-    let response = stub.request_pre_keys(request).await?.into_inner();
-    let (_sk, message) = initiate_send(
-        response.try_into()?,
-        &x3dh_client.get_ik().await?,
-        &message.encode_to_vec(),
-    )?;
-    let recipient = recipient.to_bytes().to_vec();
+fn send_message_requests(
+    bundles: Vec<PreKeyBundle>,
+    ik: SigningKey,
+    message: ApplicationMessage,
+) -> impl Stream<Item = SendMessageRequest> {
+    let message: ApplicationMessageProto = message.into();
+    stream! {
+        for bundle in bundles {
+            let (_sk, message) = match initiate_send(
+                bundle,
+                &ik,
+                &message.encode_to_vec(),
+            ) {
+                Ok((sk, message)) => (sk, message),
+                Err(e) => {
+                    error!("Failed to x3dh::initiate_send: {e}");
+                    continue
+                },
+            };
 
-    #[allow(deprecated)]
-    let recipient_str = base64::encode(&recipient);
-    info!(
-        "Sending message:\n{message}\n\
-            Recipient: {recipient_str}"
-    );
+            info!("Sending message:\n{message}\n");
 
-    let request = Request::new(tokio_stream::iter([SendMessageRequest {
-        recipient_identity_key: Some(recipient),
-        message: Some(message.into()),
-    }]));
-    stub.send_message(request).await?;
-    Ok(())
+            yield SendMessageRequest {
+                recipient_identity_key: Some(ik.verifying_key().as_bytes().to_vec()),
+                message: Some(message.into()),
+            };
+        }
+    }
 }
 
-pub async fn send_message_user(
+pub async fn send_message(
     brongnal: &mut BrongnalClient<Channel>,
     gossamer: &mut GossamerClient<Channel>,
-    x3dh_client: &X3DHClient,
+    ik: SigningKey,
     recipient: &str,
     message: ApplicationMessage,
 ) -> ClientResult<()> {
     let message = message.into();
-    let futures: Vec<_> = get_keys(gossamer, &recipient)
-        .await?
-        .into_iter()
-        .map(|key| tokio::spawn(send_message(brongnal, &x3dh_client, &key, &message)))
-        .collect();
-
-    let mut res = Vec::with_capacity(futures.len());
-    for f in futures.into_iter() {
-        res.push(f.await);
+    let keys = get_keys(gossamer, &recipient).await?;
+    let mut bundles = Vec::with_capacity(keys.len());
+    for key in keys {
+        let recipient = key.as_bytes().to_vec();
+        let request = Request::new(PreKeyBundleRequest {
+            identity_key: Some(recipient),
+        });
+        bundles.push(
+            brongnal
+                .request_pre_keys(request)
+                .await?
+                .into_inner()
+                .try_into()?,
+        );
     }
+    let requests = send_message_requests(bundles, ik, message);
+
+    brongnal.send_message(Request::new(requests)).await?;
     Ok(())
 }
 
-pub async fn get_ledger(stub: &mut GossamerServiceClient<Channel>) -> ClientResult<Ledger> {
+async fn get_ledger(stub: &mut GossamerServiceClient<Channel>) -> ClientResult<Ledger> {
     let request = Request::new(GetLedgerRequest {});
     let ledger = stub.get_ledger(request).await?.into_inner();
     Ok(ledger)
 }
 
-pub async fn get_keys(
+async fn get_keys(
     stub: &mut GossamerServiceClient<Channel>,
     peer_username: &str,
 ) -> ClientResult<Vec<VerifyingKey>> {
