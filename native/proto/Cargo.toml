@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
-prost = "0.12.4"
+prost = "0.12.6"
 protocol = { path = "../protocol/" }
-thiserror = "1.0.58"
+thiserror = "1.0.69"
 tonic = "0.11.0"
 tonic-reflection = { version = "0.11.0", features = ["server"] }
 x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
