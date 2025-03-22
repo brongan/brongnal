@@ -86,3 +86,4 @@ message RetrieveMessagesRequest {
 
   // TODO(https://github.com/brongan/brongnal/issues/14) - Add proof of possession.
 }
+
