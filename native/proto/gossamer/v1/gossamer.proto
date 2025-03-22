@@ -1,45 +1,48 @@
 syntax = "proto2";
+ 
 package gossamer.v1;
-
-// provider is the human readable form of an identity.
-service GossamerService {
-	rpc Perform (ActionRequest) returns (ActionResponse);
-}
-
-message AppendKey {
-	enum KeyPurpose {
-		KEY_PURPOSE_UNKNOWN = 0;
-		KEY_PURPOSE_IDENTITY_KEY = 1;
-		KEY_PURPOSE_PRE_KEY = 2;
-	}
-	optional string provider = 1;
-	optional bytes public_key = 2;
-	optional KeyPurpose key_purpose = 3;
-}
-
-message RevokeKey {
-	optional string provider = 1;
-	optional bytes public_key = 2;
-}
-
-message Message {
-	oneof action {
-		AppendKey append_key = 1;
-		RevokeKey revoke_key  = 2;
-	}
-}
-
-message SignedMessage {
-	// Serialized `Message`.
-	optional bytes contents = 1;
-	optional bytes signature = 2;
-	optional string provider = 3;
-	optional bytes public_key = 4;
-}
-
-message ActionRequest {
-	optional SignedMessage message = 1;
-}
-
-message ActionResponse {}
-
+ 
+ // https://github.com/paragonie/libgossamer/blob/master/docs/specification/Overview.md
+ 
+ // provider is the human readable form of an identity.
+ service GossamerService {
+   rpc Action(ActionRequest) returns (ActionResponse);
+ 
+   rpc GetLedger(GetLedgerRequest) returns (Ledger);
+ }
+ 
+ enum Action {
+ 	  ACTION_UNKNOWN = 0;
+ 	  ACTION_APPEND_KEY = 1;
+ 	  ACTION_REVOKE_KEY = 2;
+ }
+ message Message {
+   optional bytes provider = 1;
+   optional bytes public_key = 2;
+   optional Action action = 3;
+ }
+ 
+ message SignedMessage {
+   // Serialized `Message`.
+   optional bytes contents = 1;
+   optional bytes signature = 2;
+   optional bytes identity_key = 3;
+ }
+ 
+ message ActionRequest {
+   optional SignedMessage message = 1;
+ }
+ 
+ message ActionResponse {}
+ 
+ message GetLedgerRequest {}
+ 
+ message User {
+   optional bytes provider = 1;
+   repeated bytes public_keys = 2;
+ }
+ 
+ message Ledger {
+   repeated User users = 1;
+ }
+ 
