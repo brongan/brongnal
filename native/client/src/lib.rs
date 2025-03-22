@@ -266,7 +266,6 @@ async fn register_username(
     name: String,
 ) -> ClientResult<()> {
     let provider = Blake2b::<blake2::digest::typenum::U32>::digest(name.as_bytes()).to_vec();
-
     let message = protocol::gossamer::Message {
         provider,
         public_key: ik.verifying_key(),
