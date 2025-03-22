@@ -7,7 +7,7 @@ use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
-use protocol::x3dh::{initiate_recv, initiate_send, Message, X3DHError};
+use protocol::x3dh::{initiate_recv, initiate_send, Message as X3DHMessage, X3DHError};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -80,10 +80,10 @@ pub struct DecryptedMessage {
 
 fn into_message_stream(
     mut stream: Streaming<MessageProto>,
-) -> impl Stream<Item = ClientResult<Message>> {
+) -> impl Stream<Item = ClientResult<X3DHMessage>> {
     try_stream! {
         while let Some(message) = stream.message().await? {
-            let message: Message = message.try_into()?;
+            let message: X3DHMessage = message.try_into()?;
             yield message;
         }
     }
