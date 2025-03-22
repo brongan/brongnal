@@ -1,6 +1,6 @@
 use crate::messages::*;
 use client::{get_messages, register, send_message, X3DHClient};
-use proto::service::brongnal_client::BrongnalClient;
+use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use rinf::debug_print;
 use std::{path::PathBuf, sync::Arc};
 use tokio_rusqlite::Connection;

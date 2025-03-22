@@ -2,7 +2,7 @@ use anyhow::Context;
 use async_stream::try_stream;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
-use proto::service::brongnal_client::BrongnalClient;
+use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleRequest, RequestPreKeysRequest,
     RetrieveMessagesRequest, SendMessageRequest,

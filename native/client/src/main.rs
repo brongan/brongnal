@@ -2,7 +2,7 @@ use anyhow::Result;
 use client::{get_messages, register, send_message, DecryptedMessage, X3DHClient};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
-use proto::service::brongnal_client::BrongnalClient;
+use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;

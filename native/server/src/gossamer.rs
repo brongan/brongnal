@@ -1,5 +1,5 @@
 use ed25519_dalek::VerifyingKey;
-use proto::gossamer::gossamer_server::Gossamer;
+use proto::gossamer::gossamer_service_server::GossamerService;
 use proto::gossamer::{ActionRequest, ActionResponse, SignedMessage};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -20,7 +20,7 @@ impl Default for InMemoryGossamer {
 }
 
 #[tonic::async_trait]
-impl Gossamer for InMemoryGossamer {
+impl GossamerService for InMemoryGossamer {
     async fn perform(
         &self,
         request: Request<ActionRequest>,
