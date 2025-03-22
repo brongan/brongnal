@@ -1,5 +1,5 @@
 syntax = "proto2";
-package service;
+package service.v1;
 
 service Brongnal {
 	rpc RegisterPreKeyBundle (RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
