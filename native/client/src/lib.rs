@@ -117,7 +117,7 @@ pub fn get_messages(
                 };
                 // TODO: Caller must delete the session keys with the peer on an error.
                 let (_sk, decrypted) = initiate_recv(
-                    &x3dh_client.get_ik().await?,
+                    &x3dh_client.get_ik(),
                     &x3dh_client.get_pre_key(message.pre_key).await?,
                     &message.sender_ik,
                     message.ek,
@@ -148,12 +148,7 @@ pub async fn register(
     name: String,
 ) -> ClientResult<()> {
     info!("Registering {name}!");
-    let ik = x3dh_client
-        .get_ik()
-        .await?
-        .verifying_key()
-        .as_bytes()
-        .to_vec();
+    let ik = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
 
     let request = tonic::Request::new(RegisterPreKeyBundleRequest {
         identity_key: Some(ik.clone()),
@@ -191,7 +186,7 @@ pub async fn send_message(
     let (_sk, message) = initiate_send(
         response.into_inner().try_into()?,
         sender_identity,
-        &x3dh_client.get_ik().await?,
+        &x3dh_client.get_ik(),
         message,
     )?;
     info!("Sending message: {message}");
