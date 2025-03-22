@@ -3,6 +3,7 @@ use blake2::{Blake2b512, Digest};
 
 mod aead;
 pub mod bundle;
+pub mod gossamer;
 pub mod x3dh;
 
 // TODO(https://github.com/brongan/brongnal/issues/7) - Implement ratcheting.
