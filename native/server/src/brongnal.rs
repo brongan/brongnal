@@ -1,10 +1,9 @@
 use crate::persistence::SqliteStorage;
 use ed25519_dalek::{Signature, VerifyingKey};
-use proto::service::brongnal_service_server::BrongnalService;
 use proto::service::{
-    Message as MessageProto, PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest,
-    RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RetrieveMessagesRequest,
-    SendMessageRequest, SendMessageResponse,
+    brongnal_service_server::BrongnalService, Message as MessageProto,
+    PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
+    RegisterPreKeyBundleResponse, RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
 };
 use proto::{parse_verifying_key, parse_x25519_public_key};
 use protocol::bundle::verify_bundle;
