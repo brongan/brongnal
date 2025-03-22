@@ -19,6 +19,7 @@ enum KeyType {
 
 pub struct X3DHClient {
     connection: tokio_rusqlite::Connection,
+    ik: SigningKey,
 }
 
 fn create_key_table(connection: &Connection) -> rusqlite::Result<()> {
@@ -132,17 +133,17 @@ fn opk_count(connection: &Connection) -> rusqlite::Result<u32> {
 
 impl X3DHClient {
     pub async fn new(connection: tokio_rusqlite::Connection) -> ClientResult<X3DHClient> {
-        connection
+        let ik = connection
             .call(|connection| {
                 create_key_table(connection)?;
                 lazy_init_identity_key(connection)?;
                 lazy_init_pre_key(connection)?;
-                Ok(())
+                Ok(load_identity_key(connection)?.unwrap())
             })
             .await
             .map_err(ClientError::TokioSqlite)?;
 
-        let sqlite_client = X3DHClient { connection };
+        let sqlite_client = X3DHClient { connection, ik };
         Ok(sqlite_client)
     }
 }
@@ -169,12 +170,8 @@ impl X3DHClient {
         Ok(X25519StaticSecret::from(key))
     }
 
-    pub async fn get_ik(&self) -> ClientResult<SigningKey> {
-        info!("Loading identity key.");
-        self.connection
-            .call(|connection| Ok(load_identity_key(connection)?))
-            .await?
-            .ok_or(ClientError::GetIdentityKey)
+    pub fn get_ik(&self) -> SigningKey {
+        self.ik.clone()
     }
 
     pub async fn get_pre_key(&self, pre_key: X25519PublicKey) -> ClientResult<X25519StaticSecret> {
@@ -190,8 +187,9 @@ impl X3DHClient {
     }
 
     pub async fn get_spk(&self) -> ClientResult<SignedPreKey> {
+        let ik = self.get_ik();
         self.connection
-            .call(|connection| {
+            .call(move |connection| {
                 let pre_key = load_pre_key(connection)?.unwrap();
                 #[allow(deprecated)]
                 let pubkey = base64::encode(pre_key.to_bytes());
@@ -199,7 +197,7 @@ impl X3DHClient {
                 Ok(SignedPreKey {
                     pre_key: X25519PublicKey::from(&pre_key),
                     signature: sign_bundle(
-                        &load_identity_key(connection)?.unwrap(),
+                        &ik,
                         &[(pre_key.clone(), X25519PublicKey::from(&pre_key))],
                     ),
                 })
@@ -209,13 +207,10 @@ impl X3DHClient {
     }
 
     pub async fn create_opks(&self, num_keys: u32) -> ClientResult<SignedPreKeys> {
-        info!("Creating {num_keys} one time pre keys!");
-        let ik: SigningKey = self
-            .connection
-            .call(|connection| Ok(load_identity_key(connection)?))
-            .await?
-            .expect("has identity key");
-        let opks = create_prekey_bundle(&ik, num_keys);
+        if num_keys != 0 {
+            info!("Creating {num_keys} one time pre keys!");
+        }
+        let opks = create_prekey_bundle(&self.ik, num_keys);
         let pre_keys = opks.bundle.iter().map(|(_, _pub)| *_pub).collect();
         let persisted_pre_keys: Vec<X25519StaticSecret> =
             opks.bundle.into_iter().map(|opk| opk.0).collect();
@@ -304,7 +299,6 @@ mod tests {
     async fn client_stuff() -> Result<()> {
         let conn = tokio_rusqlite::Connection::open_in_memory().await?;
         let client = X3DHClient::new(conn).await?;
-        let _ik = client.get_ik().await?;
         let _spk = client.get_spk().await?;
 
         Ok(())
