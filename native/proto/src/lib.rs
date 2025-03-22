@@ -22,10 +22,10 @@ pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, KeyError> 
     Ok(X25519PublicKey::from(key))
 }
 pub mod gossamer {
-    tonic::include_proto!("gossamer");
+    tonic::include_proto!("gossamer.v1");
 }
 pub mod service {
-    tonic::include_proto!("service");
+    tonic::include_proto!("service.v1");
 }
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("service_descriptor");
 

@@ -1,5 +1,5 @@
 syntax = "proto2";
-package gossamer;
+package gossamer.v1;
 
 // provider is the human readable form of an identity.
 service Gossamer {
