@@ -48,15 +48,7 @@ async fn send_messages(mut stub: BrongnalClient<Channel>, client: Arc<X3DHClient
     while let Some(dart_signal) = receiver.recv().await {
         let req: SendMessage = dart_signal.message;
         debug_print!("Rust received message from flutter!: {}", req.message());
-        match send_message(
-            &mut stub,
-            &client,
-            req.sender().to_owned(),
-            req.receiver(),
-            req.message(),
-        )
-        .await
-        {
+        match send_message(&mut stub, &client, req.receiver(), req.message()).await {
             Ok(_) => {}
             Err(e) => {
                 debug_print!("Failed to message: {e}");

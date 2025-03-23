@@ -127,7 +127,7 @@ pub fn get_messages(
                 Ok::<DecryptedMessage, ClientError>(DecryptedMessage {
                     // TODO(https://github.com/brongan/brongnal/issues/15): Don't blindly trust the
                     // sender's claimed identity.
-                    sender_identity: message.sender_identity,
+                    sender_identity: String::from("Unknown"),
                     message: decrypted,
                 })
             };
@@ -174,7 +174,6 @@ pub async fn register(
 pub async fn send_message(
     stub: &mut BrongnalClient<Channel>,
     x3dh_client: &X3DHClient,
-    sender_identity: String,
     recipient_identity: &str,
     message: &str,
 ) -> ClientResult<()> {
@@ -185,7 +184,6 @@ pub async fn send_message(
     let response = stub.request_pre_keys(request).await?;
     let (_sk, message) = initiate_send(
         response.into_inner().try_into()?,
-        sender_identity,
         &x3dh_client.get_ik(),
         message,
     )?;
