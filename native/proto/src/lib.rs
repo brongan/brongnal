@@ -79,7 +79,6 @@ impl TryFrom<MessageProto> for X3DHMessage {
     type Error = tonic::Status;
 
     fn try_from(value: MessageProto) -> Result<Self, Self::Error> {
-        let sender_identity = value.sender_identity().to_owned();
         let sender_ik = parse_verifying_key(value.sender_identity_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid sender_identity_key: {e}")))?;
 
@@ -98,7 +97,6 @@ impl TryFrom<MessageProto> for X3DHMessage {
             None
         };
         Ok(X3DHMessage {
-            sender_identity,
             sender_ik,
             ek,
             pre_key,
@@ -114,7 +112,6 @@ impl TryFrom<MessageProto> for X3DHMessage {
 impl From<X3DHMessage> for MessageProto {
     fn from(val: X3DHMessage) -> Self {
         MessageProto {
-            sender_identity: Some(val.sender_identity),
             sender_identity_key: Some(val.sender_ik.to_bytes().to_vec()),
             ephemeral_key: Some(val.ek.to_bytes().to_vec()),
             pre_key: Some(val.pre_key.to_bytes().to_vec()),

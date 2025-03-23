@@ -439,7 +439,6 @@ mod tests {
             .await?;
 
         let message_proto = MessageProto {
-            sender_identity: Some(String::from("alice")),
             sender_identity_key: Some(b"alice identity key".to_vec()),
             ephemeral_key: Some(b"alice ephemeral key".to_vec()),
             pre_key: Some(b"bob pre key".to_vec()),

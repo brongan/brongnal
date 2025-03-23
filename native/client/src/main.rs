@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        if let Err(e) = send_message(&mut stub, &client.clone(), name.clone(), &command.to, &command.msg)
+                        if let Err(e) = send_message(&mut stub, &client.clone(), &command.to, &command.msg)
                             .await {
                                 eprintln!("Failed to send message: {e}");
                         }

@@ -56,8 +56,6 @@ message PreKeyBundle {
 }
 
 message Message {
-	optional string sender_identity = 1;
-
 	// ED25519 public key
 	optional bytes sender_identity_key = 2;
 
