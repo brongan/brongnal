@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
             msg = message_stream.next() => {
                 match msg {
                     Some(Ok(ApplicationMessage {sender, text})) => {
-                        println!("Received message from {sender}: {text:?}");
+                        println!("Received message from {sender}: {text}");
                     },
                     Some(Err(e)) => {
                         eprintln!("Failed to receive decrypted message: {e}");
