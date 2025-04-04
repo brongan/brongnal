@@ -26,6 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("RUST_LOG should be a valid tracing filter");
     tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
+        .without_time()
         .finish()
         .with(filter)
         .try_init()?;
