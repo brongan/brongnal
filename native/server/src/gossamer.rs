@@ -92,7 +92,7 @@ impl GossamerService for InMemoryGossamer {
         request: Request<GetLedgerRequest>,
     ) -> Result<Response<Ledger>, Status> {
         let request = request.into_inner();
-        info!("Received Ledger Request for: {request:?}");
+        info!("Received Ledger Request.");
 
         let providers = self.provider.lock().unwrap();
         let users = providers
