@@ -8,6 +8,7 @@ use rusqlite::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::Status;
 use tracing::info;
+use tracing::instrument;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 pub struct SqliteStorage(tokio_rusqlite::Connection);
@@ -21,6 +22,7 @@ fn time_now() -> u64 {
 
 impl SqliteStorage {
     pub async fn new(connection: tokio_rusqlite::Connection) -> tokio_rusqlite::Result<Self> {
+        info!("Creating SQlite Tables.");
         connection
             .call(|connection| {
                 connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -64,8 +66,8 @@ impl SqliteStorage {
     /// Add a new identity to the storage.
     /// Attempts to overwrite an identity key returns an error.
     /// Updates to the user's signed pre key are allowed.
-    pub async fn add_user(&self, ik: VerifyingKey, spk: SignedPreKeyProto) -> tonic::Result<()> {
-        info!("Adding user \"{}\" to the database.", base64.encode(ik));
+    #[instrument(skip(self, ik, spk))]
+    pub async fn add_user(&self, ik: &VerifyingKey, spk: SignedPreKeyProto) -> tonic::Result<()> {
         let spk = spk.encode_to_vec();
         let ik = ik.to_bytes();
 
@@ -98,8 +100,8 @@ impl SqliteStorage {
     /// Replaces the signed pre key for a given identity.
     // TODO(https://github.com/brongan/brongnal/issues/27) -  Implement signed pre key rotation.
     #[allow(dead_code)]
+    #[instrument(skip(self, ik, spk))]
     pub async fn update_spk(&self, ik: &VerifyingKey, spk: SignedPreKeyProto) -> tonic::Result<()> {
-        info!("Updating spk for {} in the database.", base64.encode(ik));
         let ik_bytes = ik.to_bytes();
 
         self.0
@@ -123,17 +125,12 @@ impl SqliteStorage {
     }
 
     /// Appends new unburnt one time pre keys for others to message a given identity.
+    #[instrument(skip(self, ik, opks), fields(opk_count = opks.len()))]
     pub async fn add_opks(
         &self,
         ik: &VerifyingKey,
         opks: Vec<X25519PublicKey>,
     ) -> tonic::Result<()> {
-        info!(
-            "Adding {} one time key(s) for ik=\"{}\" to the database.",
-            opks.len(),
-            base64.encode(ik)
-        );
-
         let ik = ik.to_bytes();
 
         self.0
@@ -152,11 +149,8 @@ impl SqliteStorage {
 
     /// Retrieves the identity key and signed pre key for a given identity.
     /// A client must first invoke this before messaging a peer.
+    #[instrument(skip(self, ik))]
     pub async fn get_current_spk(&self, ik: &VerifyingKey) -> tonic::Result<SignedPreKeyProto> {
-        info!(
-            "Retrieving pre keys for user \"{}\" from the database.",
-            base64.encode(ik)
-        );
         let ik = ik.to_bytes();
 
         self.0
@@ -174,12 +168,9 @@ impl SqliteStorage {
     }
 
     /// Retrieve a one time pre key for a identity key.
+    #[instrument(skip(self, ik))]
     pub async fn pop_opk(&self, ik: &VerifyingKey) -> tonic::Result<Option<X25519PublicKey>> {
         let ik = ik.to_bytes();
-        info!(
-            "Popping one time key for ik \"{}\" from the database.",
-            base64.encode(ik)
-        );
 
         self.0
             .call(move |connection| {
@@ -198,15 +189,12 @@ impl SqliteStorage {
     }
 
     /// Enqueue a message for a given recipient.
+    #[instrument(skip(self, recipient, message))]
     pub async fn add_message(
         &self,
         recipient: &VerifyingKey,
         message: MessageProto,
     ) -> tonic::Result<()> {
-        info!(
-            "Enqueueing message for recipient {} in database.",
-            base64.encode(recipient)
-        );
         let recipient = recipient.to_bytes();
 
         self.0
@@ -223,11 +211,8 @@ impl SqliteStorage {
 
     /// Retrieve enqueued messages for a given identity.
     // TODO - Consider changing this to an async stream.
+    #[instrument(skip(self, recipient))]
     pub async fn get_messages(&self, recipient: &VerifyingKey) -> tonic::Result<Vec<MessageProto>> {
-        info!(
-            "Retrieving messages for \"{}\" from the database.",
-            base64.encode(recipient)
-        );
         let recipient = recipient.to_bytes();
 
         self.0
@@ -250,11 +235,8 @@ impl SqliteStorage {
             .map_err(|e| Status::internal(format!("Failed to query messages: {e}")))
     }
 
+    #[instrument(skip(self, ik))]
     pub async fn get_one_time_prekey_count(&self, ik: &VerifyingKey) -> tonic::Result<u32> {
-        info!(
-            "Retrieving opk count for \"{}\" from the database.",
-            base64.encode(ik)
-        );
         let ik = ik.to_bytes();
 
         self.0
@@ -291,7 +273,7 @@ mod tests {
         let alice = X3DHClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
-        storage.add_user(alice_ik, alice_spk.clone()).await?;
+        storage.add_user(&alice_ik, alice_spk.clone()).await?;
         assert_eq!(storage.get_current_spk(&alice_ik).await?, alice_spk);
         Ok(())
     }
@@ -303,8 +285,8 @@ mod tests {
         let alice = X3DHClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
-        storage.add_user(alice_ik, alice_spk.clone()).await?;
-        storage.add_user(alice_ik, alice_spk.clone()).await?;
+        storage.add_user(&alice_ik, alice_spk.clone()).await?;
+        storage.add_user(&alice_ik, alice_spk.clone()).await?;
 
         Ok(())
     }
@@ -316,14 +298,14 @@ mod tests {
         let alice = X3DHClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
-        storage.add_user(alice_ik, alice_spk.clone()).await?;
+        storage.add_user(&alice_ik, alice_spk.clone()).await?;
 
         let alice2 = X3DHClient::new(Connection::open_in_memory().await?).await?;
         let alice2_spk: SignedPreKeyProto = alice2.get_spk().await.unwrap().into();
 
         assert_eq!(
             storage
-                .add_user(alice_ik, alice2_spk)
+                .add_user(&alice_ik, alice2_spk)
                 .await
                 .err()
                 .map(|e| e.code()),
@@ -367,7 +349,7 @@ mod tests {
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let keys = bob.create_opks(1).await?.pre_keys;
         storage
-            .add_user((&bob.get_ik()).into(), bob.get_spk().await?.into())
+            .add_user((&bob_ik).into(), bob.get_spk().await?.into())
             .await?;
         storage.add_opks(&bob_ik, keys.clone()).await?;
         assert_eq!(storage.pop_opk(&bob_ik).await?, Some(keys[0]));
@@ -397,7 +379,7 @@ mod tests {
         let bob = X3DHClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let bob_spk: SignedPreKeyProto = bob.get_spk().await.unwrap().into();
-        storage.add_user(bob_ik, bob_spk.clone()).await?;
+        storage.add_user(&bob_ik, bob_spk.clone()).await?;
 
         // Create a different spk and overwrite it.
         let new_spk = SignedPreKeyProto {
@@ -432,7 +414,7 @@ mod tests {
         let bob = X3DHClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().await.unwrap();
-        storage.add_user(bob_ik, bob_spk.clone().into()).await?;
+        storage.add_user(&bob_ik, bob_spk.clone().into()).await?;
 
         let message_proto = MessageProto {
             sender_identity_key: Some(b"alice identity key".to_vec()),

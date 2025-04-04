@@ -6,7 +6,7 @@ use proto::gossamer::{
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tonic::{Request, Response, Status};
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
 pub struct InMemoryGossamer {
     provider: Arc<Mutex<HashMap<Vec<u8>, VerifyingKey>>>,
@@ -71,11 +71,12 @@ impl InMemoryGossamer {
 
 #[tonic::async_trait]
 impl GossamerService for InMemoryGossamer {
+    #[instrument(skip(self, request))]
     async fn action(
         &self,
         request: Request<ActionRequest>,
     ) -> Result<Response<ActionResponse>, Status> {
-        info!("Received Action Request.");
+        info!("Handling Action");
         match request.into_inner().message {
             Some(signed_message) => {
                 let _: () = self
@@ -87,13 +88,12 @@ impl GossamerService for InMemoryGossamer {
         }
     }
 
+    #[instrument(skip(self, _request))]
     async fn get_ledger(
         &self,
-        request: Request<GetLedgerRequest>,
+        _request: Request<GetLedgerRequest>,
     ) -> Result<Response<Ledger>, Status> {
-        let request = request.into_inner();
-        info!("Received Ledger Request.");
-
+        info!("Returning Ledger.");
         let providers = self.provider.lock().unwrap();
         let users = providers
             .iter()
