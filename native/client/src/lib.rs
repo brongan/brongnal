@@ -323,7 +323,7 @@ fn send_message_requests(
     stream! {
         for bundle in bundles {
             let recipient_identity_key = Some(bundle.ik.as_bytes().to_vec());
-            let (_sk, message) = match initiate_send(
+            let (_sk, x3dh_message) = match initiate_send(
                 bundle,
                 &ik,
                 &message.encode_to_vec(),
@@ -335,11 +335,11 @@ fn send_message_requests(
                 },
             };
 
-            info!("Sending message:\n{message}\n");
+            info!("Sending message:{message:?}\n{x3dh_message}\n");
 
             yield SendMessageRequest {
                 recipient_identity_key,
-                message: Some(message.into()),
+                message: Some(x3dh_message.into()),
             };
         }
     }

@@ -7,14 +7,13 @@ use proto::FILE_DESCRIPTOR_SET;
 use sentry::ClientInitGuard;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
-use std::str::FromStr;
 use tokio_rusqlite::Connection;
 use tonic::transport::Server;
 use tonic_reflection::server::Builder;
 use tracing::{info, warn, Level};
-use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 mod brongnal;
 mod gossamer;
@@ -22,13 +21,16 @@ mod persistence;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let filter = Targets::from_str(std::env::var("RUST_LOG").as_deref().unwrap_or("info"))
-        .expect("RUST_LOG should be a valid tracing filter");
     tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
+        .with_level(true)
+        .with_file(false)
+        .with_line_number(false)
+        .with_thread_ids(false)
+        .with_target(false)
         .without_time()
         .finish()
-        .with(filter)
+        .with(EnvFilter::from_default_env())
         .try_init()?;
 
     let _guard: Option<ClientInitGuard> = if let Ok(dsn) = std::env::var("SENTRY_DSN") {

@@ -9,6 +9,7 @@ destination = "/db"
 
 [env]
 DB = "/db"
+RUST_LOG="INFO"
 
 [[services]]
   protocol = "tcp"
