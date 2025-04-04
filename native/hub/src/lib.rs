@@ -100,13 +100,12 @@ async fn main() {
                             sender,
                             text,
                         } = msg;
-                        debug_print!("[Received Message] from {sender}: {text}",);
+                        debug_print!("[Received Message] from {sender}: {text}");
                         ReceivedMessage {
                             message: text,
                             sender,
                         }
                         .send_signal_to_dart();
-
                     },
                     Some(Err(e)) => {
                         debug_print!("[Failed to Decrypt Message]: {e}");

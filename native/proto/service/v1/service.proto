@@ -70,7 +70,7 @@ message Message {
   // X25519 public key (Optional)
   optional bytes one_time_key = 4;
 
-  // binary
+  // serialized RatchetMessage
   optional bytes ciphertext = 5;
 }
 

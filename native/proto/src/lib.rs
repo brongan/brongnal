@@ -239,9 +239,53 @@ impl From<GossamerSignedMessage> for gossamer::SignedMessage {
     }
 }
 
+pub struct RatchetHeader {
+    ratchet_key: X25519PublicKey,
+    message_number: u32,
+    chain_length: u32,
+}
+
+pub struct RatchetMessage {
+    pub header: Option<RatchetHeader>,
+    pub message: ApplicationMessage,
+}
+
 pub struct ApplicationMessage {
     pub sender: String,
     pub text: String,
+}
+
+impl TryInto<RatchetHeader> for application::ratchet_message::Header {
+    type Error = tonic::Status;
+    fn try_into(self) -> Result<RatchetHeader, Self::Error> {
+        let ratchet_key = parse_x25519_public_key(
+            &self
+                .ratchet_key
+                .ok_or(Status::invalid_argument("Missing ratchet key."))?,
+        )
+        .map_err(|_e| Status::invalid_argument("Ratchet key was not valid."))?;
+        let message_number = self
+            .message_number
+            .ok_or(Status::invalid_argument("Missing message_number."))?;
+        let chain_length = self
+            .chain_length
+            .ok_or(Status::invalid_argument("Missing chain_length."))?;
+        Ok(RatchetHeader {
+            ratchet_key,
+            message_number,
+            chain_length,
+        })
+    }
+}
+
+impl From<RatchetHeader> for application::ratchet_message::Header {
+    fn from(val: RatchetHeader) -> Self {
+        Self {
+            ratchet_key: Some(val.ratchet_key.as_bytes().to_vec()),
+            message_number: Some(val.message_number),
+            chain_length: Some(val.chain_length),
+        }
+    }
 }
 
 impl TryInto<ApplicationMessage> for application::Message {
@@ -276,6 +320,27 @@ impl From<ApplicationMessage> for application::Message {
             contents: Some(Contents {
                 content_type: Some(ContentType::Text(val.text)),
             }),
+        }
+    }
+}
+
+impl TryInto<RatchetMessage> for application::RatchetMessage {
+    type Error = tonic::Status;
+    fn try_into(self) -> Result<RatchetMessage, Self::Error> {
+        let header = self.header.map(|header| header.try_into()).transpose()?;
+        let message = self
+            .message
+            .ok_or(Status::invalid_argument("RatchetMessage missing message."))?
+            .try_into()?;
+        Ok(RatchetMessage { header, message })
+    }
+}
+
+impl From<RatchetMessage> for application::RatchetMessage {
+    fn from(val: RatchetMessage) -> Self {
+        Self {
+            header: val.header.map(|header| header.into()),
+            message: Some(val.message.into()),
         }
     }
 }

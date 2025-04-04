@@ -1,5 +1,18 @@
 syntax = "proto2";
+
 package application.v1;
+
+message RatchetMessage {
+  message Header {
+    // X25519 public key
+    optional bytes ratchet_key = 1;
+    optional uint32 message_number = 2;
+    optional uint32 chain_length = 3;
+  }
+  optional Header header = 1;
+
+  optional Message message = 2;
+}
 
 message Sender {
 	optional string username = 1;

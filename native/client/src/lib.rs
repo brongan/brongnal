@@ -7,6 +7,7 @@ pub use client::X3DHClient;
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
+use proto::application::RatchetMessage as RatchetProto;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient;
 use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger as LedgerProto, SignedMessage};
 use proto::service::brongnal_service_client::BrongnalServiceClient;
@@ -14,7 +15,7 @@ use proto::service::{
     Message as MessageProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
-use proto::{parse_verifying_key, ApplicationMessage};
+use proto::{parse_verifying_key, ApplicationMessage, RatchetMessage};
 use protocol::x3dh::{
     initiate_recv, initiate_send, Message as X3DHMessage, PreKeyBundle, X3DHError,
 };
@@ -176,12 +177,13 @@ impl MessageSubscriber {
                         opk,
                         &message.ciphertext,
                     )?;
-                    let application_message: ApplicationMessage = ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
-                    if !self.ledger.validate_username(&application_message.sender, &message.ik) {
-                        warn!("Message failed username validation. Claimed sender: {}", &application_message.sender);
+                    // TODO: Handle the ratchet header.
+                    let ratchet_message: RatchetMessage = RatchetProto::decode(&*decrypted)?.try_into()?;
+                    if !self.ledger.validate_username(&ratchet_message.message.sender, &message.ik) {
+                        warn!("Message failed username validation. Claimed sender: {}", &ratchet_message.message.sender);
                         continue;
                     }
-                    Ok::<ApplicationMessage, ClientError>(application_message)
+                    Ok::<ApplicationMessage, ClientError>(ratchet_message.message)
                 };
                 match res {
                     Ok(decrypted) => yield decrypted,
@@ -232,12 +234,16 @@ impl User {
         })
     }
 
-    pub async fn send_message(&self, peer_username: &str, message: String) -> ClientResult<()> {
+    pub async fn send_message(&self, peer_username: &str, text: String) -> ClientResult<()> {
         let mut brongnal = self.brongnal.clone();
         let mut gossamer = self.gossamer.clone();
-        let message = ApplicationMessage {
-            sender: self.username.clone(),
-            text: message,
+        // TODO: Create Ratchet Header
+        let message = RatchetMessage {
+            header: None,
+            message: ApplicationMessage {
+                sender: self.username.clone(),
+                text,
+            },
         };
         let ik = self.x3dh.get_ik();
         let keys = get_keys(&mut gossamer, peer_username).await?;
@@ -325,9 +331,9 @@ async fn register_device(
 fn send_message_requests(
     bundles: Vec<PreKeyBundle>,
     ik: SigningKey,
-    message: ApplicationMessage,
+    message: RatchetMessage,
 ) -> impl Stream<Item = SendMessageRequest> {
-    let message: ApplicationMessageProto = message.into();
+    let message: RatchetProto = message.into();
     stream! {
         for bundle in bundles {
             let recipient_identity_key = Some(bundle.ik.as_bytes().to_vec());
