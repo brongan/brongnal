@@ -103,14 +103,14 @@ fn insert_pre_keys(
     Ok(())
 }
 
-fn lazy_init_identity_key(connection: &Connection) -> rusqlite::Result<()> {
-    if load_identity_key(connection)?.is_some() {
-        return Ok(());
+fn lazy_init_identity_key(connection: &Connection) -> rusqlite::Result<SigningKey> {
+    if let Some(ik) = load_identity_key(connection)? {
+        return Ok(ik);
     }
     info!("Creating initial identity key.");
     let identity_key = SigningKey::generate(&mut OsRng);
     insert_identity_key(&identity_key, connection)?;
-    Ok(())
+    Ok(identity_key)
 }
 
 fn lazy_init_pre_key(connection: &Connection) -> rusqlite::Result<()> {
@@ -136,9 +136,8 @@ impl X3DHClient {
         let ik = connection
             .call(|connection| {
                 create_key_table(connection)?;
-                lazy_init_identity_key(connection)?;
                 lazy_init_pre_key(connection)?;
-                Ok(load_identity_key(connection)?.unwrap())
+                Ok(lazy_init_identity_key(connection)?)
             })
             .await
             .map_err(ClientError::TokioSqlite)?;
