@@ -95,48 +95,50 @@ async fn main() {
     tokio::pin!(message_stream);
     let receiver = SendMessage::get_dart_signal_receiver();
 
-    tokio::select! {
-        decrypted = message_stream.next() => {
-            match decrypted {
-                Some(Ok(msg)) => {
-                    let ApplicationMessage {
-                        sender,
-                        text,
-                    } = msg;
-                    debug_print!("[Received Message] from {sender}: {text}",);
-                    ReceivedMessage {
-                        message: Some(text),
-                        sender: Some(sender),
-                    }
-                    .send_signal_to_dart();
+    loop {
+        tokio::select! {
+            decrypted = message_stream.next() => {
+                match decrypted {
+                    Some(Ok(msg)) => {
+                        let ApplicationMessage {
+                            sender,
+                            text,
+                        } = msg;
+                        debug_print!("[Received Message] from {sender}: {text}",);
+                        ReceivedMessage {
+                            message: Some(text),
+                            sender: Some(sender),
+                        }
+                        .send_signal_to_dart();
 
-                },
-                Some(Err(e)) => {
-                    debug_print!("[Failed to Decrypt Message]: {e}");
-                },
-                None => {
-                    debug_print!("Lost decrypted message stream.");
-                },
-            }
-        },
-        dart_signal = receiver.recv() => {
-            match dart_signal {
-                Some(dart_signal) => {
-                    let req: SendMessage = dart_signal.message;
-                    let message = req.message.unwrap();
-                    let recipient = req.receiver.unwrap();
-                    debug_print!("Rust received message from flutter!: {}", &message);
+                    },
+                    Some(Err(e)) => {
+                        debug_print!("[Failed to Decrypt Message]: {e}");
+                    },
+                    None => {
+                        debug_print!("Lost decrypted message stream.");
+                    },
+                }
+            },
+            dart_signal = receiver.recv() => {
+                match dart_signal {
+                    Some(dart_signal) => {
+                        let req: SendMessage = dart_signal.message;
+                        let message = req.message.unwrap();
+                        let recipient = req.receiver.unwrap();
+                        debug_print!("Rust received message from flutter!: {}", &message);
 
-                    if let Err(e) = user.send_message(&recipient, message).await {
-                        debug_print!("Failed to query keys for user: {recipient}: {e}");
-                    }
-                },
-                None => {
-                    debug_print!("Lost message connection to flutter!");
-                },
+                        if let Err(e) = user.send_message(&recipient, message).await {
+                            debug_print!("Failed to query keys for user: {recipient}: {e}");
+                        }
+                    },
+                    None => {
+                        debug_print!("Lost message connection to flutter!");
+                    },
+                }
             }
         }
     }
 
-    rinf::dart_shutdown().await;
+    //rinf::dart_shutdown().await;
 }
