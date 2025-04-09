@@ -1,5 +1,5 @@
 import 'package:brongnal_app/common/util.dart';
-import 'package:brongnal_app/messages/brongnal.pb.dart';
+import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -106,7 +106,7 @@ class _SendMessageWidgetState extends State<SendMessageWidget> {
               onSubmitted: (value) {
                 SendMessage(
                         sender: widget.self,
-                        receiver: widget.peer,
+                        recipient: widget.peer,
                         message: messageInput.text)
                     .sendSignalToRust();
                 widget.conversationModel.addSentMessage(

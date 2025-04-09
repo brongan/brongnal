@@ -51,3 +51,4 @@ result
 
 android/app/.cxx
 android/.kotlin
+/lib/src/bindings

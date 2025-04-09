@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/database.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
-import 'package:brongnal_app/messages/generated.dart';
+import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
@@ -17,7 +17,6 @@ import 'package:provider/provider.dart';
 import 'package:rinf/rinf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xdg_directories/xdg_directories.dart';
-import 'package:brongnal_app/messages/brongnal.pb.dart';
 
 void main() async {
   setupWindow();

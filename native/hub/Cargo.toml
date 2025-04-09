@@ -13,11 +13,12 @@ crate-type = ["lib", "cdylib", "staticlib"]
 client = { path = "../client" }
 prost = "0.12.6"
 proto = { path = "../proto" }
-rinf = "7.3"
+rinf = "8.0"
 tokio-rusqlite = { version = "0.6.0", features = ["bundled"] }
 tokio = { version = "1.44.1", features = ["full"] }
 tonic = { version = "0.11.0", features = ["tls-webpki-roots"] }
 webpki-roots = "0.26.8"
 tokio-stream = "0.1.17"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde"] }
+serde = "1.0.219"
 

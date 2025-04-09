@@ -1,6 +1,6 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
-import 'package:brongnal_app/messages/brongnal.pb.dart';
+import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/conversations.dart';
 import 'package:brongnal_app/screens/compose.dart';
