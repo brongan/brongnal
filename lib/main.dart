@@ -1,9 +1,10 @@
-import './messages/generated.dart';
 import 'dart:io' show Platform, Directory;
-import 'messages/brongnal.pb.dart';
+import 'dart:ui';
+
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/database.dart';
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
+import 'package:brongnal_app/messages/generated.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
@@ -16,6 +17,7 @@ import 'package:provider/provider.dart';
 import 'package:rinf/rinf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xdg_directories/xdg_directories.dart';
+import 'package:brongnal_app/messages/brongnal.pb.dart';
 
 void main() async {
   setupWindow();
@@ -81,6 +83,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
   String? username;
   late ClientChannel _channel;
   late BrongnalClient _stub;
+  late final AppLifecycleListener _listener;
 
   @override
   void initState() {
@@ -93,6 +96,18 @@ class _BrongnalAppState extends State<BrongnalApp> {
     _stub = BrongnalClient(_channel,
         options: CallOptions(timeout: const Duration(seconds: 30)));
     listenForRegister();
+    _listener = AppLifecycleListener(
+      onExitRequested: () async {
+        finalizeRust(); // Shut down the async Rust runtime.
+        return AppExitResponse.exit;
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _listener.dispose();
+    super.dispose();
   }
 
   void listenForRegister() async {
