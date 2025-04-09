@@ -49,3 +49,5 @@ result
 # Generated messages
 */**/messages/
 
+android/app/.cxx
+android/.kotlin
