@@ -1,5 +1,5 @@
 import 'package:brongnal_app/generated/service.pbgrpc.dart';
-import 'package:brongnal_app/messages/brongnal.pb.dart';
+import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:flutter/material.dart';
 
 class Register extends StatelessWidget {

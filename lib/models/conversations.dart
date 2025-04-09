@@ -1,7 +1,7 @@
 import 'dart:collection';
 
 import 'package:brongnal_app/database.dart';
-import 'package:brongnal_app/messages/brongnal.pb.dart';
+import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:flutter/material.dart';
 
 class ConversationModel extends ChangeNotifier {

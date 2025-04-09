@@ -1,14 +1,15 @@
-use crate::messages::*;
 use client::{User, X3DHClient};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use proto::ApplicationMessage;
 use rinf::debug_print;
+use rinf::{DartSignal, RustSignal};
+use signals::*;
 use std::{path::PathBuf, sync::Arc};
 use tokio_rusqlite::Connection;
 use tokio_stream::StreamExt;
 
-mod messages;
+mod signals;
 
 rinf::write_interface!();
 
@@ -17,7 +18,7 @@ async fn await_rust_startup() -> Option<(PathBuf, Option<String>)> {
     if let Some(dart_signal) = receiver.recv().await {
         let message = dart_signal.message;
         return Some((
-            PathBuf::from(message.database_directory().to_owned()),
+            PathBuf::from(message.database_directory.to_owned()),
             message.username,
         ));
     }
@@ -29,15 +30,8 @@ async fn await_register_widget() -> Option<String> {
     let receiver = RegisterUserRequest::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let message: RegisterUserRequest = dart_signal.message;
-        match message.username {
-            Some(username) => {
-                debug_print!("Received request to register {username}");
-                return Some(username);
-            }
-            None => {
-                debug_print!("Received empty register request.");
-            }
-        }
+        debug_print!("Received request to register {}", message.username);
+        return Some(message.username);
     }
     debug_print!("Lost message connection to flutter!");
     None
@@ -65,17 +59,17 @@ async fn main() {
 
     let user = if username.is_none() {
         loop {
-            let username = await_register_widget().await;
+            let username = await_register_widget().await.unwrap();
             match User::new(
                 brongnal.clone(),
                 gossamer.clone(),
                 client.clone(),
-                username.clone().unwrap(),
+                username.clone(),
             )
             .await
             {
                 Ok(user) => {
-                    debug_print!("Registered from register widget: {username:?}");
+                    debug_print!("Registered from register widget: {username}");
                     RegisterUserResponse { username }.send_signal_to_dart();
                     break user;
                 }
@@ -106,8 +100,8 @@ async fn main() {
                         } = msg;
                         debug_print!("[Received Message] from {sender}: {text}",);
                         ReceivedMessage {
-                            message: Some(text),
-                            sender: Some(sender),
+                            message: text,
+                            sender: sender,
                         }
                         .send_signal_to_dart();
 
@@ -124,10 +118,12 @@ async fn main() {
             dart_signal = receiver.recv() => {
                 match dart_signal {
                     Some(dart_signal) => {
-                        let req: SendMessage = dart_signal.message;
-                        let message = req.message.unwrap();
-                        let recipient = req.receiver.unwrap();
-                        debug_print!("Rust received message from flutter!: {}", &message);
+                        let SendMessage {
+                            sender,
+                            message,
+                            recipient
+                        } = dart_signal.message;
+                        debug_print!("Rust received message from flutter({sender})!: {}", &message);
 
                         if let Err(e) = user.send_message(&recipient, message).await {
                             debug_print!("Failed to query keys for user: {recipient}: {e}");
