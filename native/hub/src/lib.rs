@@ -117,6 +117,7 @@ async fn main() {
                     },
                     None => {
                         debug_print!("Lost decrypted message stream.");
+                        break;
                     },
                 }
             },
@@ -134,11 +135,13 @@ async fn main() {
                     },
                     None => {
                         debug_print!("Lost message connection to flutter!");
+                        break;
                     },
                 }
             }
         }
     }
 
-    //rinf::dart_shutdown().await;
+    debug_print!("rinf::dart_shutdown().await");
+    rinf::dart_shutdown().await;
 }
