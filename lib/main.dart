@@ -34,6 +34,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
   RustStartup(databaseDirectory: databaseDirectory.path, username: username)
       .sendSignalToRust();
+  PushNotification(message: message.data["payload"]).sendSignalToRust();
 }
 
 Future<String?> setupNotifications() async {

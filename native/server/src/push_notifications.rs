@@ -39,7 +39,7 @@ impl FirebaseCloudMessagingClient {
                 }
             }
         });
-        let response = self
+        let _response = self
             .client
             .post(url)
             .header(
@@ -54,11 +54,6 @@ impl FirebaseCloudMessagingClient {
             .send()
             .await?
             .error_for_status()?;
-
-        info!(
-            "Firebase Cloud Messaging Response: {}",
-            response.text().await?
-        );
         Ok(())
     }
 }
