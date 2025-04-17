@@ -6,6 +6,7 @@ pub struct RustStartup {
     pub database_directory: String,
     pub username: Option<String>,
     pub fcm_token: Option<String>,
+    pub background_message: Option<Vec<u8>>,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -29,9 +30,4 @@ pub struct SendMessage {
 pub struct ReceivedMessage {
     pub message: String,
     pub sender: String,
-}
-
-#[derive(Deserialize, DartSignal)]
-pub struct PushNotification {
-    message: Vec<u8>,
 }

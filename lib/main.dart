@@ -32,9 +32,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } on StateError catch (_) {
     databaseDirectory = await getApplicationCacheDirectory();
   }
-  RustStartup(databaseDirectory: databaseDirectory.path, username: username)
+  RustStartup(
+          databaseDirectory: databaseDirectory.path,
+          username: username,
+          message: message.data["payload"])
       .sendSignalToRust();
-  PushNotification(message: message.data["payload"]).sendSignalToRust();
 }
 
 Future<String?> setupNotifications() async {

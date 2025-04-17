@@ -150,6 +150,36 @@ pub struct MessageSubscriber {
 }
 
 impl MessageSubscriber {
+    fn handle_message(&self, message: X3DHMessage) -> ClientResult<ApplicationMessage> {
+        let opk = if let Some(opk) = message.opk {
+            Some(self.x3dh.fetch_wipe_opk(opk).await?)
+        } else {
+            None
+        };
+        // TODO: Caller must delete the session keys with the peer on an error.
+        let (_sk, decrypted) = initiate_recv(
+            &self.ik,
+            &self.x3dh.get_pre_key(message.pre_key).await?,
+            &message.ik,
+            message.ek,
+            opk,
+            &message.ciphertext,
+        )?;
+        let application_message: ApplicationMessage =
+            ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
+        if !self
+            .ledger
+            .validate_username(&application_message.sender, &message.ik)
+        {
+            warn!(
+                "Message failed username validation. Claimed sender: {}",
+                &application_message.sender
+            );
+            continue;
+        }
+        Ok::<ApplicationMessage, ClientError>(application_message)
+    }
+
     pub fn into_stream(self) -> impl Stream<Item = ClientResult<ApplicationMessage>> {
         try_stream! {
             let messages = into_message_stream(self.stream);
@@ -160,28 +190,8 @@ impl MessageSubscriber {
                     continue;
                 }
                 let message = message.unwrap();
-                let res = {
-                    let opk = if let Some(opk) = message.opk {
-                        Some(self.x3dh.fetch_wipe_opk(opk).await?)
-                    } else {
-                        None
-                    };
-                    // TODO: Caller must delete the session keys with the peer on an error.
-                    let (_sk, decrypted) = initiate_recv(
-                        &self.ik,
-                        &self.x3dh.get_pre_key(message.pre_key).await?,
-                        &message.ik,
-                        message.ek,
-                        opk,
-                        &message.ciphertext,
-                    )?;
-                    let application_message: ApplicationMessage = ApplicationMessageProto::decode(&*decrypted)?.try_into()?;
-                    if !self.ledger.validate_username(&application_message.sender, &message.ik) {
-                        warn!("Message failed username validation. Claimed sender: {}", &application_message.sender);
-                        continue;
-                    }
-                    Ok::<ApplicationMessage, ClientError>(application_message)
-                };
+
+                let res = ;
                 match res {
                     Ok(decrypted) => yield decrypted,
                     Err(e) => {
@@ -210,6 +220,10 @@ impl User {
             x3dh,
             username,
         })
+    }
+
+    pub async fn decrypt_message(&self, message: Vec<u8>) -> ClientResult<ApplicationMessage> {
+        let message: X3DHMessage = message.try_into()?;
     }
 
     pub async fn get_messages(&self) -> ClientResult<MessageSubscriber> {

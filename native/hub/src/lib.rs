@@ -44,6 +44,7 @@ async fn main() {
         database_directory,
         username,
         fcm_token,
+        background_message,
     } = rust_startup().await.expect("Rust startup message sent.");
     let database_directory = PathBuf::from(database_directory);
     let db_path = database_directory.join("keys.sqlite");
