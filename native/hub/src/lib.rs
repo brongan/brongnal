@@ -103,7 +103,7 @@ async fn main() {
                         debug_print!("[Received Message] from {sender}: {text}",);
                         ReceivedMessage {
                             message: text,
-                            sender: sender,
+                            sender,
                         }
                         .send_signal_to_dart();
 

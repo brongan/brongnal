@@ -83,7 +83,7 @@ impl BrongnalController {
         message: MessageProto,
     ) -> Result<()> {
         info!("Sending message.");
-        let tx = self.receivers.lock().unwrap().get(&recipient).cloned();
+        let tx = self.receivers.lock().unwrap().get(recipient).cloned();
         if let Some(tx) = tx {
             match tx.send(Ok(message.clone())).await {
                 Ok(_) => {
@@ -114,7 +114,7 @@ impl BrongnalController {
             (_, None) => info!("Cannot notify: GOOGLE_APPLICATION_CREDENTIALS is unset"),
         }
 
-        self.storage.add_message(&recipient, message).await?;
+        self.storage.add_message(recipient, message).await?;
         info!("Put message in mailbox.");
         Ok(())
     }

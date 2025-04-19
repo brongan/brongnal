@@ -2376,6 +2376,7 @@ dependencies = [
  "rusqlite",
  "sentry",
  "serde_json",
+ "thiserror 2.0.12",
  "tokio",
  "tokio-rusqlite",
  "tokio-stream",
