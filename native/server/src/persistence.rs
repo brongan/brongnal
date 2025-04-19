@@ -411,7 +411,7 @@ mod tests {
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let keys = bob.create_opks(1).await?.pre_keys;
         storage
-            .add_user((&bob_ik).into(), bob.get_spk().await?.into())
+            .add_user(&bob_ik, bob.get_spk().await?.into())
             .await?;
         storage.add_opks(&bob_ik, keys.clone()).await?;
         assert_eq!(storage.pop_opk(&bob_ik).await?, Some(keys[0]));

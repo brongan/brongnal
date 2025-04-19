@@ -1,11 +1,20 @@
 use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
 use gcp_auth::{CustomServiceAccount, TokenProvider};
 use serde_json::json;
-use tracing::{info, instrument};
+use thiserror::Error;
+use tracing::instrument;
 
 pub struct FirebaseCloudMessagingClient {
     client: reqwest::Client,
     service_account: CustomServiceAccount,
+}
+
+#[derive(Error, Debug)]
+pub enum NotifyError {
+    #[error("GCP Auth returned an error")]
+    GCPError(#[from] gcp_auth::Error),
+    #[error("FCM API returned an error.")]
+    FCMError(#[from] reqwest::Error),
 }
 
 impl FirebaseCloudMessagingClient {
@@ -20,7 +29,7 @@ impl FirebaseCloudMessagingClient {
     }
 
     #[instrument(name = "push", skip(self, fcm_token, message))]
-    pub async fn notify(&self, fcm_token: &str, message: &[u8]) -> anyhow::Result<()> {
+    pub async fn notify(&self, fcm_token: &str, message: &[u8]) -> Result<(), NotifyError> {
         let payload = if message.len() <= 2048 {
             base64.encode(message)
         } else {
@@ -31,9 +40,6 @@ impl FirebaseCloudMessagingClient {
         let message = json!({
             "message": {
                 "token": fcm_token,
-                "notification": {
-                    "title": "Brongnal Message",
-                },
                 "data": {
                     "payload": payload
                 }
