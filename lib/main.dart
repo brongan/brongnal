@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:brongnal_app/firebase_options.dart';
 import 'dart:io' show Platform, Directory;
 import 'dart:ui';
@@ -12,6 +14,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -19,12 +22,40 @@ import 'package:rinf/rinf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xdg_directories/xdg_directories.dart';
 
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  print("Handling a background message: ${message.messageId}");
+int id = 0;
+
+void notifyDecryptedMessage(
+    FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin) async {
+  const String groupKey = 'com.android.brongnal_app.DecryptedMessage';
+  const String groupChannelId = '1';
+  const String groupChannelName = 'Chats';
+  const String groupChannelDescription = 'Messages.';
+  const AndroidNotificationDetails androidNotificationDetails =
+      AndroidNotificationDetails(groupChannelId, groupChannelName,
+          channelDescription: groupChannelDescription,
+          importance: Importance.max,
+          priority: Priority.high,
+          groupKey: groupKey,
+          ticker: 'Chats',
+          setAsGroupSummary: false);
+  const NotificationDetails notificationDetails =
+      NotificationDetails(android: androidNotificationDetails);
+
+  final stream = ReceivedMessage.rustSignalStream;
+  await for (final rustSignal in stream) {
+    final ReceivedMessage message = rustSignal.message;
+    await flutterLocalNotificationsPlugin.show(
+        id++, message.sender, message.message, notificationDetails,
+        payload: message.sender);
+  }
+}
+
+Future<void> _firebaseMessagingHandler(RemoteMessage message) async {
   await initializeRust(assignRustSignal);
+  debugPrint("Initialized Rust");
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final username = prefs.getString("username");
+  debugPrint("Acquired Username");
 
   Directory databaseDirectory;
   try {
@@ -32,13 +63,60 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } on StateError catch (_) {
     databaseDirectory = await getApplicationCacheDirectory();
   }
+  debugPrint("Telling rust about database and username.");
   RustStartup(databaseDirectory: databaseDirectory.path, username: username)
       .sendSignalToRust();
-  PushNotification(message: message.data["payload"]).sendSignalToRust();
+  FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
+  notifyDecryptedMessage(plugin);
 }
 
-Future<String?> setupNotifications() async {
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint("_firebaseMessagingBackgroundHandler: ${message.messageId}");
+  return _firebaseMessagingHandler(message);
+}
+
+void _firebaseMessagingForegroundHandler(RemoteMessage message) {
+  debugPrint("_firebaseMessagingForegroundHandler: ${message.messageId}");
+  _firebaseMessagingHandler(message);
+}
+
+void onDidReceiveNotificationResponse(
+    NotificationResponse notificationResponse) async {
+  debugPrint("onDidReceiveNotificationResponse: ${notificationResponse.id}");
+  final String? payload = notificationResponse.payload;
+  if (notificationResponse.payload != null) {
+    debugPrint('notification payload: $payload');
+  }
+  // TODO make something happen when notification is pressed.
+}
+
+Future<FlutterLocalNotificationsPlugin> createLocalNotifications() async {
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/brongnal_launcher');
+  final DarwinInitializationSettings initializationSettingsDarwin =
+      DarwinInitializationSettings();
+  final LinuxInitializationSettings initializationSettingsLinux =
+      LinuxInitializationSettings(defaultActionName: 'Open notification');
+  final WindowsInitializationSettings initializationSettingsWindows =
+      WindowsInitializationSettings(
+          appName: 'Flutter Local Notifications Example',
+          appUserModelId: 'Com.Dexterous.FlutterLocalNotificationsExample',
+          guid: '10759e20-4f29-4646-97cb-15acfd7fc208');
+  final InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
+      macOS: initializationSettingsDarwin,
+      linux: initializationSettingsLinux,
+      windows: initializationSettingsWindows);
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings,
+      onDidReceiveNotificationResponse: onDidReceiveNotificationResponse);
+  return flutterLocalNotificationsPlugin;
+}
+
+Future<String?> setupNotifications(FirebaseMessaging messaging) async {
   NotificationSettings settings = await messaging.requestPermission(
     alert: true,
     announcement: false,
@@ -50,9 +128,11 @@ Future<String?> setupNotifications() async {
   );
 
   if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-    print('User granted permission: ${settings.authorizationStatus}');
+    debugPrint('User granted permission: ${settings.authorizationStatus}');
     final String? token = await messaging.getToken();
-    print('Firebase Token: $token');
+    debugPrint('Firebase Token: $token');
+    FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
+    notifyDecryptedMessage(plugin);
     return token;
   }
   return null;
@@ -65,8 +145,9 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    fcmToken = await setupNotifications(FirebaseMessaging.instance);
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    fcmToken = await setupNotifications();
+    FirebaseMessaging.onMessage.listen(_firebaseMessagingForegroundHandler);
   } else {
     fcmToken = null;
   }
@@ -165,13 +246,6 @@ class _BrongnalAppState extends State<BrongnalApp> {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       prefs.setString("username", message.username);
     }
-  }
-
-  void listenForPushNotifications() async {
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Got a message whilst in the foreground!');
-      print('Message data: ${message.data}');
-    });
   }
 
   @override
