@@ -29,6 +29,7 @@ use tonic::{Request, Streaming};
 use tracing::{error, info, warn};
 
 pub mod client;
+mod messages;
 
 type BrongnalClient = BrongnalServiceClient<Channel>;
 type GossamerClient = GossamerServiceClient<Channel>;

@@ -30,8 +30,3 @@ pub struct ReceivedMessage {
     pub message: String,
     pub sender: String,
 }
-
-#[derive(Deserialize, DartSignal)]
-pub struct PushNotification {
-    message: Vec<u8>,
-}
