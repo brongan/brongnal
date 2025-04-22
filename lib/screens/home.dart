@@ -72,7 +72,7 @@ class _HomeState extends State<Home> {
         bottomNavigationBar: NavigationBar(
           backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
           indicatorColor: theme.navigationBarTheme.indicatorColor,
-          height: 150,
+          height: 66,
           animationDuration: const Duration(milliseconds: 1000),
           destinations: [
             NavigationDestination(
@@ -177,7 +177,7 @@ class _HomeState extends State<Home> {
         builder: (BuildContext context) {
           return IconButton(
             icon: CircleAvatar(
-              radius: 20,
+              radius: 16,
               backgroundColor: theme.foregroundColor,
               child: const Text(
                 'BR',
@@ -287,9 +287,10 @@ class BrongnalFloatingActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(8.0),
-      child: FloatingActionButton.large(
+      child: FloatingActionButton(
         backgroundColor: backgroundColor,
         onPressed: () {
           final messenger = ScaffoldMessenger.of(context);
@@ -297,7 +298,7 @@ class BrongnalFloatingActionButton extends StatelessWidget {
           messenger.showSnackBar(SnackBar(content: Text("Todo: $name")));
         },
         heroTag: name,
-        child: Icon(icon, color: textColor, size: 40),
+        child: Icon(icon, color: textColor, size: theme.iconTheme.size),
       ),
     );
   }
@@ -311,6 +312,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     switch (destination) {
       case SelectedDestination.chats:
         return Column(
@@ -323,7 +325,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.all(8.0),
-              child: FloatingActionButton.large(
+              child: FloatingActionButton(
                 backgroundColor: backgroundColor,
                 onPressed: () {
                   Navigator.push(context, MaterialPageRoute<void>(
@@ -333,8 +335,8 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
                   ));
                 },
                 heroTag: "Send a message.",
-                child: const Icon(Icons.create_outlined,
-                    color: textColor, size: 40),
+                child: Icon(Icons.create_outlined,
+                    color: textColor, size: theme.iconTheme.size),
               ),
             )
           ],

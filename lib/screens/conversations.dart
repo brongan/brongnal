@@ -24,7 +24,7 @@ class ConversationsScreen extends StatelessWidget {
           return Conversation(
             avatar: CircleAvatar(
                 backgroundColor: Colors.primaries[i % Colors.primaries.length],
-                radius: 36,
+                radius: 25,
                 child: Text(peer.substring(0, 2))),
             lastMessage: items.values.elementAt(i).last,
             self: self,
@@ -90,7 +90,7 @@ class Conversation extends StatelessWidget {
         child: Row(
           children: [
             Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.all(12.0),
               child: avatar,
             ),
             Expanded(

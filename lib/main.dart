@@ -1,15 +1,13 @@
-import 'dart:math';
-
-import 'package:brongnal_app/firebase_options.dart';
 import 'dart:io' show Platform, Directory;
 import 'dart:ui';
 
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/database.dart';
-import 'package:brongnal_app/src/bindings/bindings.dart';
+import 'package:brongnal_app/firebase_options.dart';
 import 'package:brongnal_app/models/conversations.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
+import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
