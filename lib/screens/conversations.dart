@@ -4,6 +4,7 @@ import 'package:brongnal_app/screens/chat.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:brongnal_app/database.dart';
+import 'package:timeago/timeago.dart' as timeago;
 
 class ConversationsScreen extends StatelessWidget {
   const ConversationsScreen({
@@ -60,7 +61,6 @@ class Conversation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final delta = DateTime.now().difference(lastMessage.time).inHours;
     final theme = Theme.of(context);
 
     var readIcon = Icon(
@@ -120,7 +120,7 @@ class Conversation extends StatelessWidget {
               child: Column(
                 children: [
                   Text(
-                    '${delta}h',
+                    '${timeago.format(lastMessage.time, locale: 'en_short')}',
                     style: theme.textTheme.bodySmall,
                   ),
                   readIcon,
