@@ -24,6 +24,10 @@ class ChatScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final messages = conversationModel.items[peer] ?? [];
+    ScrollController scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+    });
     return Scaffold(
       appBar: getConversationAppBar(context, peer),
       body: Column(
@@ -31,6 +35,7 @@ class ChatScreen extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               itemCount: messages.length,
+              controller: scrollController,
               itemBuilder: (context, i) {
                 return MessageWidget(
                   message: messages[i].message,
