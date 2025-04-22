@@ -174,7 +174,6 @@ class MessageWidget extends StatelessWidget {
             text: message,
             style: theme.textTheme.bodySmall!.copyWith(
               color: Colors.white,
-              fontSize: 24,
             ),
             children: [
               const TextSpan(text: ' '),
@@ -208,20 +207,21 @@ AppBar getConversationAppBar(BuildContext context, String name) {
             child: Text(name,
                 overflow: TextOverflow.fade,
                 style: theme.titleTextStyle!.copyWith(
-                  fontSize: 30,
+                  fontSize: 20,
                   color: Colors.white,
                 ))),
-        const Icon(Icons.account_circle, size: 30),
+        Icon(Icons.account_circle, size: 16),
       ],
     ),
     toolbarHeight: theme.toolbarHeight,
     backgroundColor: theme.backgroundColor,
+    leadingWidth: 36,
     actions: <Widget>[
       const StubIconButton(icon: Icons.videocam_outlined, name: 'Video Call'),
       const StubIconButton(icon: Icons.phone_outlined, name: 'Call'),
       PopupMenuButton<ConversationPopupItem>(
         onSelected: (ConversationPopupItem item) {},
-        iconSize: 36,
+        iconSize: theme.iconTheme!.size!,
         itemBuilder: (BuildContext context) => [],
       ),
     ],

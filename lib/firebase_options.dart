@@ -84,4 +84,3 @@ class DefaultFirebaseOptions {
     storageBucket: 'brongnal.firebasestorage.app',
   );
 }
-

@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 const Color textColor = Color.fromRGBO(190, 192, 197, 1.0);
 const backgroundColor = Color.fromRGBO(26, 28, 32, 1.0);
-const double appbarIconThemeSize = 42;
+const double appbarIconThemeSize = 32;
 
 const conversationNameStyle = TextStyle(
   fontStyle: FontStyle.normal,
   fontWeight: FontWeight.w400,
   fontFamily: 'Roboto',
-  fontSize: 24,
+  fontSize: 20,
   color: textColor,
 );
 const conversationMessageStyle = TextStyle(
@@ -16,7 +16,7 @@ const conversationMessageStyle = TextStyle(
   fontStyle: FontStyle.normal,
   fontWeight: FontWeight.w300,
   fontFamily: 'Roboto',
-  fontSize: 18,
+  fontSize: 16,
   color: textColor,
 );
 
@@ -26,16 +26,16 @@ ThemeData bronganlDarkTheme = ThemeData(
     seedColor: Colors.deepOrange,
     brightness: Brightness.dark,
   ).copyWith(surface: backgroundColor),
-  dialogBackgroundColor: backgroundColor,
+  dialogTheme: DialogThemeData(backgroundColor: backgroundColor),
   drawerTheme: const DrawerThemeData(backgroundColor: backgroundColor),
   appBarTheme: const AppBarTheme(
       backgroundColor: backgroundColor,
       iconTheme: IconThemeData(color: textColor, size: appbarIconThemeSize),
-      toolbarHeight: 100,
+      toolbarHeight: 66,
       titleTextStyle: TextStyle(
         color: Color.fromRGBO(255, 255, 255, .95),
         fontFamily: 'Roboto',
-        fontSize: 36,
+        fontSize: 24,
         fontWeight: FontWeight.w300,
       )),
   bottomNavigationBarTheme: const BottomNavigationBarThemeData(
@@ -48,7 +48,7 @@ ThemeData bronganlDarkTheme = ThemeData(
     indicatorColor: Color.fromRGBO(70, 75, 92, 1.0),
     labelTextStyle: WidgetStatePropertyAll(conversationMessageStyle),
   ),
-  iconTheme: const IconThemeData(color: textColor, size: 40),
+  iconTheme: const IconThemeData(color: textColor, size: appbarIconThemeSize),
   textTheme: const TextTheme(
     bodyMedium: conversationNameStyle,
     bodySmall: conversationMessageStyle,

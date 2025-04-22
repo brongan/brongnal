@@ -1,4 +1,3 @@
-import 'package:brongnal_app/generated/service.pbgrpc.dart';
 import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:flutter/material.dart';
 
