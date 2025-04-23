@@ -268,15 +268,11 @@ impl SqliteStorage {
     #[instrument(skip(self, ik, token))]
     pub async fn set_fcm_token(&self, ik: &VerifyingKey, token: String) -> tonic::Result<()> {
         let ik = ik.to_bytes();
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
         self.0
             .call(move |connection| {
                 connection.execute(
                     "INSERT INTO firebasetoken (ik, token, insertion_time) VALUES (?1, ?2, ?3)",
-                    params![ik, token, now],
+                    params![ik, token, time_now()],
                 )?;
                 Ok(())
             })
@@ -293,11 +289,7 @@ impl SqliteStorage {
         max_age: Duration,
     ) -> tonic::Result<Option<String>> {
         let ik = ik.to_bytes();
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let min_time = now.saturating_sub(max_age.as_secs());
+        let min_time = time_now().saturating_sub(max_age.as_secs());
 
         self.0
             .call(move |connection| {
@@ -316,6 +308,19 @@ impl SqliteStorage {
             .inspect_err(|e| error!("Failed to get Firebase Cloud Messaging token: {e}."))
             .map_err(|_| Status::internal("Failed to get Firebase Cloud Messaging token."))
     }
+}
+
+/// Returns the number of messages deleted.
+pub async fn clean_mailboxes(
+    connection: &tokio_rusqlite::Connection,
+    ttl: Duration,
+) -> tokio_rusqlite::Result<usize> {
+    let expired = time_now() - ttl.as_secs();
+    connection
+        .call(move |connection| {
+            Ok(connection.execute("DELETE FROM mailbox WHERE time < $0", params![expired])?)
+        })
+        .await
 }
 
 #[cfg(test)]

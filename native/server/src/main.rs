@@ -1,13 +1,15 @@
+#![feature(duration_constructors)]
 use crate::gossamer::InMemoryGossamer;
 use crate::push_notifications::FirebaseCloudMessagingClient;
 use brongnal::BrongnalController;
-use persistence::SqliteStorage;
+use persistence::{clean_mailboxes, SqliteStorage};
 use proto::gossamer::gossamer_service_server::GossamerServiceServer as GossamerServer;
 use proto::service::brongnal_service_server::BrongnalServiceServer as BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
 use sentry::ClientInitGuard;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
+use std::time::Duration;
 use tokio_rusqlite::Connection;
 use tonic::transport::Server;
 use tonic_reflection::server::Builder;
@@ -20,6 +22,17 @@ mod brongnal;
 mod gossamer;
 mod persistence;
 mod push_notifications;
+
+pub async fn db_cleanup(connection: tokio_rusqlite::Connection) {
+    let mut interval = tokio::time::interval(Duration::from_hours(1));
+    loop {
+        interval.tick().await;
+        match clean_mailboxes(&connection, Duration::from_days(30)).await {
+            Ok(num) => info!("Cleaned up {num} items from mailboxes."),
+            Err(e) => warn!("Failed to clean mailboxes: {e}"),
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,6 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Database Path: {}", db_path.display());
     let connection = Connection::open(db_path).await?;
+    tokio::spawn(db_cleanup(connection.clone()));
+
     let controller = BrongnalController::new(SqliteStorage::new(connection).await?, fcm_client);
 
     info!("Brongnal Server listening at: {server_addr}");
