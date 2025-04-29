@@ -28,40 +28,33 @@ impl SqliteStorage {
                 connection.pragma_update(None, "journal_mode", "WAL")?;
                 connection.pragma_update(None, "synchronous", "normal")?;
                 connection.pragma_update(None, "foreign_keys", "on")?;
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS device (
+                connection.execute_batch(
+                    "
+                    BEGIN;
+                    CREATE TABLE IF NOT EXISTS device (
                         ik BLOB PRIMARY KEY,
                         spk BLOB NOT NULL,
                         time INTEGER NOT NULL
-                    )",
-                    (),
-                )?;
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS opk_queue (
+                    );
+                    CREATE TABLE IF NOT EXISTS opk_queue (
                         opk BLOB PRIMARY KEY,
                         ik BLOB NOT NULL,
                         time INTEGER NOT NULL,
                         FOREIGN KEY(ik) REFERENCES device(ik)
-                    )",
-                    (),
-                )?;
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS mailbox (
+                    );
+                    CREATE TABLE IF NOT EXISTS mailbox (
                         message BLOB PRIMARY KEY,
                         ik BLOB NOT NULL,
                         time integer NOT NULL,
                         FOREIGN KEY(ik) REFERENCES device(ik)
-                    )",
-                    (),
-                )?;
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS firebasetoken (
+                    );
+                    CREATE TABLE IF NOT EXISTS firebasetoken (
                         ik STRING PRIMARY KEY,
                         token STRING NOT NULL,
                         insertion_time integer NOT NULL,
                         FOREIGN KEY(ik) REFERENCES device(ik)
-                    )",
-                    (),
+                    );
+                    COMMIT;",
                 )?;
                 Ok(())
             })
