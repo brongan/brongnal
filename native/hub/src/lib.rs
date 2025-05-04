@@ -2,8 +2,7 @@ use client::{User, X3DHClient};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use proto::ApplicationMessage;
-use rinf::debug_print;
-use rinf::{DartSignal, RustSignal};
+use rinf::{debug_print, DartSignal, RustSignal};
 use signals::*;
 use std::{path::PathBuf, sync::Arc};
 use tokio_rusqlite::Connection;
@@ -127,7 +126,7 @@ async fn main() {
                         } = dart_signal.message;
                         debug_print!("Rust received message from flutter({sender})!: {}", &message);
 
-                        if let Err(e) = user.send_message(&recipient, message).await {
+                        if let Err(e) = user.send_message(recipient.clone(), message).await {
                             debug_print!("Failed to query keys for user: {recipient}: {e}");
                         }
                     },

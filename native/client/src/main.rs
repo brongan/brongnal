@@ -58,13 +58,18 @@ async fn main() -> Result<()> {
     let gossamer = GossamerClient::connect(addr.clone()).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
-    let client = Arc::new(X3DHClient::new(Connection::open(db_path).await?).await?);
+    let connection = Connection::open(db_path).await?;
+    let client = Arc::new(X3DHClient::new(connection.clone()).await?);
     let ik = client.get_ik();
 
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
     info!("Registering {name} with key={ik_str} at {addr}");
     let user = User::new(brongnal, gossamer, client, name.clone(), None).await?;
+    let history = user.get_message_history().await.unwrap();
+    for message in history.messages {
+        println!("{message}");
+    }
 
     println!("NAME MESSAGE");
 
@@ -93,7 +98,7 @@ async fn main() -> Result<()> {
             command = cli_rx.recv() => {
                 match command {
                     Some(command) => {
-                        if let Err(e) = user.send_message(&command.to, command.msg).await {
+                        if let Err(e) = user.send_message(command.to, command.msg).await {
                                 eprintln!("Failed to send message: {e}");
                         }
                     },

@@ -239,6 +239,7 @@ impl From<GossamerSignedMessage> for gossamer::SignedMessage {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ApplicationMessage {
     pub sender: String,
     pub text: String,
