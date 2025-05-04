@@ -1,24 +1,10 @@
+use proto::ApplicationMessage;
+use rinf::{DartSignal, RustSignal, SignalPiece};
+use rusqlite::{params, Connection};
+use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use proto::ApplicationMessage;
-use rusqlite::{params, Connection};
-
-/*
- *@UseRowClass(MessageModel)
-class Messages extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get sender => text()();
-  TextColumn get receiver => text()();
-  TextColumn get message => text()();
-  DateTimeColumn get time => dateTime()();
-  IntColumn get state => intEnum<MessageState>()();
-
-  @override
-  Set<Column<Object>>? get primaryKey => {id};
-}
-*/
-
-#[derive(Clone, Copy, strum_macros::Display)]
+#[derive(Clone, Copy, strum_macros::Display, Serialize)]
 #[repr(u8)]
 enum State {
     Sending,
@@ -33,68 +19,84 @@ fn time_now() -> u64 {
         .as_secs()
 }
 
-// A message is sent by someone.
-// possibly in a group
-// the sender could be self or another user
-// a recipient can either self or another user
-// a message could be a part of a group chat
-// a message can be sending, sent, delivered, or read
-// contents can be a message, image, etc
-// The primary key of a message is its hash?? How else to reference other messages with read
-// receipts.
+#[derive(Serialize, RustSignal)]
+struct PersistedConversations {
+    vec: PersistedMessage,
+}
+
+#[derive(Serialize, RustSignal, SignalPiece)]
+struct PersistedMessage {
+    sender: String,
+    receiver: String,
+    creation_time: SystemTime,
+    state: State,
+    text: String,
+}
+
 fn create_tables(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute(
-        "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY)",
+        "CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            created_at INTEGER NOT NULL,
+            name TEXT,
+            profile_pic BLOB,
+            )",
         (),
     )?;
+
     connection.execute(
         "CREATE TABLE IF NOT EXISTS messages (
+        message_id INTEGER PRIMARY KEY,
         sender TEXT NOT NULL,
         receiver TEXT NOT NULL,
-        text TEXT NOT NULL,
-        time INTEGER NOT NULL,
+        creation_time INTEGER NOT NULL,
         state INTEGER NOT NULL,
-        group INTEGER,
+        text TEXT,
         FOREIGN KEY(sender) REFERENCES users(username),
         FOREIGN KEY(receiver) REFERENCES users(username),
      )",
         (),
     )?;
+
     Ok(())
 }
 
-type MessageId = u32;
-
-fn add_user(connection: &Connection, username: &str) -> rusqlite::Result<()> {
+type MessageId = i64;
+pub fn add_user(
+    connection: &Connection,
+    username: &str,
+    name: Option<String>,
+    profile_pic: Vec<u8>,
+) -> rusqlite::Result<()> {
     connection.execute(
-        "INSERT OR IGNORE INTO users (username) VALUES ($1)",
-        params![username],
+        "INSERT OR IGNORE INTO users (username, created_at, name, profile_pic) VALUES ($1, $2)",
+        params![username, time_now(), name, profile_pic],
     )?;
     Ok(())
 }
 
-fn receive(
+pub fn receive(
     connection: &Connection,
     our_username: &str,
     message: ApplicationMessage,
 ) -> rusqlite::Result<()> {
-    connection.execute("INSERT OR IGNORE INTO messages (sender, receiver, contents, time, state) VALUES ($1, $2, $3, $4, $5)", 
+    connection.execute("INSERT OR IGNORE INTO messages (sender, receiver, creation_time, state, text) VALUES ($1, $2, $3, $4, $5)", 
         params![
-            message.sender, our_username, message.text, time_now(), State::Delivered as u8
+            message.sender, our_username, time_now(), State::Delivered as u8, message.text
         ]
     )?;
     Ok(())
 }
 
-fn send(
+pub fn send(
     connection: &Connection,
     sender: String,
     receiver: String,
     message: String,
 ) -> rusqlite::Result<()> {
-    connection.execute("INSERT OR IGNORE INTO messages (sender, receiver, contents, time, state) VALUES ($1, $2, $3, $4, $5)", 
+    connection.execute("INSERT OR IGNORE INTO messages (sender, receiver, creation_time, state, text) VALUES ($1, $2, $3, $4, $5)", 
         params![
-            sender, receiver, message, time_now(), State::Sending as u8
+            sender, receiver, time_now(), State::Sending as u8, message
         ]
     )?;
     Ok(())
@@ -108,4 +110,13 @@ fn update_state(connection: &Connection, id: MessageId, state: State) -> rusqlit
         |row| row.get(0),
     )?;
     Ok(())
+}
+
+fn get_conversations(
+    connection: &Connection,
+    peer: String,
+) -> rusqlite::Result<PersistedConversations> {
+    let mut stmt = connection
+        .prepare("SELECT (sender, receiver, creation_time, state, text) FROM messages")?;
+    for 
 }

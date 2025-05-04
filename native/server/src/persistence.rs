@@ -212,7 +212,6 @@ impl SqliteStorage {
     }
 
     /// Retrieve enqueued messages for a given identity.
-    // TODO - Consider changing this to an async stream.
     #[instrument(skip(self, recipient))]
     pub async fn get_messages(&self, recipient: &VerifyingKey) -> tonic::Result<Vec<MessageProto>> {
         let recipient = recipient.to_bytes();

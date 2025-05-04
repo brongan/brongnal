@@ -1,4 +1,5 @@
 #![feature(result_flattening)]
+#![feature(trivial_bounds)]
 use anyhow::Context;
 use async_stream::{stream, try_stream};
 use blake2::{Blake2b, Digest};
