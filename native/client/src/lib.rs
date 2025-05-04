@@ -1,9 +1,12 @@
 #![feature(result_flattening)]
+#![feature(trivial_bounds)]
+#![feature(iterator_try_collect)]
 use anyhow::Context;
 use async_stream::{stream, try_stream};
 use blake2::{Blake2b, Digest};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
+use client::{MessageState, MessagesModel};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
@@ -30,7 +33,6 @@ use tonic::{Request, Streaming};
 use tracing::{error, info, warn};
 
 pub mod client;
-mod messages;
 
 type BrongnalClient = BrongnalServiceClient<Channel>;
 type GossamerClient = GossamerServiceClient<Channel>;
@@ -149,6 +151,7 @@ pub struct MessageSubscriber {
     ik: SigningKey,
     x3dh: Arc<X3DHClient>,
     ledger: Box<dyn Ledger>,
+    username: String,
 }
 
 impl MessageSubscriber {
@@ -183,7 +186,13 @@ impl MessageSubscriber {
                         warn!("Message failed username validation. Claimed sender: {}", &ratchet_message.message.sender);
                         continue;
                     }
-                    Ok::<ApplicationMessage, ClientError>(ratchet_message.message)
+                    let application_message = ratchet_message.message;
+                    let ApplicationMessage {
+                        sender,
+                        text
+                    } = application_message.clone();
+                    self.x3dh.persist_message(sender, self.username.clone(), text, MessageState::Delivered).await?;
+                    Ok::<ApplicationMessage, ClientError>(application_message)
                 };
                 match res {
                     Ok(decrypted) => yield decrypted,
@@ -231,10 +240,11 @@ impl User {
             ik,
             x3dh: self.x3dh.clone(),
             ledger,
+            username: self.username.clone(),
         })
     }
 
-    pub async fn send_message(&self, peer_username: &str, text: String) -> ClientResult<()> {
+    pub async fn send_message(&self, peer_username: String, message: String) -> ClientResult<()> {
         let mut brongnal = self.brongnal.clone();
         let mut gossamer = self.gossamer.clone();
         // TODO: Create Ratchet Header
@@ -242,11 +252,11 @@ impl User {
             header: None,
             message: ApplicationMessage {
                 sender: self.username.clone(),
-                text,
+                text: message.clone(),
             },
         };
         let ik = self.x3dh.get_ik();
-        let keys = get_keys(&mut gossamer, peer_username).await?;
+        let keys = get_keys(&mut gossamer, &peer_username).await?;
         let mut bundles = Vec::with_capacity(keys.len());
         for key in keys {
             let recipient = key.as_bytes().to_vec();
@@ -261,10 +271,26 @@ impl User {
                     .try_into()?,
             );
         }
-        let requests = send_message_requests(bundles, ik, message);
+        let requests = send_message_requests(bundles, ik, application_message);
 
+        let row_id = self
+            .x3dh
+            .persist_message(
+                self.username.clone(),
+                peer_username,
+                message,
+                MessageState::Sending,
+            )
+            .await?;
         brongnal.send_message(Request::new(requests)).await?;
+        self.x3dh
+            .persist_message_state(row_id, MessageState::Sent)
+            .await?;
         Ok(())
+    }
+
+    pub async fn get_message_history(&self) -> ClientResult<MessagesModel> {
+        self.x3dh.get_messages().await
     }
 }
 
