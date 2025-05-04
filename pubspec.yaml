@@ -42,3 +42,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+rinf:
+  gen_input_crates:
+    - hub
+    - client
+  gen_output_dir: lib/src/bindings
