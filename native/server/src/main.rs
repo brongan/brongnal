@@ -1,4 +1,5 @@
 #![feature(duration_constructors)]
+#![feature(duration_constructors_lite)]
 use crate::gossamer::InMemoryGossamer;
 use crate::push_notifications::FirebaseCloudMessagingClient;
 use brongnal::BrongnalController;
