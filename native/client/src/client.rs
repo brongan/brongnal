@@ -1,6 +1,7 @@
 use crate::{ClientError, ClientResult};
 use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
 use chacha20poly1305::aead::OsRng;
+use chrono::{DateTime, Utc};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use proto::ApplicationMessage;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
@@ -55,7 +56,6 @@ fn create_tables(connection: &Connection) -> rusqlite::Result<()> {
                         profile_pic BLOB
                     );
                     CREATE TABLE IF NOT EXISTS messages (
-                        message_id INTEGER PRIMARY KEY,
                         sender TEXT NOT NULL,
                         receiver TEXT NOT NULL,
                         creation_time INTEGER NOT NULL,
@@ -193,9 +193,10 @@ impl std::fmt::Display for MessageModel {
             state,
             ref text,
         } = self;
+        let creation_time: DateTime<Utc> = creation_time.into();
         write!(
             f,
-            "From: {sender} To: {receiver} at {creation_time:#?} with {state}\n{text}"
+            "From: {sender} To: {receiver} at {creation_time} with {state}\n{text}"
         )?;
         Ok(())
     }
@@ -207,10 +208,10 @@ pub fn add_user(
     connection: &Connection,
     username: &str,
     name: Option<String>,
-    profile_pic: Vec<u8>,
+    profile_pic: Option<Vec<u8>>,
 ) -> rusqlite::Result<()> {
     connection.execute(
-        "INSERT OR IGNORE INTO users (username, created_at, name, profile_pic) VALUES ($1, $2)",
+        "INSERT OR IGNORE INTO users (username, created_at, name, profile_pic) VALUES ($1, $2, $3, $4)",
         params![username, time_now(), name, profile_pic],
     )?;
     Ok(())
@@ -251,7 +252,7 @@ fn update_state(
 ) -> rusqlite::Result<()> {
     // Returns the first row updated so that a missing message results in an error.
     let _: u8 = connection.query_row(
-        "UPDATE messages SET state = ?2 WHERE id = ?1 RETURNING state",
+        "UPDATE messages SET state = ?2 WHERE rowid = ?1 RETURNING state",
         params![id, state as u8],
         |row| row.get(0),
     )?;
@@ -379,6 +380,8 @@ impl X3DHClient {
     ) -> ClientResult<MessageId> {
         self.connection
             .call(move |connection| {
+                add_user(connection, &sender, None, None)?;
+                add_user(connection, &receiver, None, None)?;
                 Ok(persist_state(
                     connection, &sender, &receiver, &message, state,
                 )?)
