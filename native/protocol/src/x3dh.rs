@@ -53,7 +53,7 @@ pub struct X3DHSendKeyAgreement {
     pub sk: [u8; 32],
 }
 
-/// A `Message` in this packages implementation of the X3DH protocol.
+/// An `InitiationMessage` in this packages implementation of the X3DH protocol.
 /// This struct is the output of `Alice` sending a message to `Bob`.
 /// * `ik` is the identity key of the sender.
 /// * `ek` is the ephemeral key generated to encrypt the message.
@@ -61,7 +61,7 @@ pub struct X3DHSendKeyAgreement {
 /// * `opk` is Bob's one time prekey that (may) have been used.
 /// * `ciphertext` is the encrypted message.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Message {
+pub struct InitiationMessage {
     pub ik: VerifyingKey,
     pub ek: X25519PublicKey,
     pub pre_key: X25519PublicKey,
@@ -70,7 +70,7 @@ pub struct Message {
 }
 
 #[allow(deprecated)]
-impl std::fmt::Display for Message {
+impl std::fmt::Display for InitiationMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -187,7 +187,7 @@ pub fn initiate_send(
     prekey_bundle: PreKeyBundle,
     sender_ik: &SigningKey,
     message: &[u8],
-) -> Result<([u8; 32], Message), X3DHError> {
+) -> Result<([u8; 32], InitiationMessage), X3DHError> {
     let X3DHSendKeyAgreement { ek, sk } = initiate_send_get_sk(
         prekey_bundle.ik,
         &prekey_bundle.spk,
@@ -216,7 +216,7 @@ pub fn initiate_send(
 
     Ok((
         sk,
-        Message {
+        InitiationMessage {
             ik: sender_ik.verifying_key(),
             ek,
             pre_key: prekey_bundle.spk.pre_key,

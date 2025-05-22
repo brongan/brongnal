@@ -4,7 +4,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use prost::Message as _;
 use protocol::gossamer::Message;
 use protocol::gossamer::SignedMessage as GossamerSignedMessage;
-use protocol::x3dh::Message as X3DHMessage;
+use protocol::x3dh::InitiationMessage as X3DHInitiationMessage;
 use protocol::x3dh::PreKeyBundle;
 use protocol::x3dh::SignedPreKey;
 use protocol::x3dh::SignedPreKeys;
@@ -84,7 +84,7 @@ impl TryFrom<SignedPreKeyProto> for SignedPreKey {
     }
 }
 
-impl TryFrom<MessageProto> for X3DHMessage {
+impl TryFrom<MessageProto> for X3DHInitiationMessage {
     type Error = tonic::Status;
 
     fn try_from(value: MessageProto) -> Result<Self, Self::Error> {
@@ -105,7 +105,7 @@ impl TryFrom<MessageProto> for X3DHMessage {
         } else {
             None
         };
-        Ok(X3DHMessage {
+        Ok(X3DHInitiationMessage {
             ik: sender_ik,
             ek,
             pre_key,
@@ -118,8 +118,8 @@ impl TryFrom<MessageProto> for X3DHMessage {
     }
 }
 
-impl From<X3DHMessage> for MessageProto {
-    fn from(val: X3DHMessage) -> Self {
+impl From<X3DHInitiationMessage> for MessageProto {
+    fn from(val: X3DHInitiationMessage) -> Self {
         MessageProto {
             sender_identity_key: Some(val.ik.to_bytes().to_vec()),
             ephemeral_key: Some(val.ek.to_bytes().to_vec()),

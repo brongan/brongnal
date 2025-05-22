@@ -19,7 +19,8 @@ use proto::service::{
 };
 use proto::{parse_verifying_key, ApplicationMessage};
 use protocol::x3dh::{
-    initiate_recv, initiate_send, Message as X3DHMessage, PreKeyBundle, X3DHError,
+    initiate_recv, initiate_send, InitiationMessage as X3DHInitiationMessage, PreKeyBundle,
+    X3DHError,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -92,10 +93,10 @@ impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
 
 fn into_message_stream(
     mut stream: Streaming<MessageProto>,
-) -> impl Stream<Item = ClientResult<X3DHMessage>> {
+) -> impl Stream<Item = ClientResult<X3DHInitiationMessage>> {
     try_stream! {
         while let Some(message) = stream.message().await? {
-            let message: X3DHMessage = message.try_into()?;
+            let message: X3DHInitiationMessage = message.try_into()?;
             yield message;
         }
     }

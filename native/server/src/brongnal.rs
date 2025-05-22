@@ -223,7 +223,7 @@ impl BrongnalService for BrongnalController {
 
             // Do some basic validation on the message before persisting it or sending it to the
             // recipient.
-            let _message = protocol::x3dh::Message::try_from(message_proto.clone())?;
+            let _message = protocol::x3dh::InitiationMessage::try_from(message_proto.clone())?;
 
             self.handle_send_message(&recipient, message_proto)
                 .await
