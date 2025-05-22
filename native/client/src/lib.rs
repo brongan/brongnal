@@ -248,7 +248,7 @@ impl User {
         let mut brongnal = self.brongnal.clone();
         let mut gossamer = self.gossamer.clone();
         // TODO: Create Ratchet Header
-        let message = RatchetMessage {
+        let ratchet_message = RatchetMessage {
             header: None,
             message: ApplicationMessage {
                 sender: self.username.clone(),
@@ -271,7 +271,7 @@ impl User {
                     .try_into()?,
             );
         }
-        let requests = send_message_requests(bundles, ik, application_message);
+        let requests = send_message_requests(bundles, ik, ratchet_message);
 
         let row_id = self
             .x3dh
