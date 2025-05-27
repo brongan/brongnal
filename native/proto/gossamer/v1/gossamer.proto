@@ -16,6 +16,7 @@ enum Action {
 	  ACTION_APPEND_KEY = 1;
 	  ACTION_REVOKE_KEY = 2;
 }
+
 message Message {
   optional bytes provider = 1;
   optional bytes public_key = 2;
