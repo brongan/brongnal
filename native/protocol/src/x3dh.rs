@@ -53,6 +53,13 @@ pub struct X3DHSendKeyAgreement {
     pub sk: [u8; 32],
 }
 
+/// A message can either be an inititation message or a normal ratchet messages.
+#[derive(Debug, PartialEq)]
+pub enum ProtocolMessage {
+    Initiation(InitiationMessage),
+    Ratchet { ciphertext: Vec<u8> },
+}
+
 /// An `InitiationMessage` in this packages implementation of the X3DH protocol.
 /// This struct is the output of `Alice` sending a message to `Bob`.
 /// * `ik` is the identity key of the sender.

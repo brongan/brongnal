@@ -237,12 +237,12 @@ fn persist_state(
     message: &str,
     state: MessageState,
 ) -> rusqlite::Result<MessageId> {
-    Ok(connection.query_row("INSERT OR IGNORE INTO messages (sender, receiver, creation_time, state, text) VALUES ($1, $2, $3, $4, $5) RETURNING rowid", 
+    connection.query_row("INSERT OR IGNORE INTO messages (sender, receiver, creation_time, state, text) VALUES ($1, $2, $3, $4, $5) RETURNING rowid", 
         params![
             sender, receiver, time_now(), state as u8, message
         ],
         |row| row.get(0),
-    )?)
+    )
 }
 
 fn update_state(

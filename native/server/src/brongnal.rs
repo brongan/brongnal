@@ -5,7 +5,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use prost::Message as _;
 use proto::service::brongnal_service_server::BrongnalService;
 use proto::service::{
-    Message as MessageProto, PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest,
+    PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest, ProtocolMessage as MessageProto,
     RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RetrieveMessagesRequest,
     SendMessageRequest, SendMessageResponse, SignedPreKey as SignedPreKeyProto,
 };
@@ -223,7 +223,7 @@ impl BrongnalService for BrongnalController {
 
             // Do some basic validation on the message before persisting it or sending it to the
             // recipient.
-            let _message = protocol::x3dh::InitiationMessage::try_from(message_proto.clone())?;
+            let _message = protocol::x3dh::ProtocolMessage::try_from(message_proto.clone())?;
 
             self.handle_send_message(&recipient, message_proto)
                 .await

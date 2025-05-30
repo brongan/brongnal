@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
     let brongnal = BrongnalClient::connect(addr.clone()).await?;
     let gossamer = GossamerClient::connect(addr.clone()).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
-    let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
+    let db_path = xdg_dirs.place_data_file(format!("{name}_keys.sqlite"))?;
     let connection = Connection::open(db_path).await?;
     let client = Arc::new(X3DHClient::new(connection.clone()).await?);
     let ik = client.get_ik();

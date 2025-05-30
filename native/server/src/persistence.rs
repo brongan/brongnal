@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
 use ed25519_dalek::VerifyingKey;
 use prost::Message;
-use proto::service::Message as MessageProto;
+use proto::service::ProtocolMessage as MessageProto;
 use proto::service::SignedPreKey as SignedPreKeyProto;
 use rusqlite::params;
 use rusqlite::Error;
@@ -322,6 +322,7 @@ mod tests {
     use chacha20poly1305::aead::OsRng;
     use client::X3DHClient;
     use ed25519_dalek::SigningKey;
+    use proto::service::{protocol_message::MessageType, X3dhInitiationMessage};
     use tokio_rusqlite::Connection;
     use tonic::Code;
 
@@ -476,11 +477,13 @@ mod tests {
         storage.add_user(&bob_ik, bob_spk.clone().into()).await?;
 
         let message_proto = MessageProto {
-            sender_identity_key: Some(b"alice identity key".to_vec()),
-            ephemeral_key: Some(b"alice ephemeral key".to_vec()),
-            pre_key: Some(b"bob pre key".to_vec()),
-            one_time_key: Some(b"bob one time key".to_vec()),
-            ciphertext: Some(b"ciphertext".to_vec()),
+            message_type: Some(MessageType::InitiationMessage(X3dhInitiationMessage {
+                sender_identity_key: Some(b"alice identity key".to_vec()),
+                ephemeral_key: Some(b"alice ephemeral key".to_vec()),
+                pre_key: Some(b"bob pre key".to_vec()),
+                one_time_key: Some(b"bob one time key".to_vec()),
+                ciphertext: Some(b"ciphertext".to_vec()),
+            })),
         };
         storage.add_message(&bob_ik, message_proto.clone()).await?;
         assert_eq!(storage.get_messages(&bob_ik).await?, vec![message_proto]);

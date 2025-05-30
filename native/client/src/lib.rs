@@ -14,14 +14,11 @@ use proto::gossamer::gossamer_service_client::GossamerServiceClient;
 use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger as LedgerProto, SignedMessage};
 use proto::service::brongnal_service_client::BrongnalServiceClient;
 use proto::service::{
-    Message as MessageProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
+    PreKeyBundleRequest, ProtocolMessage as ProtocolMessageProto, RegisterPreKeyBundleRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
 use proto::{parse_verifying_key, ApplicationMessage};
-use protocol::x3dh::{
-    initiate_recv, initiate_send, InitiationMessage as X3DHInitiationMessage, PreKeyBundle,
-    X3DHError,
-};
+use protocol::x3dh::{initiate_recv, initiate_send, PreKeyBundle, ProtocolMessage, X3DHError};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -92,11 +89,11 @@ impl<Identity: Eq + std::hash::Hash> SessionKeys<Identity> {
 }
 
 fn into_message_stream(
-    mut stream: Streaming<MessageProto>,
-) -> impl Stream<Item = ClientResult<X3DHInitiationMessage>> {
+    mut stream: Streaming<ProtocolMessageProto>,
+) -> impl Stream<Item = ClientResult<ProtocolMessage>> {
     try_stream! {
         while let Some(message) = stream.message().await? {
-            let message: X3DHInitiationMessage = message.try_into()?;
+            let message: ProtocolMessage = message.try_into()?;
             yield message;
         }
     }
@@ -147,7 +144,7 @@ impl Ledger for HashLedger {
 }
 
 pub struct MessageSubscriber {
-    stream: Streaming<MessageProto>,
+    stream: Streaming<ProtocolMessageProto>,
     ik: SigningKey,
     x3dh: Arc<X3DHClient>,
     ledger: Box<dyn Ledger>,
@@ -165,6 +162,10 @@ impl MessageSubscriber {
                     continue;
                 }
                 let message = message.unwrap();
+                let message = match message {
+                    ProtocolMessage::Initiation(initiation_message) => initiation_message,
+                    ProtocolMessage::Ratchet { ciphertext: _ } => unreachable!("never"),
+                };
                 let res = {
                     let opk = if let Some(opk) = message.opk {
                         Some(self.x3dh.fetch_wipe_opk(opk).await?)
@@ -357,7 +358,7 @@ fn send_message_requests(
     stream! {
         for bundle in bundles {
             let recipient_identity_key = Some(bundle.ik.as_bytes().to_vec());
-            let (_sk, x3dh_message) = match initiate_send(
+            let (_sk, x3dh_initiation) = match initiate_send(
                 bundle,
                 &ik,
                 &message.encode_to_vec(),
@@ -369,11 +370,11 @@ fn send_message_requests(
                 },
             };
 
-            info!("Sending message:{message:?}\n{x3dh_message}\n");
+            info!("Sending message:{message:?}\n{x3dh_initiation}\n");
 
             yield SendMessageRequest {
                 recipient_identity_key,
-                message: Some(x3dh_message.into()),
+                message: Some(ProtocolMessage::Initiation(x3dh_initiation).into()),
             };
         }
     }

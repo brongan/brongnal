@@ -4,14 +4,17 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use prost::Message as _;
 use protocol::gossamer::Message;
 use protocol::gossamer::SignedMessage as GossamerSignedMessage;
-use protocol::x3dh::InitiationMessage as X3DHInitiationMessage;
+use protocol::x3dh::InitiationMessage;
 use protocol::x3dh::PreKeyBundle;
+use protocol::x3dh::ProtocolMessage;
 use protocol::x3dh::SignedPreKey;
 use protocol::x3dh::SignedPreKeys;
-use service::Message as MessageProto;
-use service::PreKeyBundle as PreKeyBundleProto;
+use service::protocol_message::MessageType;
+use service::ProtocolMessage as ProtocolMessageProto;
 use service::SignedPreKey as SignedPreKeyProto;
 use service::SignedPreKeys as SignedPreKeysProto;
+use service::X3dhInitiationMessage as InitiationMessageProto;
+use service::{PreKeyBundle as PreKeyBundleProto, RatchetMessage};
 use thiserror::Error;
 use tonic::Status;
 use x25519_dalek::PublicKey as X25519PublicKey;
@@ -84,10 +87,10 @@ impl TryFrom<SignedPreKeyProto> for SignedPreKey {
     }
 }
 
-impl TryFrom<MessageProto> for X3DHInitiationMessage {
+impl TryFrom<InitiationMessageProto> for InitiationMessage {
     type Error = tonic::Status;
 
-    fn try_from(value: MessageProto) -> Result<Self, Self::Error> {
+    fn try_from(value: InitiationMessageProto) -> Result<Self, Self::Error> {
         let sender_ik = parse_verifying_key(value.sender_identity_key())
             .map_err(|e| Status::invalid_argument(format!("Invalid sender_identity_key: {e}")))?;
 
@@ -105,7 +108,7 @@ impl TryFrom<MessageProto> for X3DHInitiationMessage {
         } else {
             None
         };
-        Ok(X3DHInitiationMessage {
+        Ok(InitiationMessage {
             ik: sender_ik,
             ek,
             pre_key,
@@ -118,14 +121,49 @@ impl TryFrom<MessageProto> for X3DHInitiationMessage {
     }
 }
 
-impl From<X3DHInitiationMessage> for MessageProto {
-    fn from(val: X3DHInitiationMessage) -> Self {
-        MessageProto {
+impl From<InitiationMessage> for InitiationMessageProto {
+    fn from(val: InitiationMessage) -> Self {
+        Self {
             sender_identity_key: Some(val.ik.to_bytes().to_vec()),
             ephemeral_key: Some(val.ek.to_bytes().to_vec()),
             pre_key: Some(val.pre_key.to_bytes().to_vec()),
             one_time_key: val.opk.map(|opk| opk.to_bytes().to_vec()),
             ciphertext: Some(val.ciphertext),
+        }
+    }
+}
+
+impl TryFrom<ProtocolMessageProto> for ProtocolMessage {
+    type Error = tonic::Status;
+    fn try_from(value: ProtocolMessageProto) -> Result<Self, Self::Error> {
+        let message_type = value
+            .message_type
+            .ok_or(Status::invalid_argument("Empty Protocol Message"))?;
+        match message_type {
+            MessageType::Message(RatchetMessage { ciphertext }) => {
+                let ciphertext = ciphertext.ok_or(Status::invalid_argument(
+                    "Ratchet message missing ciphertext.",
+                ))?;
+                Ok(ProtocolMessage::Ratchet { ciphertext })
+            }
+            MessageType::InitiationMessage(m) => {
+                Ok(ProtocolMessage::Initiation(InitiationMessage::try_from(m)?))
+            }
+        }
+    }
+}
+
+impl From<ProtocolMessage> for ProtocolMessageProto {
+    fn from(val: ProtocolMessage) -> Self {
+        Self {
+            message_type: Some(match val {
+                ProtocolMessage::Initiation(m) => MessageType::InitiationMessage(m.into()),
+                ProtocolMessage::Ratchet { ciphertext } => {
+                    MessageType::Message(service::RatchetMessage {
+                        ciphertext: Some(ciphertext),
+                    })
+                }
+            }),
         }
     }
 }
