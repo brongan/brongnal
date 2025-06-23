@@ -1,3 +1,4 @@
+import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:brongnal_app/models/chat_history.dart';
@@ -38,12 +39,13 @@ class ChatScreen extends StatelessWidget {
               controller: scrollController,
               itemBuilder: (context, i) {
                 return MessageWidget(
-                  message: messages[i].text,
-                  time: DateTime.fromMillisecondsSinceEpoch(
-                      1000 * messages[i].dbRecvTime),
-                  sender:
-                      messages[i].sender == self ? Sender.self : Sender.other,
-                );
+                    message: messages[i].text,
+                    time: DateTime.fromMillisecondsSinceEpoch(
+                        1000 * messages[i].dbRecvTime),
+                    sender:
+                        messages[i].sender == self ? Sender.self : Sender.other,
+                    // TODO: only add this icon for the last message in a set from a given sender.
+                    state: messages[i].state);
               },
             ),
           ),
@@ -134,10 +136,12 @@ class MessageWidget extends StatelessWidget {
     required this.message,
     required this.time,
     required this.sender,
+    required this.state,
   });
   final String message;
   final DateTime time;
   final Sender sender;
+  final MessageState state;
 
   @override
   Widget build(BuildContext context) {
@@ -157,6 +161,13 @@ class MessageWidget extends StatelessWidget {
       bubbleColor = Colors.grey.shade800;
       alignment = Alignment.centerLeft;
     }
+
+    var readIcon = Icon(
+      getIcon(state),
+      color: textColor,
+      size: 18,
+    );
+
     return Align(
       alignment: alignment,
       child: Container(
@@ -180,6 +191,7 @@ class MessageWidget extends StatelessWidget {
                 text: DateFormat.jm().format(time),
                 style: theme.textTheme.bodySmall,
               ),
+              WidgetSpan(child: readIcon),
             ],
           ),
         ),

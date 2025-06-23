@@ -18,3 +18,16 @@ class ChatHistory extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+IconData getIcon(MessageState messageState) {
+  switch (messageState) {
+    case MessageState.sending:
+      return Icons.radio_button_unchecked_outlined;
+    case MessageState.sent:
+      return Icons.check_circle;
+    case MessageState.delivered:
+      return Icons.check_circle_outline_outlined;
+    case MessageState.read:
+      return Icons.check_circle_outline_outlined;
+  }
+}

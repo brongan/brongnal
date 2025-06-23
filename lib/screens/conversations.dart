@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'package:brongnal_app/common/theme.dart';
+import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:brongnal_app/screens/chat.dart';
 import 'package:flutter/material.dart';
@@ -30,19 +31,6 @@ class ConversationsScreen extends StatelessWidget {
             peer: peer,
           );
         });
-  }
-}
-
-IconData getIcon(MessageState messageState) {
-  switch (messageState) {
-    case MessageState.sending:
-      return Icons.radio_button_unchecked_outlined;
-    case MessageState.sent:
-      return Icons.check_circle;
-    case MessageState.delivered:
-      return Icons.check_circle_outline_outlined;
-    case MessageState.read:
-      return Icons.check_circle_outline_outlined;
   }
 }
 
