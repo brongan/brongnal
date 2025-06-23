@@ -1,9 +1,8 @@
+import 'dart:collection';
 import 'package:brongnal_app/common/theme.dart';
-import 'package:brongnal_app/models/conversations.dart';
+import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:brongnal_app/screens/chat.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:brongnal_app/database.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 class ConversationsScreen extends StatelessWidget {
@@ -13,21 +12,20 @@ class ConversationsScreen extends StatelessWidget {
     required this.conversations,
   });
   final String self;
-  final ConversationModel conversations;
+  final UnmodifiableMapView<String, List<MessageModel>> conversations;
 
   @override
   Widget build(BuildContext context) {
-    final items = conversations.items;
     return ListView.builder(
-        itemCount: items.length,
+        itemCount: conversations.length,
         itemBuilder: (context, i) {
-          final peer = items.keys.elementAt(i);
+          final peer = conversations.keys.elementAt(i);
           return Conversation(
             avatar: CircleAvatar(
                 backgroundColor: Colors.primaries[i % Colors.primaries.length],
                 radius: 25,
                 child: Text(peer.substring(0, 2))),
-            lastMessage: items.values.elementAt(i).last,
+            lastMessage: conversations.values.elementAt(i).last,
             self: self,
             peer: peer,
           );
@@ -41,6 +39,8 @@ IconData getIcon(MessageState messageState) {
       return Icons.radio_button_unchecked_outlined;
     case MessageState.sent:
       return Icons.check_circle;
+    case MessageState.delivered:
+      return Icons.check_circle_outline_outlined;
     case MessageState.read:
       return Icons.check_circle_outline_outlined;
   }
@@ -62,6 +62,8 @@ class Conversation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final time = DateTime.fromMillisecondsSinceEpoch(
+        1000 * lastMessage.dbRecvTime.toInt());
 
     var readIcon = Icon(
       getIcon(lastMessage.state),
@@ -73,14 +75,9 @@ class Conversation extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute<void>(
-            builder: (context) => Consumer<ConversationModel>(
-              builder: (context, conversationModel, child) {
-                return ChatScreen(
-                  self: self,
-                  peer: peer,
-                  conversationModel: conversationModel,
-                );
-              },
+            builder: (context) => ChatScreen(
+              self: self,
+              peer: peer,
             ),
           ),
         );
@@ -106,7 +103,7 @@ class Conversation extends StatelessWidget {
                       style: theme.textTheme.bodyMedium,
                     ),
                     Text(
-                      lastMessage.message,
+                      lastMessage.text,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall,
                       maxLines: 2,
@@ -120,7 +117,7 @@ class Conversation extends StatelessWidget {
               child: Column(
                 children: [
                   Text(
-                    '${timeago.format(lastMessage.time, locale: 'en_short')}',
+                    timeago.format(time, locale: 'en_short'),
                     style: theme.textTheme.bodySmall,
                   ),
                   readIcon,

@@ -1,7 +1,7 @@
 use crate::{ClientError, ClientResult};
 use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
 use chacha20poly1305::aead::OsRng;
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use proto::ApplicationMessage;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
@@ -9,7 +9,7 @@ use protocol::x3dh;
 use rinf::{RustSignal, SignalPiece};
 use rusqlite::{params, Connection};
 use serde::Serialize;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use strum_macros::FromRepr;
 use tracing::info;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
@@ -162,12 +162,13 @@ fn opk_count(connection: &Connection) -> rusqlite::Result<u32> {
     )
 }
 
-#[derive(Clone, Copy, strum_macros::Display, Serialize, FromRepr)]
+#[derive(Clone, Copy, strum_macros::Display, Serialize, FromRepr, SignalPiece)]
 #[repr(u8)]
 pub enum MessageState {
     Sending,
     Sent,
     Delivered,
+    Read,
 }
 
 #[derive(Serialize, RustSignal)]
@@ -177,11 +178,11 @@ pub struct MessagesModel {
 
 #[derive(Serialize, RustSignal, SignalPiece)]
 pub struct MessageModel {
-    sender: String,
-    receiver: String,
-    creation_time: SystemTime,
-    state: MessageState,
-    text: String,
+    pub sender: String,
+    pub receiver: String,
+    pub db_recv_time: i64,
+    pub state: MessageState,
+    pub text: String,
 }
 
 impl std::fmt::Display for MessageModel {
@@ -189,14 +190,14 @@ impl std::fmt::Display for MessageModel {
         let &MessageModel {
             ref sender,
             ref receiver,
-            creation_time,
+            db_recv_time,
             state,
             ref text,
         } = self;
-        let creation_time: DateTime<Utc> = creation_time.into();
+        let db_recv_time = DateTime::from_timestamp(db_recv_time as i64, 0).unwrap();
         write!(
             f,
-            "From: {sender} To: {receiver} at {creation_time} with {state}\n{text}"
+            "From: {sender} To: {receiver} at {db_recv_time} with {state}\n{text}"
         )?;
         Ok(())
     }
@@ -259,6 +260,22 @@ fn update_state(
     Ok(())
 }
 
+fn get_message(connection: &Connection, id: MessageId) -> rusqlite::Result<MessageModel> {
+    connection.query_row(
+        "SELECT sender, receiver, creation_time, state, text FROM messages WHERE rowid = ?1",
+        params![id],
+        |row| {
+            Ok(MessageModel {
+                sender: row.get(0)?,
+                receiver: row.get(1)?,
+                db_recv_time: row.get(2)?,
+                state: MessageState::from_repr(row.get(3)?).unwrap(),
+                text: row.get(4)?,
+            })
+        },
+    )
+}
+
 fn get_conversations(connection: &Connection) -> rusqlite::Result<MessagesModel> {
     let mut stmt =
         connection.prepare("SELECT sender, receiver, creation_time, state, text FROM messages")?;
@@ -266,7 +283,7 @@ fn get_conversations(connection: &Connection) -> rusqlite::Result<MessagesModel>
         Ok(MessageModel {
             sender: row.get(0)?,
             receiver: row.get(1)?,
-            creation_time: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(2)?),
+            db_recv_time: row.get(2)?,
             state: MessageState::from_repr(row.get(3)?).unwrap(),
             text: row.get(4)?,
         })
@@ -397,6 +414,13 @@ impl X3DHClient {
     ) -> ClientResult<()> {
         self.connection
             .call(move |connection| Ok(update_state(connection, message_id, state)?))
+            .await
+            .map_err(ClientError::TokioSqlite)
+    }
+
+    pub async fn get_message(&self, id: MessageId) -> ClientResult<MessageModel> {
+        self.connection
+            .call(move |connection| Ok(get_message(connection, id)?))
             .await
             .map_err(ClientError::TokioSqlite)
     }

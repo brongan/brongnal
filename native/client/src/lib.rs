@@ -1,4 +1,3 @@
-#![feature(result_flattening)]
 #![feature(trivial_bounds)]
 #![feature(iterator_try_collect)]
 use anyhow::Context;
@@ -24,6 +23,8 @@ use protocol::x3dh::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 use tokio_stream::Stream;
@@ -31,6 +32,8 @@ use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use tonic::{Request, Streaming};
 use tracing::{error, info, warn};
+
+use crate::client::MessageModel;
 
 pub mod client;
 
@@ -155,7 +158,7 @@ pub struct MessageSubscriber {
 }
 
 impl MessageSubscriber {
-    pub fn into_stream(self) -> impl Stream<Item = ClientResult<ApplicationMessage>> {
+    pub fn into_stream(self) -> impl Stream<Item = ClientResult<MessageModel>> {
         try_stream! {
             let messages = into_message_stream(self.stream);
             tokio::pin!(messages);
@@ -190,9 +193,15 @@ impl MessageSubscriber {
                     let ApplicationMessage {
                         sender,
                         text
-                    } = application_message.clone();
-                    self.x3dh.persist_message(sender, self.username.clone(), text, MessageState::Delivered).await?;
-                    Ok::<ApplicationMessage, ClientError>(application_message)
+                    } = application_message;
+                    let id = self.x3dh.persist_message(sender.clone(), self.username.clone(), text.clone(), MessageState::Delivered).await?;
+                    Ok::<MessageModel, ClientError>(MessageModel {
+                        sender,
+                        receiver: self.username.clone(),
+                        db_recv_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+                        state: MessageState::Delivered,
+                        text,
+                    })
                 };
                 match res {
                     Ok(decrypted) => yield decrypted,
@@ -244,7 +253,7 @@ impl User {
         })
     }
 
-    pub async fn send_message(&self, peer_username: String, message: String) -> ClientResult<()> {
+    pub async fn send_message(&self, peer_username: String, message: String) -> ClientResult<i64> {
         let mut brongnal = self.brongnal.clone();
         let mut gossamer = self.gossamer.clone();
         // TODO: Create Ratchet Header
@@ -286,7 +295,11 @@ impl User {
         self.x3dh
             .persist_message_state(row_id, MessageState::Sent)
             .await?;
-        Ok(())
+        Ok(row_id)
+    }
+
+    pub async fn get_message(&self, id: i64) -> ClientResult<MessageModel> {
+        self.x3dh.get_message(id).await
     }
 
     pub async fn get_message_history(&self) -> ClientResult<MessagesModel> {

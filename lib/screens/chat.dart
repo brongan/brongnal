@@ -1,8 +1,9 @@
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/src/bindings/bindings.dart';
-import 'package:brongnal_app/models/conversations.dart';
+import 'package:brongnal_app/models/chat_history.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 enum Sender {
   other,
@@ -14,15 +15,14 @@ class ChatScreen extends StatelessWidget {
     super.key,
     required this.self,
     required this.peer,
-    required this.conversationModel,
   });
 
   final String self;
   final String peer;
-  final ConversationModel conversationModel;
 
   @override
   Widget build(BuildContext context) {
+    var conversationModel = context.watch<ChatHistory>();
     final messages = conversationModel.items[peer] ?? [];
     ScrollController scrollController = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -38,8 +38,9 @@ class ChatScreen extends StatelessWidget {
               controller: scrollController,
               itemBuilder: (context, i) {
                 return MessageWidget(
-                  message: messages[i].message,
-                  time: messages[i].time,
+                  message: messages[i].text,
+                  time: DateTime.fromMillisecondsSinceEpoch(
+                      1000 * messages[i].dbRecvTime),
                   sender:
                       messages[i].sender == self ? Sender.self : Sender.other,
                 );
@@ -66,7 +67,7 @@ class SendMessageWidget extends StatefulWidget {
   });
   final String self;
   final String peer;
-  final ConversationModel conversationModel;
+  final ChatHistory conversationModel;
 
   @override
   State<SendMessageWidget> createState() => _SendMessageWidgetState();
@@ -114,8 +115,6 @@ class _SendMessageWidgetState extends State<SendMessageWidget> {
                         recipient: widget.peer,
                         message: messageInput.text)
                     .sendSignalToRust();
-                widget.conversationModel.addSentMessage(
-                    messageInput.text, widget.self, widget.peer);
                 messageInput.clear();
                 myFocusNode.requestFocus();
               },

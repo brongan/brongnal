@@ -24,9 +24,3 @@ pub struct SendMessage {
     pub recipient: String,
     pub message: String,
 }
-
-#[derive(Serialize, RustSignal)]
-pub struct ReceivedMessage {
-    pub message: String,
-    pub sender: String,
-}
