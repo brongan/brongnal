@@ -1,10 +1,11 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
 import 'package:brongnal_app/src/bindings/bindings.dart';
-import 'package:brongnal_app/models/conversations.dart';
+import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/screens/conversations.dart';
 import 'package:brongnal_app/screens/compose.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 enum HomepagePopupItem {
   newGroup,
@@ -14,10 +15,8 @@ enum HomepagePopupItem {
 }
 
 class Home extends StatefulWidget {
-  final ConversationModel conversations;
   const Home({
     super.key,
-    required this.conversations,
     required this.username,
   });
   final String username;
@@ -40,14 +39,11 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     username = widget.username;
-    listenForMessages();
-  }
-
-  void listenForMessages() async {
-    final stream = ReceivedMessage.rustSignalStream;
-    await for (final rustSignal in stream) {
-      widget.conversations.add(username, rustSignal.message);
-    }
+    final subscription = MessageModel.rustSignalStream.listen((signalPack) {
+      MessageModel messageModel = signalPack.message;
+      debugPrint("Received message from Rust: ${messageModel}.");
+      context.read<ChatHistory>().add(messageModel);
+    });
   }
 
   @override
@@ -56,8 +52,12 @@ class _HomeState extends State<Home> {
     final Widget body;
 
     if (_destination == SelectedDestination.chats) {
-      body = ConversationsScreen(
-          self: username, conversations: widget.conversations);
+      body = Consumer<ChatHistory>(builder: (context, conversations, child) {
+        return ConversationsScreen(
+          self: username,
+          conversations: conversations.items,
+        );
+      });
     } else {
       body = Text("TODO", style: theme.textTheme.bodyMedium);
     }

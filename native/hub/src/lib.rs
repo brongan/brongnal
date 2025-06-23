@@ -1,7 +1,6 @@
-use client::{User, X3DHClient};
+use client::{client::MessageModel, User, X3DHClient};
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
-use proto::ApplicationMessage;
 use rinf::{debug_print, DartSignal, RustSignal};
 use signals::*;
 use std::{path::PathBuf, sync::Arc};
@@ -85,6 +84,10 @@ async fn main() {
             .unwrap()
     };
 
+    for msg in user.get_message_history().await.unwrap().messages {
+        msg.send_signal_to_dart();
+    }
+
     let subscriber = user.get_messages().await.unwrap();
     let message_stream = subscriber.into_stream();
     tokio::pin!(message_stream);
@@ -95,16 +98,9 @@ async fn main() {
             decrypted = message_stream.next() => {
                 match decrypted {
                     Some(Ok(msg)) => {
-                        let ApplicationMessage {
-                            sender,
-                            text,
-                        } = msg;
+                        msg.send_signal_to_dart();
+                        let MessageModel {sender,text, receiver: _, db_recv_time: _, state: _ } = msg;
                         debug_print!("[Received Message] from {sender}: {text}");
-                        ReceivedMessage {
-                            message: text,
-                            sender,
-                        }
-                        .send_signal_to_dart();
                     },
                     Some(Err(e)) => {
                         debug_print!("[Failed to Decrypt Message]: {e}");
@@ -125,8 +121,14 @@ async fn main() {
                         } = dart_signal.message;
                         debug_print!("Rust received message from flutter({sender})!: {}", &message);
 
-                        if let Err(e) = user.send_message(recipient.clone(), message).await {
-                            debug_print!("Failed to query keys for user: {recipient}: {e}");
+                        match user.send_message(recipient.clone(), message).await {
+                            Ok(id) => {
+                                match user.get_message(id).await {
+                                    Ok(msg) => msg.send_signal_to_dart(),
+                                    Err(e) => debug_print!("Failed to retrieve sent message from DB."),
+                                }
+                            },
+                            Err(e) => debug_print!("Failed to query keys for user: {recipient}: {e}"),
                         }
                     },
                     None => {

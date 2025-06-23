@@ -1,10 +1,10 @@
 use anyhow::Result;
+use client::client::MessageModel;
 use client::{User, X3DHClient};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
 use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
 use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
-use proto::ApplicationMessage;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -111,7 +111,7 @@ async fn main() -> Result<()> {
             },
             msg = message_stream.next() => {
                 match msg {
-                    Some(Ok(ApplicationMessage {sender, text})) => {
+                    Some(Ok(MessageModel {sender,text, receiver, db_recv_time, state })) => {
                         println!("Received message from {sender}: {text}");
                     },
                     Some(Err(e)) => {

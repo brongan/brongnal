@@ -2,9 +2,8 @@ import 'dart:io' show Platform, Directory;
 import 'dart:ui';
 
 import 'package:brongnal_app/common/theme.dart';
-import 'package:brongnal_app/database.dart';
 import 'package:brongnal_app/firebase_options.dart';
-import 'package:brongnal_app/models/conversations.dart';
+import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
 import 'package:brongnal_app/src/bindings/bindings.dart';
@@ -39,11 +38,11 @@ void notifyDecryptedMessage(
   const NotificationDetails notificationDetails =
       NotificationDetails(android: androidNotificationDetails);
 
-  final stream = ReceivedMessage.rustSignalStream;
+  final stream = MessageModel.rustSignalStream;
   await for (final rustSignal in stream) {
-    final ReceivedMessage message = rustSignal.message;
+    final MessageModel message = rustSignal.message;
     await flutterLocalNotificationsPlugin.show(
-        id++, message.sender, message.message, notificationDetails,
+        id++, message.sender, message.text, notificationDetails,
         payload: message.sender);
   }
 }
@@ -167,27 +166,7 @@ void main() async {
           fcmToken: fcmToken)
       .sendSignalToRust();
 
-  final database = AppDatabase(databaseDirectory);
-  List<MessageModel> allMessages =
-      await database.select(database.messages).get();
-  final Map<String, List<MessageModel>> conversations = {};
-  for (final messageModel in allMessages) {
-    final peer = messageModel.sender == username
-        ? messageModel.receiver
-        : messageModel.sender;
-    conversations.putIfAbsent(peer, () => []);
-    conversations[peer]!.add(messageModel);
-  }
-
-  runApp(
-    ChangeNotifierProvider(
-      create: (context) => ConversationModel(
-        database: database,
-        conversations: conversations,
-      ),
-      child: BrongnalApp(username: username, directory: databaseDirectory),
-    ),
-  );
+  runApp(BrongnalApp(username: username));
 }
 
 void setupWindow() {
@@ -201,10 +180,8 @@ void setupWindow() {
 }
 
 class BrongnalApp extends StatefulWidget {
-  const BrongnalApp(
-      {super.key, required this.username, required this.directory});
+  const BrongnalApp({super.key, required this.username});
   final String? username;
-  final Directory directory;
 
   @override
   State<BrongnalApp> createState() => _BrongnalAppState();
@@ -250,12 +227,15 @@ class _BrongnalAppState extends State<BrongnalApp> {
   Widget build(BuildContext context) {
     final Widget child;
     if (username == null) {
-      child = Register();
+      child = const Register();
     } else {
-      child = Consumer<ConversationModel>(
-        builder: (_, model, __) => Home(
-          conversations: model,
-          username: username!,
+      child = ChangeNotifierProvider(
+        create: (context) => ChatHistory(username: username!),
+        child: Navigator(
+          pages: [
+            MaterialPage(child: Home(username: username!)),
+          ],
+          onDidRemovePage: (object) {},
         ),
       );
     }
