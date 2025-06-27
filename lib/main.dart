@@ -21,30 +21,10 @@ import 'package:xdg_directories/xdg_directories.dart';
 
 int id = 0;
 
-void notifyDecryptedMessage(
-    FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin) async {
-  const String groupKey = 'com.android.brongnal_app.DecryptedMessage';
-  const String groupChannelId = '1';
-  const String groupChannelName = 'Chats';
-  const String groupChannelDescription = 'Messages.';
-  const AndroidNotificationDetails androidNotificationDetails =
-      AndroidNotificationDetails(groupChannelId, groupChannelName,
-          channelDescription: groupChannelDescription,
-          importance: Importance.max,
-          priority: Priority.high,
-          groupKey: groupKey,
-          ticker: 'Chats',
-          setAsGroupSummary: false);
-  const NotificationDetails notificationDetails =
-      NotificationDetails(android: androidNotificationDetails);
-
-  final stream = MessageModel.rustSignalStream;
-  await for (final rustSignal in stream) {
-    final MessageModel message = rustSignal.message;
-    await flutterLocalNotificationsPlugin.show(
-        id++, message.sender, message.text, notificationDetails,
-        payload: message.sender);
-  }
+Future<void> _onMessageReceived(MessageModel message) async {
+  FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
+  await plugin.show(id++, message.sender, message.text, toNotification(message),
+      payload: message.sender);
 }
 
 Future<void> _firebaseMessagingHandler(RemoteMessage message) async {
@@ -64,7 +44,13 @@ Future<void> _firebaseMessagingHandler(RemoteMessage message) async {
   RustStartup(databaseDirectory: databaseDirectory.path, username: username)
       .sendSignalToRust();
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
-  notifyDecryptedMessage(plugin);
+
+  await for (final rustSignal in MessageModel.rustSignalStream) {
+    final MessageModel message = rustSignal.message;
+    await plugin.show(
+        id++, message.sender, message.text, toNotification(message),
+        payload: message.sender);
+  }
 }
 
 @pragma('vm:entry-point')
@@ -100,7 +86,7 @@ Future<FlutterLocalNotificationsPlugin> createLocalNotifications() async {
   final WindowsInitializationSettings initializationSettingsWindows =
       WindowsInitializationSettings(
           appName: 'Flutter Local Notifications Example',
-          appUserModelId: 'Com.Dexterous.FlutterLocalNotificationsExample',
+          appUserModelId: 'com.brongan.Brongnal',
           guid: '10759e20-4f29-4646-97cb-15acfd7fc208');
   final InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
@@ -113,7 +99,7 @@ Future<FlutterLocalNotificationsPlugin> createLocalNotifications() async {
   return flutterLocalNotificationsPlugin;
 }
 
-Future<String?> setupNotifications(FirebaseMessaging messaging) async {
+Future<String?> notificationsToken(FirebaseMessaging messaging) async {
   NotificationSettings settings = await messaging.requestPermission(
     alert: true,
     announcement: false,
@@ -128,8 +114,6 @@ Future<String?> setupNotifications(FirebaseMessaging messaging) async {
     debugPrint('User granted permission: ${settings.authorizationStatus}');
     final String? token = await messaging.getToken();
     debugPrint('Firebase Token: $token');
-    FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
-    notifyDecryptedMessage(plugin);
     return token;
   }
   return null;
@@ -142,7 +126,7 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    fcmToken = await setupNotifications(FirebaseMessaging.instance);
+    fcmToken = await notificationsToken(FirebaseMessaging.instance);
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     FirebaseMessaging.onMessage.listen(_firebaseMessagingForegroundHandler);
   } else {
@@ -230,7 +214,8 @@ class _BrongnalAppState extends State<BrongnalApp> {
       child = const Register();
     } else {
       child = ChangeNotifierProvider(
-        create: (context) => ChatHistory(username: username!),
+        create: (context) => ChatHistory(
+            username: username!, onMessageReceived: _onMessageReceived),
         child: Navigator(
           pages: [
             MaterialPage(child: Home(username: username!)),
