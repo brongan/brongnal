@@ -6,7 +6,6 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use proto::ApplicationMessage;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
-use rinf::{RustSignal, SignalPiece};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -162,7 +161,7 @@ fn opk_count(connection: &Connection) -> rusqlite::Result<u32> {
     )
 }
 
-#[derive(Clone, Copy, strum_macros::Display, Serialize, FromRepr, SignalPiece)]
+#[derive(Clone, Copy, strum_macros::Display, Serialize, FromRepr)]
 #[repr(u8)]
 pub enum MessageState {
     Sending,
@@ -171,12 +170,12 @@ pub enum MessageState {
     Read,
 }
 
-#[derive(Serialize, RustSignal)]
+#[derive(Serialize)]
 pub struct MessagesModel {
     pub messages: Vec<MessageModel>,
 }
 
-#[derive(Serialize, RustSignal, SignalPiece)]
+#[derive(Serialize)]
 pub struct MessageModel {
     pub sender: String,
     pub receiver: String,

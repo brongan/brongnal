@@ -41,7 +41,7 @@ class _HomeState extends State<Home> {
     username = widget.username;
     final subscription = MessageModel.rustSignalStream.listen((signalPack) {
       MessageModel messageModel = signalPack.message;
-      debugPrint("Received message from Rust: ${messageModel}.");
+      debugPrint("Received message from Rust: $messageModel.");
       context.read<ChatHistory>().add(messageModel);
     });
   }

@@ -54,3 +54,9 @@ android/.kotlin
 /lib/src/bindings
 android/build
 dist/
+
+# flutter_rust_bridge
+lib/src/rust/*
+rust/src/frb_generated*
+frb_generated.h
+
