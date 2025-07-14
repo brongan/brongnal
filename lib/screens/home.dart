@@ -66,7 +66,7 @@ class _HomeState extends State<Home> {
         appBar: getHomeAppBar(context),
         drawer: getHomeDrawer(context),
         backgroundColor: theme.colorScheme.surface,
-        body: body,
+        body: SafeArea(child: body),
         floatingActionButton: BrongnalFloatingActionButtons(
             self: username, destination: _destination),
         bottomNavigationBar: NavigationBar(
