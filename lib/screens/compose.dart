@@ -27,42 +27,44 @@ class ComposeMessage extends StatelessWidget {
           ],
         ),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: TextField(
-              controller: usernameInput,
-              decoration: InputDecoration(
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-                hintText: "Find by username",
-              ),
-              textInputAction: TextInputAction.send,
-              onSubmitted: (value) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (context) => ChatScreen(
-                      self: self,
-                      peer: usernameInput.value.text,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: TextField(
+                controller: usernameInput,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  hintText: "Find by username",
+                ),
+                textInputAction: TextInputAction.send,
+                onSubmitted: (value) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (context) => ChatScreen(
+                        self: self,
+                        peer: usernameInput.value.text,
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-          Expanded(
-            child: Consumer<ChatHistory>(
-              builder: (context, conversationModel, child) {
-                return ConversationsScreen(
-                  self: self,
-                  conversations: conversationModel.items,
-                );
-              },
+            Expanded(
+              child: Consumer<ChatHistory>(
+                builder: (context, conversationModel, child) {
+                  return ConversationsScreen(
+                    self: self,
+                    conversations: conversationModel.items,
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

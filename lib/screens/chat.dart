@@ -31,30 +31,33 @@ class ChatScreen extends StatelessWidget {
     });
     return Scaffold(
       appBar: getConversationAppBar(context, peer),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              itemCount: messages.length,
-              controller: scrollController,
-              itemBuilder: (context, i) {
-                return MessageWidget(
-                    message: messages[i].text,
-                    time: DateTime.fromMillisecondsSinceEpoch(
-                        1000 * messages[i].dbRecvTime),
-                    sender:
-                        messages[i].sender == self ? Sender.self : Sender.other,
-                    // TODO: only add this icon for the last message in a set from a given sender.
-                    state: messages[i].state);
-              },
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                itemCount: messages.length,
+                controller: scrollController,
+                itemBuilder: (context, i) {
+                  return MessageWidget(
+                      message: messages[i].text,
+                      time: DateTime.fromMillisecondsSinceEpoch(
+                          1000 * messages[i].dbRecvTime),
+                      sender: messages[i].sender == self
+                          ? Sender.self
+                          : Sender.other,
+                      // TODO: only add this icon for the last message in a set from a given sender.
+                      state: messages[i].state);
+                },
+              ),
             ),
-          ),
-          SendMessageWidget(
-            self: self,
-            peer: peer,
-            conversationModel: conversationModel,
-          ),
-        ],
+            SendMessageWidget(
+              self: self,
+              peer: peer,
+              conversationModel: conversationModel,
+            ),
+          ],
+        ),
       ),
     );
   }
