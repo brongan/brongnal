@@ -10,38 +10,42 @@ class Register extends StatelessWidget {
     TextEditingController usernameInput = TextEditingController();
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Text('Connect with Brongnal',
-                  style: theme.textTheme.displayLarge),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(40.0),
-              child: SizedBox(
-                width: 550,
-                child: TextField(
-                  controller: usernameInput,
-                  decoration: const InputDecoration(
-                    labelText: "Username",
-                    border: OutlineInputBorder(),
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text('Connect with Brongnal',
+                    style: theme.textTheme.displayLarge),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(40.0),
+                child: SizedBox(
+                  width: 550,
+                  child: TextField(
+                    controller: usernameInput,
+                    decoration: const InputDecoration(
+                      labelText: "Username",
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
               ),
-            ),
-            ElevatedButton(
-              child: const Text('Register',
-                  style: TextStyle(
-                      color: Colors.white, fontSize: 36, fontFamily: 'Roboto')),
-              onPressed: () async {
-                RegisterUserRequest(username: usernameInput.text)
-                    .sendSignalToRust();
-              },
-            ),
-          ],
+              ElevatedButton(
+                child: const Text('Register',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 36,
+                        fontFamily: 'Roboto')),
+                onPressed: () async {
+                  RegisterUserRequest(username: usernameInput.text)
+                      .sendSignalToRust();
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
