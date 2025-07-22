@@ -37,10 +37,14 @@ class ChatHistory extends ChangeNotifier {
   final String username;
   final Future<void> Function(MessageModel message) onMessageReceived;
   final Map<String, List<MessageModel>> conversations = {};
-  ChatHistory({
+
+  ChatHistory._internal({
     required this.username,
     required this.onMessageReceived,
   });
+  factory ChatHistory(String username,
+      Future<void> Function(MessageModel message) onMessageReceived) {}
+
   UnmodifiableMapView<String, List<MessageModel>> get items =>
       UnmodifiableMapView(conversations);
 
@@ -49,11 +53,7 @@ class ChatHistory extends ChangeNotifier {
     conversations.putIfAbsent(peer, () => []);
     conversations[peer]!.add(message);
     notifyListeners();
-    final recvTime =
-        DateTime.fromMillisecondsSinceEpoch(1000 * message.dbRecvTime.toInt());
-
-    if (message.receiver == username &&
-        recvTime.isAfter(DateTime.now().subtract(Duration(seconds: 1)))) {
+    if (message.receiver == username) {
       await onMessageReceived(message);
     }
   }

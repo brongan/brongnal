@@ -84,9 +84,10 @@ async fn main() {
             .unwrap()
     };
 
-    for msg in user.get_message_history().await.unwrap().messages {
-        msg.send_signal_to_dart();
-    }
+    user.get_message_history()
+        .await
+        .unwrap()
+        .send_signal_to_dart();
 
     let subscriber = user.get_messages().await.unwrap();
     let message_stream = subscriber.into_stream();
