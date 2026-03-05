@@ -79,9 +79,16 @@ async fn main() {
             }
         }
     } else {
-        User::new(brongnal, gossamer, client, username.clone().unwrap(), None)
-            .await
-            .unwrap()
+        match User::new(brongnal, gossamer, client, username.clone().unwrap(), None).await {
+            Ok(user) => {
+                debug_print!("Registered user successfully.");
+                user
+            }
+            Err(e) => {
+                debug_print!("Failed to create user: {e}");
+                panic!("Failed to create user.");
+            }
+        }
     };
 
     for msg in user.get_message_history().await.unwrap().messages {
