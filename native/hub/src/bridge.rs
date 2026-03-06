@@ -1,8 +1,6 @@
 pub use client::client::{MessageModel, MessageState};
 use client::{User, X3DHClient};
 use flutter_rust_bridge::frb;
-use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
-use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tokio_rusqlite::Connection;
@@ -69,12 +67,9 @@ pub async fn start_hub(
     let addr = backend_address.unwrap_or_else(|| "https://signal.brongan.com:443".to_string());
     let db_path = PathBuf::from(database_directory).join("keys.sqlite");
 
-    // Run all three I/O operations in parallel
-    let (brongnal, gossamer, connection) = tokio::try_join!(
-        async { BrongnalClient::connect(addr.clone()).await.map_err(|e| BridgeError::InitializationFailed(e.to_string())) },
-        async { GossamerClient::connect(addr.clone()).await.map_err(|e| BridgeError::InitializationFailed(e.to_string())) },
-        async { Connection::open(db_path).await.map_err(|e| BridgeError::InitializationFailed(e.to_string())) },
-    )?;
+    let connection = Connection::open(db_path)
+        .await
+        .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
 
     let client = Arc::new(
         X3DHClient::new(connection)
@@ -83,7 +78,7 @@ pub async fn start_hub(
     );
 
     if let Some(uname) = username {
-        let mut user = User::new(brongnal, gossamer, client, uname);
+        let mut user = User::new(addr, client, uname);
         
         let mut state_user = STATE.user.lock().await;
         *state_user = Some(user.clone());
@@ -106,12 +101,9 @@ pub async fn register_user(
 ) -> Result<(), BridgeError> {
     let db_path = PathBuf::from(database_directory).join("keys.sqlite");
 
-    // Run all three I/O operations in parallel
-    let (brongnal, gossamer, connection) = tokio::try_join!(
-        async { BrongnalClient::connect(backend_address.clone()).await.map_err(|e| BridgeError::RegistrationFailed(e.to_string())) },
-        async { GossamerClient::connect(backend_address.clone()).await.map_err(|e| BridgeError::RegistrationFailed(e.to_string())) },
-        async { Connection::open(db_path).await.map_err(|e| BridgeError::RegistrationFailed(e.to_string())) },
-    )?;
+    let connection = Connection::open(db_path)
+        .await
+        .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?;
 
     let client = Arc::new(
         X3DHClient::new(connection)
@@ -119,7 +111,7 @@ pub async fn register_user(
             .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?,
     );
 
-    let mut user = User::new(brongnal, gossamer, client, username);
+    let mut user = User::new(backend_address, client, username);
     user.register(fcm_token)
         .await
         .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?;

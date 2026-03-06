@@ -3,8 +3,6 @@ use client::client::MessageModel;
 use client::{User, X3DHClient};
 use nom::character::complete::{alphanumeric1, multispace1};
 use nom::IResult;
-use proto::gossamer::gossamer_service_client::GossamerServiceClient as GossamerClient;
-use proto::service::brongnal_service_client::BrongnalServiceClient as BrongnalClient;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -54,8 +52,6 @@ async fn main() -> Result<()> {
         .with(filter)
         .try_init()?;
 
-    let brongnal = BrongnalClient::connect(addr.clone()).await?;
-    let gossamer = GossamerClient::connect(addr.clone()).await?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let connection = Connection::open(db_path).await?;
@@ -65,8 +61,7 @@ async fn main() -> Result<()> {
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
     info!("Registering {name} with key={ik_str} at {addr}");
-    let mut user = User::new(brongnal, gossamer, client, name.clone());
-    user.register(None).await?;
+    let mut user = User::new(addr, client, name.clone());
     let history = user.get_message_history().await.unwrap();
     for message in history {
         println!("{message}");
