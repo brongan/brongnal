@@ -134,10 +134,6 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final String? savedUsername = prefs.getString("username");
 
-  // Launch UI immediately so we don't have a black screen while waiting for Rust/Firebase
-  runApp(BrongnalApp(username: savedUsername));
-
-  // Initialize remainder in background
   final String? fcmToken;
   if (!Platform.isLinux) {
     await Firebase.initializeApp(
@@ -164,15 +160,20 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
   // Start Hub
   if (savedUsername != null) {
     try {
+      final watch = Stopwatch()..start();
       await bridge.startHub(
         databaseDirectory: dbPath,
         username: savedUsername,
         backendAddress: AppConfig.defaultBackendAddr,
       );
+      watch.stop();
+      debugPrint("Rust Hub initialized in ${watch.elapsedMilliseconds} ms");
     } catch (e) {
       debugPrint("Failed to start hub: $e");
     }
   }
+
+  runApp(BrongnalApp(username: savedUsername));
 }
 
 void setupWindow() {

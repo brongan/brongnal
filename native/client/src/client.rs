@@ -32,6 +32,7 @@ pub struct X3DHClient {
     ik: SigningKey,
 }
 
+#[tracing::instrument]
 fn create_tables(connection: &Connection) -> rusqlite::Result<()> {
     connection.pragma_update(None, "journal_mode", "WAL")?;
     connection.pragma_update(None, "synchronous", "normal")?;
@@ -131,6 +132,7 @@ fn insert_pre_keys(
     Ok(())
 }
 
+#[tracing::instrument]
 fn lazy_init_identity_key(connection: &Connection) -> rusqlite::Result<SigningKey> {
     if let Some(ik) = load_identity_key(connection)? {
         return Ok(ik);
@@ -141,6 +143,7 @@ fn lazy_init_identity_key(connection: &Connection) -> rusqlite::Result<SigningKe
     Ok(identity_key)
 }
 
+#[tracing::instrument]
 fn lazy_init_pre_key(connection: &Connection) -> rusqlite::Result<()> {
     if load_pre_key(connection)?.is_some() {
         return Ok(());
@@ -284,6 +287,7 @@ fn get_conversations(connection: &Connection) -> rusqlite::Result<Vec<MessageMod
 }
 
 impl X3DHClient {
+    #[tracing::instrument(skip(connection))]
     pub async fn new(connection: tokio_rusqlite::Connection) -> ClientResult<X3DHClient> {
         let ik = connection
             .call(|connection| {
@@ -335,6 +339,7 @@ impl X3DHClient {
         Ok(X25519StaticSecret::from(key))
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_spk(&self) -> ClientResult<SignedPreKey> {
         let ik = self.ik.clone();
         self.connection
@@ -354,6 +359,7 @@ impl X3DHClient {
             .map_err(ClientError::TokioSqlite)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn create_opks(&self, num_keys: u32) -> ClientResult<SignedPreKeys> {
         if num_keys != 0 {
             info!("Creating {num_keys} one time pre keys!");
