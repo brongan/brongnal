@@ -1,6 +1,5 @@
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
-import 'package:brongnal_app/src/bindings/bindings.dart';
 import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/screens/conversations.dart';
 import 'package:brongnal_app/screens/compose.dart';
@@ -39,11 +38,6 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     username = widget.username;
-    final subscription = MessageModel.rustSignalStream.listen((signalPack) {
-      MessageModel messageModel = signalPack.message;
-      debugPrint("Received message from Rust: ${messageModel}.");
-      context.read<ChatHistory>().add(messageModel);
-    });
   }
 
   @override

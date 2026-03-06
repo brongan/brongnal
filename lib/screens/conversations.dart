@@ -1,7 +1,7 @@
 import 'dart:collection';
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/models/chat_history.dart';
-import 'package:brongnal_app/src/bindings/bindings.dart';
+import 'package:brongnal_app/src/rust/bridge.dart';
 import 'package:brongnal_app/screens/chat.dart';
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
