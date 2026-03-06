@@ -65,9 +65,10 @@ async fn main() -> Result<()> {
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
     info!("Registering {name} with key={ik_str} at {addr}");
-    let user = User::new(brongnal, gossamer, client, name.clone(), None).await?;
+    let mut user = User::new(brongnal, gossamer, client, name.clone());
+    user.register(None).await?;
     let history = user.get_message_history().await.unwrap();
-    for message in history.messages {
+    for message in history {
         println!("{message}");
     }
 
@@ -111,7 +112,7 @@ async fn main() -> Result<()> {
             },
             msg = message_stream.next() => {
                 match msg {
-                    Some(Ok(MessageModel {sender,text, receiver, db_recv_time, state })) => {
+                    Some(Ok(MessageModel {sender,text, ..})) => {
                         println!("Received message from {sender}: {text}");
                     },
                     Some(Err(e)) => {

@@ -6,11 +6,8 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use proto::ApplicationMessage;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
-use rinf::{RustSignal, SignalPiece};
 use rusqlite::{params, Connection};
-use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
-use strum_macros::FromRepr;
 use tracing::info;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 use x3dh::{SignedPreKey, SignedPreKeys};
@@ -162,7 +159,7 @@ fn opk_count(connection: &Connection) -> rusqlite::Result<u32> {
     )
 }
 
-#[derive(Clone, Copy, strum_macros::Display, Serialize, FromRepr, SignalPiece)]
+#[derive(Debug, Clone, Copy, serde::Serialize, strum_macros::Display, strum_macros::FromRepr)]
 #[repr(u8)]
 pub enum MessageState {
     Sending,
@@ -171,12 +168,7 @@ pub enum MessageState {
     Read,
 }
 
-#[derive(Serialize, RustSignal)]
-pub struct MessagesModel {
-    pub messages: Vec<MessageModel>,
-}
-
-#[derive(Serialize, RustSignal, SignalPiece)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct MessageModel {
     pub sender: String,
     pub receiver: String,
@@ -276,7 +268,7 @@ fn get_message(connection: &Connection, id: MessageId) -> rusqlite::Result<Messa
     )
 }
 
-fn get_conversations(connection: &Connection) -> rusqlite::Result<MessagesModel> {
+fn get_conversations(connection: &Connection) -> rusqlite::Result<Vec<MessageModel>> {
     let mut stmt =
         connection.prepare("SELECT sender, receiver, creation_time, state, text FROM messages")?;
     let mut message_iter = stmt.query_map([], |row| {
@@ -288,9 +280,7 @@ fn get_conversations(connection: &Connection) -> rusqlite::Result<MessagesModel>
             text: row.get(4)?,
         })
     })?;
-    Ok(MessagesModel {
-        messages: message_iter.try_collect()?,
-    })
+    Ok(message_iter.try_collect()?)
 }
 
 impl X3DHClient {
@@ -425,7 +415,7 @@ impl X3DHClient {
             .map_err(ClientError::TokioSqlite)
     }
 
-    pub async fn get_messages(&self) -> ClientResult<MessagesModel> {
+    pub async fn get_messages(&self) -> ClientResult<Vec<MessageModel>> {
         self.connection
             .call(move |connection| Ok(get_conversations(connection)?))
             .await

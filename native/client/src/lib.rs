@@ -5,7 +5,7 @@ use async_stream::{stream, try_stream};
 use blake2::{Blake2b, Digest};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 pub use client::X3DHClient;
-use client::{MessageState, MessagesModel};
+use client::{MessageState};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
@@ -105,6 +105,7 @@ fn into_message_stream(
     }
 }
 
+#[derive(Clone)]
 pub struct User {
     brongnal: BrongnalClient,
     gossamer: GossamerClient,
@@ -112,7 +113,7 @@ pub struct User {
     username: String,
 }
 
-pub trait Ledger {
+pub trait Ledger: Send + Sync {
     fn validate_username(&self, username: &str, ik: &VerifyingKey) -> bool;
 }
 
@@ -216,21 +217,24 @@ impl MessageSubscriber {
 }
 
 impl User {
-    pub async fn new(
-        mut brongnal: BrongnalClient,
-        mut gossamer: GossamerClient,
+    pub fn new(
+        brongnal: BrongnalClient,
+        gossamer: GossamerClient,
         x3dh: Arc<X3DHClient>,
         username: String,
-        fcm_token: Option<String>,
-    ) -> ClientResult<Self> {
-        register_username(&mut gossamer, x3dh.get_ik(), username.clone()).await?;
-        register_device(&mut brongnal, &x3dh, fcm_token).await?;
-        Ok(User {
+    ) -> Self {
+        User {
             brongnal,
             gossamer,
             x3dh,
             username,
-        })
+        }
+    }
+
+    pub async fn register(&mut self, fcm_token: Option<String>) -> ClientResult<()> {
+        register_username(&mut self.gossamer, self.x3dh.get_ik(), self.username.clone()).await?;
+        register_device(&mut self.brongnal, &self.x3dh, fcm_token).await?;
+        Ok(())
     }
 
     pub async fn get_messages(&self) -> ClientResult<MessageSubscriber> {
@@ -302,7 +306,7 @@ impl User {
         self.x3dh.get_message(id).await
     }
 
-    pub async fn get_message_history(&self) -> ClientResult<MessagesModel> {
+    pub async fn get_message_history(&self) -> ClientResult<Vec<MessageModel>> {
         self.x3dh.get_messages().await
     }
 }

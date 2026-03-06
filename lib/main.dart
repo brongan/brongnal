@@ -3,10 +3,12 @@ import 'dart:ui';
 
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/firebase_options.dart';
+import 'package:brongnal_app/common/config.dart';
 import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
-import 'package:brongnal_app/src/bindings/bindings.dart';
+import 'package:brongnal_app/src/rust/bridge.dart' as bridge;
+import 'package:brongnal_app/src/rust/frb_generated.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -15,24 +17,23 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:rinf/rinf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xdg_directories/xdg_directories.dart';
 
 int id = 0;
 
-Future<void> _onMessageReceived(MessageModel message) async {
+Future<void> _onMessageReceived(bridge.MessageModel message) async {
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
   await plugin.show(id++, message.sender, message.text, toNotification(message),
       payload: message.sender);
 }
 
-Future<void> _firebaseMessagingHandler(RemoteMessage message) async {
-  await initializeRust(assignRustSignal);
-  debugPrint("Initialized Rust");
+Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
+  if (!RustLib.instance.initialized) {
+    await RustLib.init();
+  }
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final username = prefs.getString("username");
-  debugPrint("Acquired Username");
 
   Directory databaseDirectory;
   try {
@@ -40,17 +41,21 @@ Future<void> _firebaseMessagingHandler(RemoteMessage message) async {
   } on StateError catch (_) {
     databaseDirectory = await getApplicationCacheDirectory();
   }
-  debugPrint("Telling rust about database and username.");
-  RustStartup(databaseDirectory: databaseDirectory.path, username: username)
-      .sendSignalToRust();
+
+  await bridge.startHub(
+    databaseDirectory: databaseDirectory.path,
+    username: username,
+    backendAddress: const String.fromEnvironment('BACKEND_ADDR',
+        defaultValue: 'https://signal.brongan.com:443'),
+  );
+
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
 
-  await for (final rustSignal in MessageModel.rustSignalStream) {
-    final MessageModel message = rustSignal.message;
+  bridge.subscribeMessages().listen((message) async {
     await plugin.show(
         id++, message.sender, message.text, toNotification(message),
         payload: message.sender);
-  }
+  });
 }
 
 @pragma('vm:entry-point')
@@ -120,7 +125,19 @@ Future<String?> notificationsToken(FirebaseMessaging messaging) async {
 }
 
 void main() async {
+  await runBrongnalApp();
+}
+
+Future<void> runBrongnalApp({String? dbDirOverride}) async {
   setupWindow();
+
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  final String? savedUsername = prefs.getString("username");
+
+  // Launch UI immediately so we don't have a black screen while waiting for Rust/Firebase
+  runApp(BrongnalApp(username: savedUsername));
+
+  // Initialize remainder in background
   final String? fcmToken;
   if (!Platform.isLinux) {
     await Firebase.initializeApp(
@@ -132,25 +149,30 @@ void main() async {
   } else {
     fcmToken = null;
   }
-  await initializeRust(assignRustSignal);
 
-  final SharedPreferences prefs = await SharedPreferences.getInstance();
-  final username = prefs.getString("username");
-
-  Directory databaseDirectory;
-  try {
-    databaseDirectory = Directory(p.join(dataHome.path, "brongnal"));
-  } on StateError catch (_) {
-    databaseDirectory = await getApplicationCacheDirectory();
+  if (dbDirOverride != null) {
+    AppConfig.setDatabaseOverride(dbDirOverride);
   }
 
-  RustStartup(
-          databaseDirectory: databaseDirectory.path,
-          username: username,
-          fcmToken: fcmToken)
-      .sendSignalToRust();
+  if (!RustLib.instance.initialized) {
+    await RustLib.init();
+  }
 
-  runApp(BrongnalApp(username: username));
+  // Determine database directory
+  final String dbPath = await AppConfig.getDatabaseDirectory(override: dbDirOverride);
+
+  // Start Hub
+  if (savedUsername != null) {
+    try {
+      await bridge.startHub(
+        databaseDirectory: dbPath,
+        username: savedUsername,
+        backendAddress: AppConfig.defaultBackendAddr,
+      );
+    } catch (e) {
+      debugPrint("Failed to start hub: $e");
+    }
+  }
 }
 
 void setupWindow() {
@@ -180,10 +202,8 @@ class _BrongnalAppState extends State<BrongnalApp> {
   void initState() {
     super.initState();
     username = widget.username;
-    listenForRegister();
     _listener = AppLifecycleListener(
       onExitRequested: () async {
-        finalizeRust(); // Shut down the async Rust runtime.
         return AppExitResponse.exit;
       },
     );
@@ -195,23 +215,16 @@ class _BrongnalAppState extends State<BrongnalApp> {
     super.dispose();
   }
 
-  void listenForRegister() async {
-    final stream = RegisterUserResponse.rustSignalStream;
-    await for (final rustSignal in stream) {
-      RegisterUserResponse message = rustSignal.message;
-      setState(() {
-        username = message.username;
-      });
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      prefs.setString("username", message.username);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final Widget child;
     if (username == null) {
-      child = const Register();
+      child = Register(onRegister: (newUsername) {
+        setState(() {
+          username = newUsername;
+        });
+      });
     } else {
       child = ChangeNotifierProvider(
         create: (context) => ChatHistory(

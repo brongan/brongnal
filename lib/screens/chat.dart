@@ -1,7 +1,7 @@
+import 'package:brongnal_app/src/rust/bridge.dart';
+import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/common/theme.dart';
 import 'package:brongnal_app/common/util.dart';
-import 'package:brongnal_app/src/bindings/bindings.dart';
-import 'package:brongnal_app/models/chat_history.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -27,7 +27,9 @@ class ChatScreen extends StatelessWidget {
     final messages = conversationModel.items[peer] ?? [];
     ScrollController scrollController = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      if (scrollController.hasClients) {
+        scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      }
     });
     return Scaffold(
       appBar: getConversationAppBar(context, peer),
@@ -42,7 +44,7 @@ class ChatScreen extends StatelessWidget {
                   return MessageWidget(
                       message: messages[i].text,
                       time: DateTime.fromMillisecondsSinceEpoch(
-                          1000 * messages[i].dbRecvTime),
+                          (1000 * messages[i].dbRecvTime.toInt())),
                       sender: messages[i].sender == self
                           ? Sender.self
                           : Sender.other,
@@ -80,6 +82,7 @@ class SendMessageWidget extends StatefulWidget {
 
 class _SendMessageWidgetState extends State<SendMessageWidget> {
   late FocusNode myFocusNode;
+  final TextEditingController messageInput = TextEditingController();
 
   @override
   void initState() {
@@ -90,12 +93,12 @@ class _SendMessageWidgetState extends State<SendMessageWidget> {
   @override
   void dispose() {
     myFocusNode.dispose();
+    messageInput.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    TextEditingController messageInput = TextEditingController();
     return Row(
       children: [
         Expanded(
@@ -114,14 +117,13 @@ class _SendMessageWidgetState extends State<SendMessageWidget> {
                 ),
               ),
               textInputAction: TextInputAction.send,
-              onSubmitted: (value) {
-                SendMessage(
-                        sender: widget.self,
-                        recipient: widget.peer,
-                        message: messageInput.text)
-                    .sendSignalToRust();
-                messageInput.clear();
-                myFocusNode.requestFocus();
+              onSubmitted: (value) async {
+                if (messageInput.text.isNotEmpty) {
+                  final text = messageInput.text;
+                  messageInput.clear();
+                  await widget.conversationModel.sendMessage(widget.peer, text);
+                  myFocusNode.requestFocus();
+                }
               },
             ),
           ),

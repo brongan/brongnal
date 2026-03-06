@@ -9,16 +9,23 @@ edition = "2021"
 # `staticlib` is for iOS and macOS.
 crate-type = ["lib", "cdylib", "staticlib"]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
 [dependencies]
 client = { path = "../client" }
 prost = "0.12.6"
 proto = { path = "../proto" }
-rinf = "8.0"
+flutter_rust_bridge = "=2.11.1"
+thiserror = "1.0"
 tokio-rusqlite = { version = "0.6.0", features = ["bundled"] }
 tokio = { version = "1.44.1", features = ["full"] }
-tonic = { version = "0.11.0", features = ["tls-webpki-roots"] }
+tonic = { version = "0.11.0", features = ["tls-webpki-roots", "transport", "codegen"] }
 webpki-roots = "0.26.8"
-tokio-stream = "0.1.17"
+tokio-stream = { version = "0.1.17", features = ["net"] }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde"] }
 serde = "1.0.219"
+lazy_static = "1.5"
+tracing = "0.1"
+tracing-subscriber = "0.3.22"
 
