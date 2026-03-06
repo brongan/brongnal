@@ -390,6 +390,7 @@ dependencies = [
  "tonic",
  "tracing",
  "tracing-subscriber",
+ "tracing-tree",
  "x25519-dalek",
  "xdg",
 ]
@@ -670,6 +671,16 @@ name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
+
+[[package]]
+name = "flutter_logger"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a3d407fd7ed76065e3d7ddbc574af50082d4301dcbf19000badc3c4367fdbd0"
+dependencies = [
+ "log",
+ "once_cell",
+]
 
 [[package]]
 name = "flutter_rust_bridge"
@@ -1085,8 +1096,10 @@ version = "0.1.0"
 dependencies = [
  "client",
  "ed25519-dalek",
+ "flutter_logger",
  "flutter_rust_bridge",
  "lazy_static",
+ "log",
  "prost",
  "proto",
  "serde",
@@ -1096,7 +1109,9 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tracing",
+ "tracing-log",
  "tracing-subscriber",
+ "tracing-tree",
  "webpki-roots",
 ]
 
@@ -1465,9 +1480,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.27"
+version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "matchers"
@@ -3047,6 +3062,18 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tracing-tree"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac87aa03b6a4d5a7e4810d1a80c19601dbe0f8a837e9177f23af721c7ba7beec"
+dependencies = [
+ "nu-ansi-term",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber",
 ]
 
 [[package]]

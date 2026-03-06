@@ -45,9 +45,18 @@ lazy_static::lazy_static! {
     };
 }
 
+use tracing_subscriber::fmt::format::FmtSpan;
+
 #[frb(init)]
 pub fn init_app() {
-    std::env::set_var("RUST_LOG", "info,rustls=error,hyper=error,h2=error");
+    // Initialize tracing BEFORE flutter_rust_bridge so our subscriber wins.
+    // FmtSpan::CLOSE prints the duration of each span when it closes.
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_span_events(FmtSpan::CLOSE)
+        .with_target(true)
+        .try_init();
+
     flutter_rust_bridge::setup_default_user_utils();
 }
 

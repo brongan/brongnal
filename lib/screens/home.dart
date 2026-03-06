@@ -310,6 +310,7 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
     switch (destination) {
       case SelectedDestination.chats:
         return Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             const BrongnalFloatingActionButton(
