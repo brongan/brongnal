@@ -55,6 +55,8 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
     await plugin.show(
         id++, message.sender, message.text, toNotification(message),
         payload: message.sender);
+  }, onError: (e) {
+    debugPrint("subscribeMessages stream error: $e");
   });
 }
 
