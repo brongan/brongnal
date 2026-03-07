@@ -61,6 +61,8 @@ class ChatHistory extends ChangeNotifier {
     // 2. Subscribe to new messages
     subscribeMessages().listen((message) {
       add(message);
+    }, onError: (e) {
+      debugPrint("subscribeMessages stream error: $e");
     });
   }
 
