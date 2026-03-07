@@ -107,8 +107,8 @@ fn into_message_stream(
 
 #[derive(Clone)]
 pub struct User {
-    addr: String,
-    cached_clients: Arc<tokio::sync::Mutex<Option<(BrongnalClient, GossamerClient)>>>,
+    brongnal: BrongnalClient,
+    gossamer: GossamerClient,
     x3dh: Arc<X3DHClient>,
     username: String,
 }
@@ -217,58 +217,39 @@ impl MessageSubscriber {
 }
 
 impl User {
+    /// Create a new User with lazy gRPC connections.
+    /// The underlying Channel connects on first RPC and auto-reconnects on failure.
+    #[tracing::instrument(skip(x3dh))]
     pub fn new(
         addr: String,
         x3dh: Arc<X3DHClient>,
         username: String,
-    ) -> Self {
-        User {
-            addr,
-            cached_clients: Arc::new(tokio::sync::Mutex::new(None)),
+    ) -> ClientResult<Self> {
+        let channel = tonic::transport::Endpoint::from_shared(addr)
+            .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
+            .connect_lazy();
+        let brongnal = BrongnalClient::new(channel.clone());
+        let gossamer = GossamerClient::new(channel);
+        Ok(User {
+            brongnal,
+            gossamer,
             x3dh,
             username,
-        }
-    }
-
-    /// Connect to both gRPC services, reusing cached connections if available.
-    #[tracing::instrument(skip(self))]
-    async fn connect(&self) -> ClientResult<(BrongnalClient, GossamerClient)> {
-        {
-            let cache = self.cached_clients.lock().await;
-            if let Some(clients) = cache.as_ref() {
-                return Ok(clients.clone());
-            }
-        }
-
-        let addr = self.addr.clone();
-        let addr2 = addr.clone();
-        let (brongnal, gossamer) = tokio::try_join!(
-            async {
-                BrongnalClient::connect(addr)
-                    .await
-                    .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))
-            },
-            async {
-                GossamerClient::connect(addr2)
-                    .await
-                    .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))
-            },
-        )?;
-
-        *self.cached_clients.lock().await = Some((brongnal.clone(), gossamer.clone()));
-        Ok((brongnal, gossamer))
+        })
     }
 
     #[tracing::instrument(skip(self))]
     pub async fn register(&mut self, fcm_token: Option<String>) -> ClientResult<()> {
-        let (mut brongnal, mut gossamer) = self.connect().await?;
+        let mut gossamer = self.gossamer.clone();
+        let mut brongnal = self.brongnal.clone();
         register_username(&mut gossamer, self.x3dh.get_ik(), self.username.clone()).await?;
         register_device(&mut brongnal, &self.x3dh, fcm_token).await?;
         Ok(())
     }
 
     pub async fn get_messages(&self) -> ClientResult<MessageSubscriber> {
-        let (mut brongnal, mut gossamer) = self.connect().await?;
+        let mut brongnal = self.brongnal.clone();
+        let mut gossamer = self.gossamer.clone();
         let ik = self.x3dh.get_ik();
         let stream = brongnal
             .retrieve_messages(RetrieveMessagesRequest {
@@ -287,7 +268,8 @@ impl User {
     }
 
     pub async fn send_message(&self, peer_username: String, message: String) -> ClientResult<i64> {
-        let (mut brongnal, mut gossamer) = self.connect().await?;
+        let mut brongnal = self.brongnal.clone();
+        let mut gossamer = self.gossamer.clone();
         // TODO: Create Ratchet Header
         let ratchet_message = RatchetMessage {
             header: None,
