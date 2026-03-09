@@ -1,7 +1,7 @@
 import 'dart:collection';
-import 'package:brongnal_app/src/rust/bridge.dart' as bridge;
+import 'package:brongnal_app/common/core.dart';
 import 'package:brongnal_app/src/rust/bridge.dart'
-    show MessageModel, MessageState, getAllMessages, subscribeMessages;
+    show MessageModel, MessageState;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -37,11 +37,13 @@ NotificationDetails toNotification(MessageModel model) {
 class ChatHistory extends ChangeNotifier {
   final String username;
   final Future<void> Function(MessageModel message) onMessageReceived;
+  final BrongnalCore core;
   final Map<String, List<MessageModel>> _conversations = {};
 
   ChatHistory({
     required this.username,
     required this.onMessageReceived,
+    required this.core,
   }) {
     _init();
   }
@@ -49,7 +51,7 @@ class ChatHistory extends ChangeNotifier {
   Future<void> _init() async {
     // 1. Load history
     try {
-      final history = await getAllMessages();
+      final history = await core.getAllMessages();
       for (final msg in history) {
         _addLocal(msg, notify: false);
       }
@@ -59,7 +61,7 @@ class ChatHistory extends ChangeNotifier {
     }
 
     // 2. Subscribe to new messages
-    subscribeMessages().listen((message) {
+    core.subscribeMessages().listen((message) {
       add(message);
     }, onError: (e) {
       debugPrint("subscribeMessages stream error: $e");
@@ -90,7 +92,7 @@ class ChatHistory extends ChangeNotifier {
 
   Future<void> sendMessage(String recipient, String text) async {
     try {
-      final msg = await bridge.sendMessage(recipient: recipient, text: text);
+      final msg = await core.sendMessage(recipient: recipient, text: text);
       add(msg);
     } catch (e) {
       debugPrint("Failed to send message: $e");

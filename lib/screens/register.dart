@@ -1,11 +1,12 @@
-import 'package:brongnal_app/src/rust/bridge.dart' as bridge;
+import 'package:brongnal_app/common/core.dart';
 import 'package:brongnal_app/common/config.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Register extends StatelessWidget {
-  const Register({super.key, required this.onRegister});
+  const Register({super.key, required this.onRegister, required this.core});
   final void Function(String username) onRegister;
+  final BrongnalCore core;
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +50,7 @@ class Register extends StatelessWidget {
                   final String dbPath = await AppConfig.getDatabaseDirectory();
 
                   try {
-                    await bridge.registerUser(
+                    await core.registerUser(
                         username: username,
                         backendAddress: AppConfig.defaultBackendAddr,
                         databaseDirectory: dbPath);

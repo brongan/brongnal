@@ -7,7 +7,8 @@ import 'package:brongnal_app/common/config.dart';
 import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
-import 'package:brongnal_app/src/rust/bridge.dart' as bridge;
+import 'package:brongnal_app/common/core.dart';
+import 'package:brongnal_app/src/rust/bridge.dart' show MessageModel;
 import 'package:brongnal_app/src/rust/frb_generated.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -22,7 +23,7 @@ import 'package:xdg_directories/xdg_directories.dart';
 
 int id = 0;
 
-Future<void> _onMessageReceived(bridge.MessageModel message) async {
+Future<void> _onMessageReceived(MessageModel message) async {
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
   await plugin.show(id++, message.sender, message.text, toNotification(message),
       payload: message.sender);
@@ -42,7 +43,8 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
     databaseDirectory = await getApplicationCacheDirectory();
   }
 
-  await bridge.startHub(
+  final bridge = const RustBrongnalCore();
+  await core.startHub(
     databaseDirectory: databaseDirectory.path,
     username: username,
     backendAddress: const String.fromEnvironment('BACKEND_ADDR',
@@ -51,7 +53,7 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
 
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
 
-  bridge.subscribeMessages().listen((message) async {
+  core.subscribeMessages().listen((message) async {
     await plugin.show(
         id++, message.sender, message.text, toNotification(message),
         payload: message.sender);
@@ -159,11 +161,11 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
   // Determine database directory
   final String dbPath = await AppConfig.getDatabaseDirectory(override: dbDirOverride);
 
-  // Start Hub
+  final bridge = const RustBrongnalCore();
   if (savedUsername != null) {
     try {
       final watch = Stopwatch()..start();
-      await bridge.startHub(
+      await core.startHub(
         databaseDirectory: dbPath,
         username: savedUsername,
         backendAddress: AppConfig.defaultBackendAddr,
@@ -175,7 +177,7 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
     }
   }
 
-  runApp(BrongnalApp(username: savedUsername));
+  runApp(BrongnalApp(username: savedUsername, core: bridge));
 }
 
 void setupWindow() {
@@ -189,8 +191,9 @@ void setupWindow() {
 }
 
 class BrongnalApp extends StatefulWidget {
-  const BrongnalApp({super.key, required this.username});
+  const BrongnalApp({super.key, required this.username, required this.core});
   final String? username;
+  final BrongnalCore core;
 
   @override
   State<BrongnalApp> createState() => _BrongnalAppState();
@@ -223,15 +226,19 @@ class _BrongnalAppState extends State<BrongnalApp> {
   Widget build(BuildContext context) {
     final Widget child;
     if (username == null) {
-      child = Register(onRegister: (newUsername) {
-        setState(() {
-          username = newUsername;
-        });
-      });
+      child = Register(
+          core: widget.bridge,
+          onRegister: (newUsername) {
+            setState(() {
+              username = newUsername;
+            });
+          });
     } else {
       child = ChangeNotifierProvider(
         create: (context) => ChatHistory(
-            username: username!, onMessageReceived: _onMessageReceived),
+            username: username!,
+            onMessageReceived: _onMessageReceived,
+            core: widget.bridge),
         child: Navigator(
           pages: [
             MaterialPage(child: Home(username: username!)),
