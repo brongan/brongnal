@@ -52,17 +52,14 @@ class ChatHistory extends ChangeNotifier {
     // 1. Load history
     try {
       final history = await core.getAllMessages();
-      for (final msg in history) {
-        _addLocal(msg, notify: false);
-      }
-      notifyListeners();
+      addHistory(history);
     } catch (e) {
       debugPrint("Failed to load message history: $e");
     }
 
     // 2. Subscribe to new messages
     core.subscribeMessages().listen((message) {
-      add(message);
+      addMessage(message);
     }, onError: (e) {
       debugPrint("subscribeMessages stream error: $e");
     });
@@ -71,21 +68,22 @@ class ChatHistory extends ChangeNotifier {
   UnmodifiableMapView<String, List<MessageModel>> get items =>
       UnmodifiableMapView(_conversations);
 
-  void _addLocal(MessageModel message, {bool notify = true}) {
+  void addHistory(List<MessageModel> messages) {
+    for (final message in messages) {
+      final peer = message.sender == username ? message.receiver : message.sender;
+      _conversations.putIfAbsent(peer, () => []);
+      _conversations[peer]!.add(message);
+    }
+    notifyListeners();
+  }
+
+  void addMessage(MessageModel message) async {
     final peer = message.sender == username ? message.receiver : message.sender;
     _conversations.putIfAbsent(peer, () => []);
     _conversations[peer]!.add(message);
-    if (notify) notifyListeners();
-  }
+    notifyListeners();
 
-  void add(MessageModel message) async {
-    _addLocal(message);
-
-    final recvTime =
-        DateTime.fromMillisecondsSinceEpoch(1000 * message.dbRecvTime.toInt());
-
-    if (message.receiver == username &&
-        recvTime.isAfter(DateTime.now().subtract(const Duration(seconds: 1)))) {
+    if (message.receiver == username) {
       await onMessageReceived(message);
     }
   }
@@ -93,7 +91,7 @@ class ChatHistory extends ChangeNotifier {
   Future<void> sendMessage(String recipient, String text) async {
     try {
       final msg = await core.sendMessage(recipient: recipient, text: text);
-      add(msg);
+      addMessage(msg);
     } catch (e) {
       debugPrint("Failed to send message: $e");
       rethrow;
