@@ -16,8 +16,8 @@ const GCA_ISSUER: &str = "https://confidentialcomputing.googleapis.com";
 pub enum AttestationError {
     #[error("Missing attestation field: {0}")]
     MissingField(&'static str),
-    #[error("Container image digest is untrusted: {0:?}")]
-    UntrustedContainer(Vec<u8>),
+    #[error("Container image digest is untrusted: {0}")]
+    UntrustedContainer(String),
     #[error("Mismatched TLS binding: expected {expected:?}, got {actual:?}")]
     TlsBindingMismatch { expected: Vec<u8>, actual: Vec<u8> },
     #[error("GCA token verification failed: {0}")]
@@ -32,55 +32,51 @@ pub enum AttestationError {
     JwksFetch(String),
 }
 
+/// Nested claims for the running container (Confidential Space).
+/// See: https://cloud.google.com/confidential-computing/confidential-vm/docs/token-claims
+#[derive(Debug, Deserialize)]
+pub struct ContainerClaims {
+    /// The container image digest as `sha256:<hex>`, e.g. "sha256:abc123..."
+    pub image_digest: Option<String>,
+}
+
+/// Top-level submods block in the GCA token.
+#[derive(Debug, Deserialize)]
+pub struct Submods {
+    pub container: Option<ContainerClaims>,
+}
+
 /// Claims from a GCA OIDC token.
 /// See: https://cloud.google.com/confidential-computing/confidential-vm/docs/token-claims
 #[derive(Debug, Deserialize)]
 pub struct GcaClaims {
     pub iss: String,
-    pub sub: String,
-    pub aud: String,
-    pub exp: u64,
-    pub iat: u64,
     pub eat_nonce: Vec<String>,
     pub secboot: bool,
     pub hwmodel: String,
-    pub swname: Option<String>,
     pub dbgstat: String,
-    pub submods: Option<serde_json::Value>,
-    pub google_service_accounts: Option<Vec<String>>,
+    /// Workload-specific sub-claims (container digest lives here).
+    pub submods: Option<Submods>,
 }
 
 pub struct AttestationVerifier;
 
 impl AttestationVerifier {
-    /// Verify the GCA OIDC JWT from the AttestationResponse:
-    /// 1. Check container_image_digest ∈ TRUSTED_DIGESTS
-    /// 2. Verify JWT signature via GCA JWKS endpoint (Google-signed)
-    /// 3. Check iss == confidentialcomputing.googleapis.com, hwmodel, secboot, dbgstat
-    /// 4. Check eat_nonce in the JWT contains the observed TLS pubkey hash (aTLS binding)
+    /// Verify the GCA OIDC JWT:
+    /// 1. Verify JWT signature via GCA JWKS endpoint (Google-signed)
+    /// 2. Check iss == confidentialcomputing.googleapis.com, hwmodel, secboot, dbgstat
+    /// 3. Check submods.container.image_digest ∈ TRUSTED_DIGESTS (from the signed JWT)
+    /// 4. Check eat_nonce in the JWT contains SHA-256(observed TLS cert pubkey) (aTLS binding)
     ///
     /// The client does NOT parse raw vTPM quotes or SNP reports.
     /// All hardware evidence verification is delegated to Google Cloud Attestation.
+    /// The container digest is read from the signed JWT, not from the server's response.
     pub async fn verify(
         &self,
         response: &AttestationResponse,
         actual_tls_pubkey_hash: &[u8],
     ) -> Result<(), AttestationError> {
-        // 1. Container digest check
-        let digest = response
-            .container_image_digest
-            .as_ref()
-            .ok_or(AttestationError::MissingField("container_image_digest"))?;
-
-        if !TRUSTED_IDENTITY_IMAGE_DIGESTS
-            .iter()
-            .any(|d| d == digest.as_slice())
-        {
-            return Err(AttestationError::UntrustedContainer(digest.clone()));
-        }
-
-
-        // 2. Verify GCA JWT
+        // 1. Verify GCA JWT (signature + standard claims)
         let token = response
             .gca_token
             .as_ref()
@@ -88,8 +84,7 @@ impl AttestationVerifier {
 
         let claims = self.verify_gca_jwt(token).await?;
 
-
-        // 3. Check hardware claims
+        // 2. Check hardware claims
         if claims.hwmodel != "GCP_AMD_SEV" {
             return Err(AttestationError::InvalidHardware(claims.hwmodel));
         }
@@ -98,6 +93,25 @@ impl AttestationVerifier {
         }
         if claims.dbgstat != "disabled-since-boot" {
             return Err(AttestationError::DebugEnabled(claims.dbgstat));
+        }
+
+        // 3. Container digest from the signed JWT (not from the server's response field)
+        let image_digest = claims
+            .submods
+            .as_ref()
+            .and_then(|s| s.container.as_ref())
+            .and_then(|c| c.image_digest.as_deref())
+            .ok_or(AttestationError::MissingField("submods.container.image_digest"))?;
+
+        // Digest is "sha256:<hex>"; strip the prefix before comparing.
+        let hex_digest = image_digest
+            .strip_prefix("sha256:")
+            .unwrap_or(image_digest);
+        if !TRUSTED_IDENTITY_IMAGE_DIGESTS
+            .iter()
+            .any(|d| hex::encode(d) == hex_digest)
+        {
+            return Err(AttestationError::UntrustedContainer(image_digest.to_string()));
         }
 
         // 4. aTLS binding: eat_nonce in the JWT must contain SHA-256(observed TLS cert pubkey).
@@ -165,24 +179,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_verify_untrusted_digest() {
-        let verifier = AttestationVerifier;
-        let p_hash = vec![1, 2, 3, 4];
-        let resp = AttestationResponse {
-            container_image_digest: Some(vec![0xBB; 32]), // not in trusted list
-            gca_token: None,
-        };
-
-        let result = verifier.verify(&resp, &p_hash).await;
-        assert!(matches!(result, Err(AttestationError::UntrustedContainer(_))));
-    }
-
-    #[tokio::test]
     async fn test_verify_missing_gca_token() {
         let verifier = AttestationVerifier;
         let p_hash = vec![1, 2, 3, 4];
         let resp = AttestationResponse {
-            container_image_digest: Some(vec![0xAA; 32]),
             gca_token: None,
         };
 

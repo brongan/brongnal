@@ -162,7 +162,6 @@ impl GossamerService for Service {
     ) -> Result<Response<AttestationResponse>, Status> {
         info!("Returning Attestation (Mock)");
         Ok(Response::new(AttestationResponse {
-            container_image_digest: Some(vec![0xAA; 32]),
             gca_token: Some("mock.jwt.token".to_string()),
         }))
     }
