@@ -36,6 +36,9 @@ use tracing::{error, info, warn};
 use crate::client::MessageModel;
 
 pub mod client;
+pub mod trusted_digests;
+pub mod attestation;
+pub mod attested_channel;
 
 type BrongnalClient = BrongnalServiceClient<Channel>;
 type GossamerClient = GossamerServiceClient<Channel>;
@@ -217,19 +220,44 @@ impl MessageSubscriber {
 }
 
 impl User {
-    /// Create a new User with lazy gRPC connections.
-    /// The underlying Channel connects on first RPC and auto-reconnects on failure.
+    /// Create a new User and verify the Identity service attestation binding.
     #[tracing::instrument(skip(x3dh))]
-    pub fn new(
-        addr: String,
+    pub async fn new(
+        mailbox_addr: String,
+        identity_addr: String,
         x3dh: Arc<X3DHClient>,
         username: String,
     ) -> ClientResult<Self> {
-        let channel = tonic::transport::Endpoint::from_shared(addr)
+        // 1. Connect to standard Mailbox Service
+        let mailbox_channel = tonic::transport::Endpoint::from_shared(mailbox_addr)
             .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
             .connect_lazy();
-        let brongnal = BrongnalClient::new(channel.clone());
-        let gossamer = GossamerClient::new(channel);
+        let brongnal = BrongnalClient::new(mailbox_channel);
+
+        // 2. Connect to Attested Identity Service
+        let attested_channel = crate::attested_channel::AttestedChannel::connect(identity_addr)
+            .await
+            .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?;
+        
+        let mut gossamer = GossamerClient::new(attested_channel.channel);
+        
+        // 3. Fetch and verify attestation
+        let attestation_res = gossamer
+            .get_attestation(proto::gossamer::AttestationRequest {})
+            .await
+            .map_err(|e| ClientError::Grpc(e))?
+            .into_inner();
+            
+        let actual_hash = attested_channel.captured_hash.lock().unwrap().clone();
+        if let Some(hash) = actual_hash {
+            let verifier = crate::attestation::AttestationVerifier;
+            verifier.verify(&attestation_res, &hash).await.map_err(|e| {
+                ClientError::Grpc(tonic::Status::unauthenticated(format!("Attestation failed: {}", e)))
+            })?;
+        } else {
+            return Err(ClientError::Grpc(tonic::Status::unauthenticated("Attestation validation failed - missing TLS handshake hashing")));
+        }
+
         Ok(User {
             brongnal,
             gossamer,
@@ -340,7 +368,6 @@ async fn register_username(
 
     let signed_message = SignedMessage {
         contents: Some(contents),
-        identity_key: Some(ik.verifying_key().as_bytes().to_vec()),
         signature: Some(signature.to_vec()),
     };
     let request = Request::new(ActionRequest {

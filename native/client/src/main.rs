@@ -60,8 +60,14 @@ async fn main() -> Result<()> {
 
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
-    info!("Registering {name} with key={ik_str} at {addr}");
-    let user = User::new(addr, client, name.clone())?;
+
+    let identity_addr = std::env::args()
+        .nth(2)
+        .unwrap_or("http://localhost:50052".to_string());
+
+    tracing::info!("Connecting mailbox to {addr} and identity to {identity_addr}");
+
+    let mut user = User::new(addr, identity_addr, client, name.clone()).await?;
     let history = user.get_message_history().await.unwrap();
     for message in history {
         println!("{message}");
