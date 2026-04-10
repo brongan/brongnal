@@ -55,9 +55,12 @@ pub struct AttestationVerifier;
 impl AttestationVerifier {
     /// Verify the GCA OIDC JWT from the AttestationResponse:
     /// 1. Check container_image_digest ∈ TRUSTED_DIGESTS
-    /// 2. Verify JWT signature via GCA JWKS
-    /// 3. Check iss, hwmodel, secboot, dbgstat
-    /// 4. Check eat_nonce contains the observed TLS pubkey hash (aTLS binding)
+    /// 2. Verify JWT signature via GCA JWKS endpoint (Google-signed)
+    /// 3. Check iss == confidentialcomputing.googleapis.com, hwmodel, secboot, dbgstat
+    /// 4. Check eat_nonce in the JWT contains the observed TLS pubkey hash (aTLS binding)
+    ///
+    /// The client does NOT parse raw vTPM quotes or SNP reports.
+    /// All hardware evidence verification is delegated to Google Cloud Attestation.
     pub async fn verify(
         &self,
         response: &AttestationResponse,
@@ -77,7 +80,7 @@ impl AttestationVerifier {
         }
 
 
-        // 3. Verify GCA JWT
+        // 2. Verify GCA JWT
         let token = response
             .gca_token
             .as_ref()
@@ -85,7 +88,8 @@ impl AttestationVerifier {
 
         let claims = self.verify_gca_jwt(token).await?;
 
-        // 4. Check claims
+
+        // 3. Check hardware claims
         if claims.hwmodel != "GCP_AMD_SEV" {
             return Err(AttestationError::InvalidHardware(claims.hwmodel));
         }
@@ -96,7 +100,9 @@ impl AttestationVerifier {
             return Err(AttestationError::DebugEnabled(claims.dbgstat));
         }
 
-        // 5. Check eat_nonce contains TLS pubkey hash
+        // 4. aTLS binding: eat_nonce in the JWT must contain SHA-256(observed TLS cert pubkey).
+        //    The launcher sets this nonce when requesting the GCA token, binding the
+        //    attestation to the active TLS session.
         let tls_hash_hex = hex::encode(actual_tls_pubkey_hash);
         let tls_hash_b64 = base64::Engine::encode(
             &base64::engine::general_purpose::STANDARD,
@@ -107,12 +113,10 @@ impl AttestationVerifier {
             .iter()
             .any(|n| n == &tls_hash_hex || n == &tls_hash_b64)
         {
-            info!(
-                "eat_nonce values: {:?}, looking for hex={} or b64={}",
-                claims.eat_nonce, tls_hash_hex, tls_hash_b64
-            );
-            // For now, log but don't fail — the nonce format may vary.
-            // TODO: Enforce once we control the launcher's nonce format.
+            return Err(AttestationError::TlsBindingMismatch {
+                expected: actual_tls_pubkey_hash.to_vec(),
+                actual: claims.eat_nonce.join(",").into_bytes(),
+            });
         }
 
         Ok(())
@@ -164,9 +168,6 @@ mod tests {
         let p_hash = vec![1, 2, 3, 4];
         let resp = AttestationResponse {
             container_image_digest: Some(vec![0xBB; 32]), // not in trusted list
-            vtpm: None,
-            snp: None,
-            tls_pubkey_hash: Some(p_hash.clone()),
             gca_token: None,
         };
 
@@ -184,9 +185,6 @@ mod tests {
         let p_hash = vec![1, 2, 3, 4];
         let resp = AttestationResponse {
             container_image_digest: Some(vec![0xAA; 32]),
-            vtpm: None,
-            snp: None,
-            tls_pubkey_hash: Some(p_hash.clone()),
             gca_token: None,
         };
 

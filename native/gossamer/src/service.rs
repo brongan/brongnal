@@ -166,9 +166,6 @@ impl GossamerService for Service {
         Ok(Response::new(AttestationResponse {
             container_image_digest: Some(vec![0xAA; 32]),
             gca_token: Some("mock.jwt.token".to_string()),
-            vtpm: None,
-            snp: None,
-            tls_pubkey_hash: None,
         }))
     }
 }
