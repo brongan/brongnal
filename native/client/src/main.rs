@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
 
     let identity_addr = std::env::args()
-        .nth(2)
+        .nth(3)
         .unwrap_or("http://localhost:50052".to_string());
 
     tracing::info!("Connecting mailbox to {addr} and identity to {identity_addr}");
