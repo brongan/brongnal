@@ -1,9 +1,7 @@
 #![feature(duration_constructors)]
-use crate::gossamer::InMemoryGossamer;
 use crate::push_notifications::FirebaseCloudMessagingClient;
 use brongnal::BrongnalController;
 use persistence::{clean_mailboxes, SqliteStorage};
-use proto::gossamer::gossamer_service_server::GossamerServiceServer as GossamerServer;
 use proto::service::brongnal_service_server::BrongnalServiceServer as BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
 use sentry::ClientInitGuard;
@@ -19,7 +17,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 mod brongnal;
-mod gossamer;
 mod persistence;
 mod push_notifications;
 
@@ -93,7 +90,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Server::builder()
         .add_service(BrongnalServer::new(controller))
-        .add_service(GossamerServer::new(InMemoryGossamer::default()))
         .add_service(reflection_service)
         .serve(server_addr)
         .await?;

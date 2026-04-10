@@ -327,6 +327,7 @@ impl From<ApplicationMessage> for application::Message {
 
 impl TryInto<RatchetMessage> for application::RatchetMessage {
     type Error = tonic::Status;
+    #[allow(clippy::result_large_err)]
     fn try_into(self) -> Result<RatchetMessage, Self::Error> {
         let header = self.header.map(|header| header.try_into()).transpose()?;
         let message = self

@@ -283,7 +283,7 @@ fn get_conversations(connection: &Connection) -> rusqlite::Result<Vec<MessageMod
             text: row.get(4)?,
         })
     })?;
-    Ok(message_iter.try_collect()?)
+    message_iter.try_collect()
 }
 
 impl X3DHClient {
