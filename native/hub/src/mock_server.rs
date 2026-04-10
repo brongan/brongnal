@@ -30,11 +30,12 @@ impl GossamerService for MockBackend {
     async fn action(&self, request: Request<ActionRequest>) -> Result<Response<ActionResponse>, Status> {
         let req = request.into_inner();
         let signed = req.message.ok_or(Status::invalid_argument("missing message"))?;
-        let contents_bytes = signed.contents.as_ref().ok_or(Status::invalid_argument("missing contents"))?;
-        let contents = proto::gossamer::Message::decode(&**contents_bytes)
+
+        let contents = proto::gossamer::Message::decode(&*signed.contents.ok_or(Status::invalid_argument("missing contents"))?)
             .map_err(|e| Status::internal(e.to_string()))?;
-        let ik = contents.public_key.as_ref().ok_or(Status::invalid_argument("missing ik in contents"))?.clone();
-        
+
+        let ik = contents.public_key.clone().ok_or(Status::invalid_argument("missing public_key in message"))?;
+
         let mut state = self.state.lock().unwrap();
         let provider = contents.provider.as_ref().ok_or(Status::invalid_argument("missing provider"))?;
         state.users.entry(provider.clone()).or_insert(UserProto {
