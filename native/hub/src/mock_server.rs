@@ -76,9 +76,10 @@ impl GossamerService for MockBackend {
         &self,
         _request: Request<AttestationRequest>,
     ) -> Result<Response<AttestationResponse>, Status> {
-        Err(Status::unimplemented(
-            "MockBackend::get_attestation unimplemented",
-        ))
+        Ok(Response::new(AttestationResponse {
+            container_image_digest: Some(vec![0xAA; 32]),
+            gca_token: Some("mock.jwt.token".to_string()),
+        }))
     }
 }
 
