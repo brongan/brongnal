@@ -78,6 +78,19 @@ impl AttestationVerifier {
 
 
 
+        // 2. aTLS binding check (from proto field, before JWT)
+        let attested_tls_hash = response
+            .tls_pubkey_hash
+            .as_ref()
+            .ok_or(AttestationError::MissingField("tls_pubkey_hash"))?;
+
+        if attested_tls_hash.as_slice() != actual_tls_pubkey_hash {
+            return Err(AttestationError::TlsBindingMismatch {
+                expected: attested_tls_hash.clone(),
+                actual: actual_tls_pubkey_hash.to_vec(),
+            });
+        }
+
         // 3. Verify GCA JWT
         let token = response
             .gca_token
@@ -167,6 +180,9 @@ mod tests {
         let p_hash = vec![1, 2, 3, 4];
         let resp = AttestationResponse {
             container_image_digest: Some(vec![0xBB; 32]), // not in trusted list
+            vtpm: None,
+            snp: None,
+            tls_pubkey_hash: Some(p_hash.clone()),
             gca_token: None,
         };
 
@@ -174,7 +190,22 @@ mod tests {
         assert!(matches!(result, Err(AttestationError::UntrustedContainer(_))));
     }
 
+    #[tokio::test]
+    async fn test_verify_tls_mismatch() {
+        let verifier = AttestationVerifier;
+        let p_hash = vec![1, 2, 3, 4];
+        let wrong_hash = vec![9, 9, 9];
+        let resp = AttestationResponse {
+            container_image_digest: Some(vec![0xAA; 32]),
+            vtpm: None,
+            snp: None,
+            tls_pubkey_hash: Some(p_hash.clone()),
+            gca_token: None,
+        };
 
+        let result = verifier.verify(&resp, &wrong_hash).await;
+        assert!(matches!(result, Err(AttestationError::TlsBindingMismatch { .. })));
+    }
 
     #[tokio::test]
     async fn test_verify_missing_gca_token() {
@@ -182,6 +213,9 @@ mod tests {
         let p_hash = vec![1, 2, 3, 4];
         let resp = AttestationResponse {
             container_image_digest: Some(vec![0xAA; 32]),
+            vtpm: None,
+            snp: None,
+            tls_pubkey_hash: Some(p_hash.clone()),
             gca_token: None,
         };
 
