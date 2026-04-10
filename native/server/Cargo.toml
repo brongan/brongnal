@@ -37,6 +37,6 @@ x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "
 xdg = "2.5.2"
 
 [dev-dependencies]
-client = { path = "../client/" }
+client = { path = "../client/", features = ["test-support"] }
 gossamer = { path = "../gossamer/" }
 

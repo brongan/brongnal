@@ -152,12 +152,13 @@ mod tests {
         // 3. Client 1: Alice registers
         let alice_db = Connection::open_in_memory().await.unwrap();
         let alice_x3dh = Arc::new(X3DHClient::new(alice_db).await.unwrap());
-        let mut alice = User::new(
+        let mut alice = User::new_insecure(
             mailbox_addr.clone(),
             identity_addr.clone(),
             alice_x3dh,
             "alice".to_string(),
         )
+        .await
         .expect("Failed to create Alice");
 
         alice
@@ -168,12 +169,13 @@ mod tests {
         // 4. Client 2: Bob registers
         let bob_db = Connection::open_in_memory().await.unwrap();
         let bob_x3dh = Arc::new(X3DHClient::new(bob_db).await.unwrap());
-        let mut bob = User::new(
+        let mut bob = User::new_insecure(
             mailbox_addr.clone(),
             identity_addr.clone(),
             bob_x3dh,
             "bob".to_string(),
         )
+        .await
         .expect("Failed to create Bob");
 
         bob.register(None).await.expect("Bob registration failed");

@@ -60,8 +60,8 @@ async fn main() -> Result<()> {
     let mailbox_addr = addr.clone();
     let identity_addr = args.get(3).cloned().unwrap_or_else(|| mailbox_addr.clone());
 
-    info!("Registering {name} (mailbox: {mailbox_addr}, identity: {identity_addr})");
-    let user = User::new(mailbox_addr, identity_addr, client, name.clone())?;
+    info!("Connecting mailbox to {mailbox_addr} and identity to {identity_addr}");
+    let user = User::new(mailbox_addr, identity_addr, client, name.clone()).await?;
     let history = user.get_message_history().await.unwrap();
     for message in history {
         println!("{message}");

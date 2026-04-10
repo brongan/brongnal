@@ -33,9 +33,13 @@ use tonic::transport::Channel;
 use tonic::{Request, Streaming};
 use tracing::{error, info, warn};
 
+use crate::attestation::AttestationVerifier;
 use crate::client::MessageModel;
 
+pub mod attestation;
+pub mod attested_channel;
 pub mod client;
+pub mod trusted_digests;
 
 type BrongnalClient = BrongnalServiceClient<Channel>;
 type GossamerClient = GossamerServiceClient<Channel>;
@@ -217,10 +221,10 @@ impl MessageSubscriber {
 }
 
 impl User {
-    /// Create a new User with lazy gRPC connections.
-    /// The underlying Channel connects on first RPC and auto-reconnects on failure.
-    #[tracing::instrument(skip(x3dh))]
-    pub fn new(
+    /// Create a new User without TLS or attestation verification.
+    /// Only for use in tests with plain-TCP gRPC servers.
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn new_insecure(
         mailbox_addr: String,
         identity_addr: String,
         x3dh: Arc<X3DHClient>,
@@ -229,12 +233,58 @@ impl User {
         let mailbox_channel = tonic::transport::Endpoint::from_shared(mailbox_addr)
             .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
             .connect_lazy();
+        let brongnal = BrongnalClient::new(mailbox_channel);
+
         let identity_channel = tonic::transport::Endpoint::from_shared(identity_addr)
             .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
             .connect_lazy();
-
-        let brongnal = BrongnalClient::new(mailbox_channel);
         let gossamer = GossamerClient::new(identity_channel);
+
+        Ok(User {
+            brongnal,
+            gossamer,
+            x3dh,
+            username,
+        })
+    }
+
+    /// Create a new User and verify the Identity service attestation binding.
+    #[tracing::instrument(skip(x3dh))]
+    pub async fn new(
+        mailbox_addr: String,
+        identity_addr: String,
+        x3dh: Arc<X3DHClient>,
+        username: String,
+    ) -> ClientResult<Self> {
+        // 1. Connect to standard Mailbox Service
+        let mailbox_channel = tonic::transport::Endpoint::from_shared(mailbox_addr)
+            .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
+            .connect_lazy();
+        let brongnal = BrongnalClient::new(mailbox_channel);
+
+        // 2. Connect to Attested Identity Service (captures TLS cert hash)
+        let (identity_channel, cert_hash) = attested_channel::connect(identity_addr)
+            .await
+            .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?;
+
+        let mut gossamer = GossamerClient::new(identity_channel);
+
+        // 3. Fetch and verify attestation against the observed TLS cert
+        let attestation_res = gossamer
+            .get_attestation(proto::gossamer::AttestationRequest {})
+            .await
+            .map_err(ClientError::Grpc)?
+            .into_inner();
+
+        AttestationVerifier
+            .verify(&attestation_res, &cert_hash)
+            .await
+            .map_err(|e| {
+                ClientError::Grpc(tonic::Status::unauthenticated(format!(
+                    "Attestation failed: {e}",
+                )))
+            })?;
+
         Ok(User {
             brongnal,
             gossamer,
@@ -344,8 +394,8 @@ async fn register_username(
     let signature = ik.sign(&contents);
 
     let signed_message = SignedMessage {
-        contents: Some(contents),
         identity_key: Some(ik.verifying_key().as_bytes().to_vec()),
+        contents: Some(contents),
         signature: Some(signature.to_vec()),
     };
     let request = Request::new(ActionRequest {
