@@ -1,5 +1,5 @@
 use proto::gossamer::gossamer_service_server::{GossamerService, GossamerServiceServer};
-use proto::gossamer::{ActionRequest, ActionResponse, GetLedgerRequest, Ledger, User as UserProto};
+use proto::gossamer::{ActionRequest, ActionResponse, AttestationRequest, AttestationResponse, GetLedgerRequest, Ledger, User as UserProto};
 use proto::service::brongnal_service_server::{BrongnalService, BrongnalServiceServer};
 use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleResponse, PreKeyBundle, PreKeyBundleRequest,
@@ -27,15 +27,15 @@ impl GossamerService for MockBackend {
     async fn action(&self, request: Request<ActionRequest>) -> Result<Response<ActionResponse>, Status> {
         let req = request.into_inner();
         let signed = req.message.ok_or(Status::invalid_argument("missing message"))?;
-        let ik = signed.identity_key.ok_or(Status::invalid_argument("missing ik"))?;
-        
-        let contents = proto::gossamer::Message::decode(&*signed.contents.ok_or(Status::invalid_argument("missing contents"))?)
+        let contents_bytes = signed.contents.as_ref().ok_or(Status::invalid_argument("missing contents"))?;
+        let contents = proto::gossamer::Message::decode(&**contents_bytes)
             .map_err(|e| Status::internal(e.to_string()))?;
-
+        let ik = contents.public_key.as_ref().ok_or(Status::invalid_argument("missing ik in contents"))?.clone();
+        
         let mut state = self.state.lock().unwrap();
-        let provider = contents.provider.unwrap();
+        let provider = contents.provider.as_ref().ok_or(Status::invalid_argument("missing provider"))?;
         state.users.entry(provider.clone()).or_insert(UserProto {
-            provider: Some(provider),
+            provider: Some(provider.clone()),
             public_keys: vec![ik],
         });
 
@@ -47,6 +47,10 @@ impl GossamerService for MockBackend {
         Ok(Response::new(Ledger {
             users: state.users.values().cloned().collect(),
         }))
+    }
+
+    async fn get_attestation(&self, _request: Request<AttestationRequest>) -> Result<Response<AttestationResponse>, Status> {
+        Err(Status::unimplemented("MockBackend::get_attestation unimplemented"))
     }
 }
 

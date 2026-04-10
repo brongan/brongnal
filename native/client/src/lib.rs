@@ -195,7 +195,7 @@ impl MessageSubscriber {
                         sender,
                         text
                     } = application_message;
-                    let id = self.x3dh.persist_message(sender.clone(), self.username.clone(), text.clone(), MessageState::Delivered).await?;
+                    let _id = self.x3dh.persist_message(sender.clone(), self.username.clone(), text.clone(), MessageState::Delivered).await?;
                     Ok::<MessageModel, ClientError>(MessageModel {
                         sender,
                         receiver: self.username.clone(),

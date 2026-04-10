@@ -1,0 +1,24 @@
+[package]
+name = "gossamer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.97"
+blake2 = "0.10.6"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
+prost = "0.12.6"
+proto = { path = "../proto/" }
+protocol = { path = "../protocol/" }
+rusqlite = { version = "0.32.1", features = [] }
+tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
+tokio-rusqlite = { version = "0.6.0", features = [] }
+tonic = "0.11.0"
+tonic-reflection = { version = "0.11.0", features = ["server"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+xdg = "2.5.2"
+hex = "0.4.3"
+
+[dev-dependencies]
+rand_core = { version = "0.6", features = ["getrandom", "std"] }
