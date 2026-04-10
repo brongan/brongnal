@@ -1,5 +1,8 @@
 use proto::gossamer::gossamer_service_server::{GossamerService, GossamerServiceServer};
-use proto::gossamer::{ActionRequest, ActionResponse, AttestationRequest, AttestationResponse, GetLedgerRequest, Ledger, User as UserProto};
+use proto::gossamer::{
+    ActionRequest, ActionResponse, AttestationRequest, AttestationResponse, GetLedgerRequest,
+    Ledger, User as UserProto,
+};
 use proto::service::brongnal_service_server::{BrongnalService, BrongnalServiceServer};
 use proto::service::{
     Message as MessageProto, RegisterPreKeyBundleResponse, PreKeyBundle, PreKeyBundleRequest,
@@ -49,8 +52,14 @@ impl GossamerService for MockBackend {
         }))
     }
 
-    async fn get_attestation(&self, _request: Request<AttestationRequest>) -> Result<Response<AttestationResponse>, Status> {
-        Err(Status::unimplemented("MockBackend::get_attestation unimplemented"))
+    async fn get_attestation(
+        &self,
+        _request: Request<AttestationRequest>,
+    ) -> Result<Response<AttestationResponse>, Status> {
+        Ok(Response::new(AttestationResponse {
+            container_image_digest: Some(vec![0xAA; 32]),
+            gca_token: Some("mock.jwt.token".to_string()),
+        }))
     }
 }
 

@@ -78,7 +78,8 @@ pub async fn start_hub(
     );
 
     if let Some(uname) = username {
-        let user = User::new(addr, client, uname)
+        let user = User::new(addr.clone(), addr, client, uname)
+            .await
             .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
         
         let mut state_user = STATE.user.lock().await;
@@ -113,7 +114,8 @@ pub async fn register_user(
             .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?,
     );
 
-    let mut user = User::new(backend_address, client, username)
+    let mut user = User::new(backend_address.clone(), backend_address, client, username)
+        .await
         .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?;
     user.register(fcm_token)
         .await
