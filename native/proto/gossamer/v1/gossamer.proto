@@ -13,30 +13,15 @@ service GossamerService {
 
 message AttestationRequest {}
 
-message VtpmAttestation {
-  optional bytes quote = 1;
-  optional bytes quote_signature = 2;
-  optional bytes pcr_values = 3;
-}
-
-message SnpAttestation {
-  optional bytes report = 1;
-  repeated bytes cert_chain = 2;
-}
-
 message AttestationResponse {
   // SHA-256 of the server container OCI image manifest.
   // Populated by the launcher from its own measurement of the container.
   optional bytes container_image_digest = 1;
-  // GCA OIDC token (JWT). Obtained by the launcher from Google Cloud
-  // Attestation using the background check model.
+  // GCA OIDC token (JWT) signed by Google's Confidential Computing attestation
+  // service. The client verifies this JWT's signature via the GCA JWKS endpoint.
+  // The aTLS binding (TLS pubkey hash) is embedded in the JWT's eat_nonce claim.
+  // See: https://cloud.google.com/confidential-computing/confidential-vm/docs/token-claims
   optional string gca_token = 2;
-  // Raw vTPM evidence (kept for future direct-verification use cases).
-  optional VtpmAttestation vtpm = 3;
-  // Raw SNP evidence (only on SEV-SNP instances, future use).
-  optional SnpAttestation snp = 4;
-  // SHA-256 of the TLS cert public key (for aTLS binding verification).
-  optional bytes tls_pubkey_hash = 5;
 }
 
 enum Action {
