@@ -76,6 +76,7 @@ impl AttestationVerifier {
             return Err(AttestationError::UntrustedContainer(digest.clone()));
         }
 
+
         // 3. Verify GCA JWT
         let token = response
             .gca_token
@@ -163,6 +164,9 @@ mod tests {
         let p_hash = vec![1, 2, 3, 4];
         let resp = AttestationResponse {
             container_image_digest: Some(vec![0xBB; 32]), // not in trusted list
+            vtpm: None,
+            snp: None,
+            tls_pubkey_hash: Some(p_hash.clone()),
             gca_token: None,
         };
 
@@ -173,12 +177,16 @@ mod tests {
         ));
     }
 
+
     #[tokio::test]
     async fn test_verify_missing_gca_token() {
         let verifier = AttestationVerifier;
         let p_hash = vec![1, 2, 3, 4];
         let resp = AttestationResponse {
             container_image_digest: Some(vec![0xAA; 32]),
+            vtpm: None,
+            snp: None,
+            tls_pubkey_hash: Some(p_hash.clone()),
             gca_token: None,
         };
 
