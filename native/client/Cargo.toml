@@ -11,6 +11,7 @@ blake2 = "0.10.6"
 chacha20poly1305 = "0.10.1"
 chrono = "0.4.41"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
+hex = "0.4"
 nom = "7.1.3"
 prost = "0.12.6"
 proto = { path = "../proto/" }
@@ -18,6 +19,10 @@ protocol = { path = "../protocol/" }
 rusqlite = { version = "0.32.1", features = [] }
 rustls = { version = "0.23.25", default-features = false, features = ["logging", "std", "ring"] }
 serde = "1.0.219"
+serde_json = "1.0.149"
+jsonwebtoken = "9"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+sha2 = "0.11.0"
 strum_macros = "0.26"
 thiserror = "1.0.69"
 tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros", "full"] }
@@ -25,9 +30,11 @@ tokio-rusqlite = { version = "0.6.0", features = [] }
 tokio-rustls = { version = "0.26.2", default-features = false, features = ["logging", "ring"] }
 tokio-stream = "0.1.17"
 tonic = { version = "0.11.0", features = ["tls", "transport", "tls-roots"] }
+tower = "0.5.3"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 tracing-tree = "0.4.1"
+webpki-roots = "1.0.6"
 x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
 xdg = "2.5.2"
 
