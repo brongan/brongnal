@@ -31,4 +31,5 @@ xdg = "2.5.2"
 
 [dev-dependencies]
 client = { path = "../client/" }
+identity = { path = "../identity/" }
 

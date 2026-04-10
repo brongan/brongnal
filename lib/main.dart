@@ -47,8 +47,10 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
   await core.startHub(
     databaseDirectory: databaseDirectory.path,
     username: username,
-    backendAddress: const String.fromEnvironment('BACKEND_ADDR',
+    mailboxAddress: const String.fromEnvironment('MAILBOX_ADDR',
         defaultValue: 'https://signal.brongan.com:443'),
+    identityAddress: const String.fromEnvironment('IDENTITY_ADDR',
+        defaultValue: 'https://gossamer.brongan.com:443'),
   );
 
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
@@ -168,7 +170,8 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
       await core.startHub(
         databaseDirectory: dbPath,
         username: savedUsername,
-        backendAddress: AppConfig.defaultBackendAddr,
+        mailboxAddress: AppConfig.defaultMailboxAddr,
+        identityAddress: AppConfig.defaultIdentityAddr,
       );
       watch.stop();
       debugPrint("Rust Hub initialized in ${watch.elapsedMilliseconds} ms");

@@ -2632,6 +2632,7 @@ dependencies = [
  "ed25519-dalek",
  "futures",
  "gcp_auth",
+ "identity",
  "prost",
  "proto",
  "protocol",

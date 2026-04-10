@@ -46,6 +46,10 @@
 		  cargoExtraArgs = "--package=server";
           cargoArtifacts = nativeArtifacts;
         });
+        myIdentity = craneLib.buildPackage (args // {
+		  cargoExtraArgs = "--package=identity";
+          cargoArtifacts = nativeArtifacts;
+        });
         dockerImage = pkgs.dockerTools.streamLayeredImage {
           name = "brongnal";
           tag = "latest";
@@ -57,10 +61,21 @@
             Env = ["RUST_LOG=info"];
           };
         };
+        identityImage = pkgs.dockerTools.streamLayeredImage {
+          name = "brongnal-identity";
+          tag = "latest";
+          contents = [ myIdentity ];
+          config = {
+            Cmd = [
+              "${myIdentity}/bin/identity"
+            ];
+            Env = ["RUST_LOG=info"];
+          };
+        };
       in
       {
         packages = {
-          inherit myServer dockerImage;
+          inherit myServer myIdentity dockerImage identityImage;
           default = myServer;
         };
       }

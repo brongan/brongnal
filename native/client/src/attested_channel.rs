@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use tonic::transport::{Channel, ClientTlsConfig};
 use sha2::{Digest, Sha256};
 use rustls::RootCertStore;
+use tracing::info;
 
 #[derive(Debug)]
 pub struct TlsRecorderVerifier {
@@ -119,6 +120,17 @@ pub struct AttestedChannel {
 
 impl AttestedChannel {
     pub async fn connect(dst: String) -> Result<Self, tonic::transport::Error> {
+        if dst.starts_with("http://") && std::env::var("BYPASS_ATTESTATION").is_ok() {
+            info!("Creating insecure channel to {dst} because BYPASS_ATTESTATION is set");
+            let channel = Endpoint::from_shared(dst)
+                .map_err(|e| tonic::transport::Error::from(e))?
+                .connect()
+                .await?;
+            return Ok(Self {
+                channel,
+                captured_hash: Arc::new(Mutex::new(Some(vec![0u8; 32]))), // Dummy hash for bypass
+            });
+        }
         let captured_hash = Arc::new(Mutex::new(None));
         let verifier = TlsRecorderVerifier::new(captured_hash.clone());
 

@@ -52,7 +52,8 @@ class Register extends StatelessWidget {
                   try {
                     await core.registerUser(
                         username: username,
-                        backendAddress: AppConfig.defaultBackendAddr,
+                        mailboxAddress: AppConfig.defaultMailboxAddr,
+                        identityAddress: AppConfig.defaultIdentityAddr,
                         databaseDirectory: dbPath);
 
                     final SharedPreferences prefs =

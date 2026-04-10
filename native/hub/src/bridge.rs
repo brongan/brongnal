@@ -62,9 +62,12 @@ pub async fn start_hub(
     database_directory: String,
     username: Option<String>,
     fcm_token: Option<String>,
-    backend_address: Option<String>,
+    mailbox_address: Option<String>,
+    identity_address: Option<String>,
 ) -> Result<(), BridgeError> {
-    let addr = backend_address.unwrap_or_else(|| "https://signal.brongan.com:443".to_string());
+    let mailbox_addr = mailbox_address.unwrap_or_else(|| "https://signal.brongan.com:443".to_string());
+    let identity_addr = identity_address.unwrap_or_else(|| "https://gossamer.brongan.com:443".to_string());
+
     let db_path = PathBuf::from(database_directory).join("keys.sqlite");
 
     let connection = Connection::open(db_path)
@@ -78,7 +81,7 @@ pub async fn start_hub(
     );
 
     if let Some(uname) = username {
-        let user = User::new(addr.clone(), addr, client, uname)
+        let user = User::new(mailbox_addr, identity_addr, client, uname)
             .await
             .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
         
@@ -99,7 +102,8 @@ pub async fn start_hub(
 pub async fn register_user(
     username: String,
     fcm_token: Option<String>,
-    backend_address: String,
+    mailbox_address: String,
+    identity_address: String,
     database_directory: String,
 ) -> Result<(), BridgeError> {
     let db_path = PathBuf::from(database_directory).join("keys.sqlite");
@@ -114,7 +118,7 @@ pub async fn register_user(
             .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?,
     );
 
-    let mut user = User::new(backend_address.clone(), backend_address, client, username)
+    let mut user = User::new(mailbox_address, identity_address, client, username)
         .await
         .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?;
     user.register(fcm_token)

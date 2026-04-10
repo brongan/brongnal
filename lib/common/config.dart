@@ -11,15 +11,17 @@ class AppConfig {
     _dbOverride = path;
   }
 
-  static void setBackendOverride(String? addr) {
-    _backendOverride = addr;
-  }
-
-  static String get defaultBackendAddr =>
+  static String get defaultMailboxAddr =>
       _backendOverride ??
       const String.fromEnvironment(
-        'BACKEND_ADDR',
+        'MAILBOX_ADDR',
         defaultValue: 'https://signal.brongan.com:443',
+      );
+
+  static String get defaultIdentityAddr =>
+      const String.fromEnvironment(
+        'IDENTITY_ADDR',
+        defaultValue: 'https://gossamer.brongan.com:443',
       );
 
   static Future<String> getDatabaseDirectory({String? override}) async {
