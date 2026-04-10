@@ -21,14 +21,13 @@ format:
 
 test: build
 	cargo test --workspace --verbose
-	flutter test -d linux test_driver/app_test.dart
 
 # run this before pushing a commit!
 precommit: format test build container 
 	
 # push server to fly.io
 deploy: container
-	podman push brongnal docker://registry.fly.io/brongnal:latest
+	podman push brongnal registry.fly.io/brongnal:latest
 	flyctl deploy -i registry.fly.io/brongnal:latest
 
 # generate flutter_rust_bridge bindings

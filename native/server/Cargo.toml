@@ -3,6 +3,13 @@ name = "server"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0.97"
 base64 = "0.22.1"
@@ -31,4 +38,5 @@ xdg = "2.5.2"
 
 [dev-dependencies]
 client = { path = "../client/" }
+gossamer = { path = "../gossamer/" }
 

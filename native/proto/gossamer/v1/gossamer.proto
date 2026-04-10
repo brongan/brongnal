@@ -7,8 +7,17 @@ package gossamer.v1;
 // provider is the human readable form of an identity.
 service GossamerService {
   rpc Action(ActionRequest) returns (ActionResponse);
-
   rpc GetLedger(GetLedgerRequest) returns (Ledger);
+  rpc GetAttestation(AttestationRequest) returns (AttestationResponse);
+}
+
+message AttestationRequest {}
+
+message AttestationResponse {
+  // SHA-256 of the server container OCI image manifest
+  optional bytes container_image_digest = 1;
+  // GCA OIDC token (JWT) obtained from Google Cloud Attestation
+  optional string gca_token = 2;
 }
 
 enum Action {

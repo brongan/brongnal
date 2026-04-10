@@ -1,12 +1,10 @@
 #![feature(duration_constructors)]
-use crate::gossamer::InMemoryGossamer;
-use crate::push_notifications::FirebaseCloudMessagingClient;
-use brongnal::BrongnalController;
-use persistence::{clean_mailboxes, SqliteStorage};
-use proto::gossamer::gossamer_service_server::GossamerServiceServer as GossamerServer;
 use proto::service::brongnal_service_server::BrongnalServiceServer as BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
 use sentry::ClientInitGuard;
+use server::brongnal::BrongnalController;
+use server::persistence::{clean_mailboxes, SqliteStorage};
+use server::push_notifications::FirebaseCloudMessagingClient;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -17,11 +15,6 @@ use tracing::{info, warn, Level};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
-
-mod brongnal;
-mod gossamer;
-mod persistence;
-mod push_notifications;
 
 pub async fn db_cleanup(connection: tokio_rusqlite::Connection) {
     let mut interval = tokio::time::interval(Duration::from_hours(1));
@@ -93,10 +86,115 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Server::builder()
         .add_service(BrongnalServer::new(controller))
-        .add_service(GossamerServer::new(InMemoryGossamer::default()))
         .add_service(reflection_service)
         .serve(server_addr)
         .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use client::{User, X3DHClient};
+    use gossamer::persistence::GossamerStorage;
+    use gossamer::service::Service;
+    use proto::gossamer::gossamer_service_server::GossamerServiceServer as GossamerServer;
+    use proto::service::brongnal_service_server::BrongnalServiceServer as BrongnalServer;
+    use std::sync::Arc;
+    use tokio_rusqlite::Connection;
+    use tokio_stream::StreamExt;
+    use tonic::transport::Server;
+
+    #[tokio::test]
+    async fn test_split_services_flow() {
+        // 1. Spawn Identity Service (OS-assigned port)
+        let identity_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let identity_port = identity_listener.local_addr().unwrap().port();
+        let identity_addr = format!("http://127.0.0.1:{identity_port}");
+
+        let identity_conn = Connection::open_in_memory().await.unwrap();
+        let identity_storage = GossamerStorage::new(identity_conn).await.unwrap();
+        let identity_handler = Service::new(identity_storage);
+
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(GossamerServer::new(identity_handler))
+                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(
+                    identity_listener,
+                ))
+                .await
+                .unwrap();
+        });
+
+        // 2. Spawn Mailbox Service (OS-assigned port)
+        let mailbox_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mailbox_port = mailbox_listener.local_addr().unwrap().port();
+        let mailbox_addr = format!("http://127.0.0.1:{mailbox_port}");
+
+        let mailbox_conn = Connection::open_in_memory().await.unwrap();
+        let mailbox_storage = SqliteStorage::new(mailbox_conn).await.unwrap();
+        let mailbox_controller = BrongnalController::new(mailbox_storage, None);
+
+        tokio::spawn(async move {
+            Server::builder()
+                .add_service(BrongnalServer::new(mailbox_controller))
+                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(
+                    mailbox_listener,
+                ))
+                .await
+                .unwrap();
+        });
+
+        // Give servers a moment to start
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        // 3. Client 1: Alice registers
+        let alice_db = Connection::open_in_memory().await.unwrap();
+        let alice_x3dh = Arc::new(X3DHClient::new(alice_db).await.unwrap());
+        let mut alice = User::new(
+            mailbox_addr.clone(),
+            identity_addr.clone(),
+            alice_x3dh,
+            "alice".to_string(),
+        )
+        .expect("Failed to create Alice");
+
+        alice
+            .register(None)
+            .await
+            .expect("Alice registration failed");
+
+        // 4. Client 2: Bob registers
+        let bob_db = Connection::open_in_memory().await.unwrap();
+        let bob_x3dh = Arc::new(X3DHClient::new(bob_db).await.unwrap());
+        let mut bob = User::new(
+            mailbox_addr.clone(),
+            identity_addr.clone(),
+            bob_x3dh,
+            "bob".to_string(),
+        )
+        .expect("Failed to create Bob");
+
+        bob.register(None).await.expect("Bob registration failed");
+
+        // 5. Alice sends message to Bob
+        alice
+            .send_message("bob".to_string(), "Hello Bob!".to_string())
+            .await
+            .expect("Alice failed to send message");
+
+        // 6. Bob receives and decrypts message
+        let subscriber = bob.get_messages().await.expect("Bob failed to subscribe");
+        let stream = subscriber.into_stream();
+        tokio::pin!(stream);
+        let msg = stream
+            .next()
+            .await
+            .expect("Stream ended early")
+            .expect("Failed to receive message");
+
+        assert_eq!(msg.sender, "alice");
+        assert_eq!(msg.text, "Hello Bob!");
+    }
 }

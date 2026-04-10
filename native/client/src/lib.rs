@@ -4,8 +4,8 @@ use anyhow::Context;
 use async_stream::{stream, try_stream};
 use blake2::{Blake2b, Digest};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
+use client::MessageState;
 pub use client::X3DHClient;
-use client::{MessageState};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
@@ -195,7 +195,7 @@ impl MessageSubscriber {
                         sender,
                         text
                     } = application_message;
-                    let id = self.x3dh.persist_message(sender.clone(), self.username.clone(), text.clone(), MessageState::Delivered).await?;
+                    let _id = self.x3dh.persist_message(sender.clone(), self.username.clone(), text.clone(), MessageState::Delivered).await?;
                     Ok::<MessageModel, ClientError>(MessageModel {
                         sender,
                         receiver: self.username.clone(),
@@ -221,15 +221,20 @@ impl User {
     /// The underlying Channel connects on first RPC and auto-reconnects on failure.
     #[tracing::instrument(skip(x3dh))]
     pub fn new(
-        addr: String,
+        mailbox_addr: String,
+        identity_addr: String,
         x3dh: Arc<X3DHClient>,
         username: String,
     ) -> ClientResult<Self> {
-        let channel = tonic::transport::Endpoint::from_shared(addr)
+        let mailbox_channel = tonic::transport::Endpoint::from_shared(mailbox_addr)
             .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
             .connect_lazy();
-        let brongnal = BrongnalClient::new(channel.clone());
-        let gossamer = GossamerClient::new(channel);
+        let identity_channel = tonic::transport::Endpoint::from_shared(identity_addr)
+            .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
+            .connect_lazy();
+
+        let brongnal = BrongnalClient::new(mailbox_channel);
+        let gossamer = GossamerClient::new(identity_channel);
         Ok(User {
             brongnal,
             gossamer,

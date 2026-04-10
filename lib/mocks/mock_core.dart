@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:brongnal_app/common/core.dart';
-import 'package:brongnal_app/src/rust/bridge.dart' show MessageModel, MessageState;
+import 'package:brongnal_app/src/rust/bridge.dart'
+    show MessageModel, MessageState;
 
 class MockCore implements BrongnalCore {
   final List<MessageModel> _messages = [];
-  final StreamController<MessageModel> _controller = StreamController.broadcast();
+  final StreamController<MessageModel> _controller =
+      StreamController.broadcast();
   bool isHubStarted = false;
   String? registeredUser;
 

@@ -24,6 +24,11 @@ import 'package:xdg_directories/xdg_directories.dart';
 int id = 0;
 
 Future<void> _onMessageReceived(MessageModel message) async {
+  if (Platform.environment.containsKey('FLUTTER_TEST')) {
+    debugPrint(
+        "Skipping notifications in test: ${message.sender}: ${message.text}");
+    return;
+  }
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
   await plugin.show(id++, message.sender, message.text, toNotification(message),
       payload: message.sender);
@@ -43,7 +48,7 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
     databaseDirectory = await getApplicationCacheDirectory();
   }
 
-  final bridge = const RustBrongnalCore();
+  final core = const RustBrongnalCore();
   await core.startHub(
     databaseDirectory: databaseDirectory.path,
     username: username,
@@ -159,9 +164,10 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
   }
 
   // Determine database directory
-  final String dbPath = await AppConfig.getDatabaseDirectory(override: dbDirOverride);
+  final String dbPath =
+      await AppConfig.getDatabaseDirectory(override: dbDirOverride);
 
-  final bridge = const RustBrongnalCore();
+  final core = const RustBrongnalCore();
   if (savedUsername != null) {
     try {
       final watch = Stopwatch()..start();
@@ -169,6 +175,7 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
         databaseDirectory: dbPath,
         username: savedUsername,
         backendAddress: AppConfig.defaultBackendAddr,
+        fcmToken: fcmToken,
       );
       watch.stop();
       debugPrint("Rust Hub initialized in ${watch.elapsedMilliseconds} ms");
@@ -177,7 +184,7 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
     }
   }
 
-  runApp(BrongnalApp(username: savedUsername, core: bridge));
+  runApp(BrongnalApp(username: savedUsername, core: core));
 }
 
 void setupWindow() {
@@ -221,13 +228,12 @@ class _BrongnalAppState extends State<BrongnalApp> {
     super.dispose();
   }
 
-
   @override
   Widget build(BuildContext context) {
     final Widget child;
     if (username == null) {
       child = Register(
-          core: widget.bridge,
+          core: widget.core,
           onRegister: (newUsername) {
             setState(() {
               username = newUsername;
@@ -238,7 +244,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
         create: (context) => ChatHistory(
             username: username!,
             onMessageReceived: _onMessageReceived,
-            core: widget.bridge),
+            core: widget.core),
         child: Navigator(
           pages: [
             MaterialPage(child: Home(username: username!)),

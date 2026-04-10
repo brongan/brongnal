@@ -78,9 +78,9 @@ pub async fn start_hub(
     );
 
     if let Some(uname) = username {
-        let user = User::new(addr, client, uname)
+        let user = User::new(addr.clone(), addr.clone(), client, uname)
             .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
-        
+
         let mut state_user = STATE.user.lock().await;
         *state_user = Some(user.clone());
 
@@ -101,6 +101,7 @@ pub async fn register_user(
     backend_address: String,
     database_directory: String,
 ) -> Result<(), BridgeError> {
+    println!("Rust: register_user started for {}", username);
     let db_path = PathBuf::from(database_directory).join("keys.sqlite");
 
     let connection = Connection::open(db_path)
@@ -113,7 +114,7 @@ pub async fn register_user(
             .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?,
     );
 
-    let mut user = User::new(backend_address, client, username)
+    let mut user = User::new(backend_address.clone(), backend_address, client, username)
         .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))?;
     user.register(fcm_token)
         .await
@@ -128,9 +129,12 @@ pub async fn register_user(
 pub async fn send_message(recipient: String, text: String) -> Result<MessageModel, BridgeError> {
     let user = {
         let state_user = STATE.user.lock().await;
-        state_user.as_ref().ok_or(BridgeError::MessageSendFailed(
-            "User not initialized".to_string(),
-        ))?.clone()
+        state_user
+            .as_ref()
+            .ok_or(BridgeError::MessageSendFailed(
+                "User not initialized".to_string(),
+            ))?
+            .clone()
     };
 
     let id = user
@@ -152,7 +156,8 @@ pub async fn get_all_messages() -> Result<Vec<MessageModel>, BridgeError> {
             .as_ref()
             .ok_or(BridgeError::InitializationFailed(
                 "User not initialized".to_string(),
-            ))?.clone()
+            ))?
+            .clone()
     };
 
     let history = user
@@ -166,9 +171,12 @@ pub async fn get_all_messages() -> Result<Vec<MessageModel>, BridgeError> {
 pub async fn subscribe_messages(sink: StreamSink<MessageModel>) -> Result<(), BridgeError> {
     let user = {
         let state_user = STATE.user.lock().await;
-        state_user.as_ref().ok_or(BridgeError::InitializationFailed(
-            "User not initialized".to_string(),
-        ))?.clone()
+        state_user
+            .as_ref()
+            .ok_or(BridgeError::InitializationFailed(
+                "User not initialized".to_string(),
+            ))?
+            .clone()
     };
 
     let subscriber = user
@@ -201,6 +209,6 @@ pub async fn start_mock_server(port: u16) -> Result<(), BridgeError> {
         .await
         .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
     tokio::spawn(crate::mock_server::serve(listener, std::future::pending()));
-    
+
     Ok(())
 }

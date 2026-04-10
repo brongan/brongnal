@@ -56,12 +56,12 @@ async fn main() -> Result<()> {
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let connection = Connection::open(db_path).await?;
     let client = Arc::new(X3DHClient::new(connection.clone()).await?);
-    let ik = client.get_ik();
 
-    #[allow(deprecated)]
-    let ik_str = base64::encode(ik.verifying_key().as_bytes());
-    info!("Registering {name} with key={ik_str} at {addr}");
-    let mut user = User::new(addr, client, name.clone())?;
+    let mailbox_addr = addr.clone();
+    let identity_addr = args.get(3).cloned().unwrap_or_else(|| mailbox_addr.clone());
+
+    info!("Registering {name} (mailbox: {mailbox_addr}, identity: {identity_addr})");
+    let user = User::new(mailbox_addr, identity_addr, client, name.clone())?;
     let history = user.get_message_history().await.unwrap();
     for message in history {
         println!("{message}");

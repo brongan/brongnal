@@ -50,16 +50,19 @@ class Register extends StatelessWidget {
                   final String dbPath = await AppConfig.getDatabaseDirectory();
 
                   try {
+                    debugPrint('Registering user: $username...');
                     await core.registerUser(
                         username: username,
                         backendAddress: AppConfig.defaultBackendAddr,
                         databaseDirectory: dbPath);
+                    debugPrint('Registration successful!');
 
                     final SharedPreferences prefs =
                         await SharedPreferences.getInstance();
                     await prefs.setString("username", username);
                     onRegister(username);
                   } catch (e) {
+                    debugPrint('Registration failed with error: $e');
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Registration failed: $e')),
