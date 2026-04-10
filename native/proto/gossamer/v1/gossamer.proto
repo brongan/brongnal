@@ -14,14 +14,12 @@ service GossamerService {
 message AttestationRequest {}
 
 message AttestationResponse {
-  // SHA-256 of the server container OCI image manifest.
-  // Populated by the launcher from its own measurement of the container.
-  optional bytes container_image_digest = 1;
   // GCA OIDC token (JWT) signed by Google's Confidential Computing attestation
   // service. The client verifies this JWT's signature via the GCA JWKS endpoint.
+  // Container image digest is in submods.container.image_digest inside the JWT.
   // The aTLS binding (TLS pubkey hash) is embedded in the JWT's eat_nonce claim.
   // See: https://cloud.google.com/confidential-computing/confidential-vm/docs/token-claims
-  optional string gca_token = 2;
+  optional string gca_token = 1;
 }
 
 enum Action {
