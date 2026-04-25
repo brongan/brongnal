@@ -43,7 +43,7 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
     databaseDirectory = await getApplicationCacheDirectory();
   }
 
-  final bridge = const RustBrongnalCore();
+  final core = const RustBrongnalCore();
   await core.startHub(
     databaseDirectory: databaseDirectory.path,
     username: username,
@@ -159,9 +159,10 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
   }
 
   // Determine database directory
-  final String dbPath = await AppConfig.getDatabaseDirectory(override: dbDirOverride);
+  final String dbPath =
+      await AppConfig.getDatabaseDirectory(override: dbDirOverride);
 
-  final bridge = const RustBrongnalCore();
+  final core = const RustBrongnalCore();
   if (savedUsername != null) {
     try {
       final watch = Stopwatch()..start();
@@ -177,7 +178,7 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
     }
   }
 
-  runApp(BrongnalApp(username: savedUsername, core: bridge));
+  runApp(BrongnalApp(username: savedUsername, core: core));
 }
 
 void setupWindow() {
@@ -221,13 +222,12 @@ class _BrongnalAppState extends State<BrongnalApp> {
     super.dispose();
   }
 
-
   @override
   Widget build(BuildContext context) {
     final Widget child;
     if (username == null) {
       child = Register(
-          core: widget.bridge,
+          core: widget.core,
           onRegister: (newUsername) {
             setState(() {
               username = newUsername;
@@ -238,7 +238,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
         create: (context) => ChatHistory(
             username: username!,
             onMessageReceived: _onMessageReceived,
-            core: widget.bridge),
+            core: widget.core),
         child: Navigator(
           pages: [
             MaterialPage(child: Home(username: username!)),
