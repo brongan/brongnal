@@ -189,7 +189,7 @@ impl std::fmt::Display for MessageModel {
             state,
             ref text,
         } = self;
-        let db_recv_time = DateTime::from_timestamp(db_recv_time as i64, 0).unwrap();
+        let db_recv_time = DateTime::from_timestamp(db_recv_time, 0).unwrap();
         write!(
             f,
             "From: {sender} To: {receiver} at {db_recv_time} with {state}\n{text}"
@@ -233,12 +233,12 @@ fn persist_state(
     message: &str,
     state: MessageState,
 ) -> rusqlite::Result<MessageId> {
-    Ok(connection.query_row("INSERT OR IGNORE INTO messages (sender, receiver, creation_time, state, text) VALUES ($1, $2, $3, $4, $5) RETURNING rowid", 
+    connection.query_row("INSERT OR IGNORE INTO messages (sender, receiver, creation_time, state, text) VALUES ($1, $2, $3, $4, $5) RETURNING rowid", 
         params![
             sender, receiver, time_now(), state as u8, message
         ],
         |row| row.get(0),
-    )?)
+    )
 }
 
 fn update_state(
@@ -283,7 +283,7 @@ fn get_conversations(connection: &Connection) -> rusqlite::Result<Vec<MessageMod
             text: row.get(4)?,
         })
     })?;
-    Ok(message_iter.try_collect()?)
+    message_iter.try_collect()
 }
 
 impl X3DHClient {
