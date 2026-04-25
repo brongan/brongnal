@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
     #[allow(deprecated)]
     let ik_str = base64::encode(ik.verifying_key().as_bytes());
     info!("Registering {name} with key={ik_str} at {addr}");
-    let mut user = User::new(addr, client, name.clone())?;
+    let user = User::new(addr, client, name.clone())?;
     let history = user.get_message_history().await.unwrap();
     for message in history {
         println!("{message}");
