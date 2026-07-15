@@ -4,8 +4,7 @@ _default:
 
 # build server and apk
 build:
-	cargo b --all
-	flutter build apk
+	nix build .#myServer .#apk
 
 # nix build and pipe into podman
 container:
@@ -14,14 +13,10 @@ container:
 
 # linters!
 format:
-	dart analyze --fatal-infos
-	dart format .
-	cargo fmt
-	cargo clippy --fix --allow-dirty
+	nix run .#format
 
 test: build
-	cargo test --workspace --verbose
-	flutter test -d linux test_driver/app_test.dart
+	nix run .#test
 
 # run this before pushing a commit!
 precommit: format test build container 
@@ -33,5 +28,4 @@ deploy: container
 
 # generate flutter_rust_bridge bindings
 codegen:
-	flutter_rust_bridge_codegen generate --rust-input crate::bridge --rust-root native/hub --dart-output lib/src/rust
-
+	nix run .#codegen
