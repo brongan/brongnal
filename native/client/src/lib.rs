@@ -4,8 +4,8 @@ use anyhow::Context;
 use async_stream::{stream, try_stream};
 use blake2::{Blake2b, Digest};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
+use client::MessageState;
 pub use client::X3DHClient;
-use client::{MessageState};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
@@ -220,11 +220,7 @@ impl User {
     /// Create a new User with lazy gRPC connections.
     /// The underlying Channel connects on first RPC and auto-reconnects on failure.
     #[tracing::instrument(skip(x3dh))]
-    pub fn new(
-        addr: String,
-        x3dh: Arc<X3DHClient>,
-        username: String,
-    ) -> ClientResult<Self> {
+    pub fn new(addr: String, x3dh: Arc<X3DHClient>, username: String) -> ClientResult<Self> {
         let channel = tonic::transport::Endpoint::from_shared(addr)
             .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
             .connect_lazy();

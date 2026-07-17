@@ -1,15 +1,15 @@
+use prost::Message;
 use proto::gossamer::gossamer_service_server::{GossamerService, GossamerServiceServer};
 use proto::gossamer::{ActionRequest, ActionResponse, GetLedgerRequest, Ledger, User as UserProto};
 use proto::service::brongnal_service_server::{BrongnalService, BrongnalServiceServer};
 use proto::service::{
-    Message as MessageProto, RegisterPreKeyBundleResponse, PreKeyBundle, PreKeyBundleRequest,
-    RegisterPreKeyBundleRequest, RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
+    Message as MessageProto, PreKeyBundle, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
+    RegisterPreKeyBundleResponse, RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tonic::{transport::Server, Request, Response, Status};
 use tokio_stream::wrappers::ReceiverStream;
-use prost::Message;
+use tonic::{transport::Server, Request, Response, Status};
 
 #[derive(Default)]
 struct InnerState {
@@ -24,13 +24,24 @@ pub struct MockBackend {
 
 #[tonic::async_trait]
 impl GossamerService for MockBackend {
-    async fn action(&self, request: Request<ActionRequest>) -> Result<Response<ActionResponse>, Status> {
+    async fn action(
+        &self,
+        request: Request<ActionRequest>,
+    ) -> Result<Response<ActionResponse>, Status> {
         let req = request.into_inner();
-        let signed = req.message.ok_or(Status::invalid_argument("missing message"))?;
-        let ik = signed.identity_key.ok_or(Status::invalid_argument("missing ik"))?;
-        
-        let contents = proto::gossamer::Message::decode(&*signed.contents.ok_or(Status::invalid_argument("missing contents"))?)
-            .map_err(|e| Status::internal(e.to_string()))?;
+        let signed = req
+            .message
+            .ok_or(Status::invalid_argument("missing message"))?;
+        let ik = signed
+            .identity_key
+            .ok_or(Status::invalid_argument("missing ik"))?;
+
+        let contents = proto::gossamer::Message::decode(
+            &*signed
+                .contents
+                .ok_or(Status::invalid_argument("missing contents"))?,
+        )
+        .map_err(|e| Status::internal(e.to_string()))?;
 
         let mut state = self.state.lock().unwrap();
         let provider = contents.provider.unwrap();
@@ -42,7 +53,10 @@ impl GossamerService for MockBackend {
         Ok(Response::new(ActionResponse {}))
     }
 
-    async fn get_ledger(&self, _request: Request<GetLedgerRequest>) -> Result<Response<Ledger>, Status> {
+    async fn get_ledger(
+        &self,
+        _request: Request<GetLedgerRequest>,
+    ) -> Result<Response<Ledger>, Status> {
         let state = self.state.lock().unwrap();
         Ok(Response::new(Ledger {
             users: state.users.values().cloned().collect(),
@@ -56,8 +70,8 @@ impl BrongnalService for MockBackend {
         &self,
         _request: Request<RegisterPreKeyBundleRequest>,
     ) -> Result<Response<RegisterPreKeyBundleResponse>, Status> {
-        Ok(Response::new(RegisterPreKeyBundleResponse { 
-            num_keys: Some(100)
+        Ok(Response::new(RegisterPreKeyBundleResponse {
+            num_keys: Some(100),
         }))
     }
 
@@ -66,7 +80,9 @@ impl BrongnalService for MockBackend {
         request: Request<PreKeyBundleRequest>,
     ) -> Result<Response<PreKeyBundle>, Status> {
         let req = request.into_inner();
-        let ik = req.identity_key.ok_or(Status::invalid_argument("missing identity key"))?;
+        let ik = req
+            .identity_key
+            .ok_or(Status::invalid_argument("missing identity key"))?;
         Ok(Response::new(PreKeyBundle {
             identity_key: Some(ik),
             signed_pre_key: Some(proto::service::SignedPreKey {
@@ -83,8 +99,12 @@ impl BrongnalService for MockBackend {
     ) -> Result<Response<SendMessageResponse>, Status> {
         let mut stream = request.into_inner();
         while let Some(req) = stream.message().await? {
-            let recipient = req.recipient_identity_key.ok_or(Status::invalid_argument("missing recipient"))?;
-            let message = req.message.ok_or(Status::invalid_argument("missing message"))?;
+            let recipient = req
+                .recipient_identity_key
+                .ok_or(Status::invalid_argument("missing recipient"))?;
+            let message = req
+                .message
+                .ok_or(Status::invalid_argument("missing message"))?;
             let mut state = self.state.lock().unwrap();
             state.messages.entry(recipient).or_default().push(message);
         }
@@ -98,11 +118,13 @@ impl BrongnalService for MockBackend {
         request: Request<RetrieveMessagesRequest>,
     ) -> Result<Response<Self::RetrieveMessagesStream>, Status> {
         let req = request.into_inner();
-        let ik = req.identity_key.ok_or(Status::invalid_argument("missing identity key"))?;
-        
+        let ik = req
+            .identity_key
+            .ok_or(Status::invalid_argument("missing identity key"))?;
+
         let (tx, rx) = tokio::sync::mpsc::channel(4);
         let state_arc = self.state.clone();
-        
+
         tokio::spawn(async move {
             loop {
                 let msgs = {
@@ -122,7 +144,7 @@ impl BrongnalService for MockBackend {
     }
 }
 
-/// Binds to the address and returns the listener. 
+/// Binds to the address and returns the listener.
 /// Awaiting this ensures the port is reserved.
 pub async fn bind(addr: &str) -> Result<tokio::net::TcpListener, Box<dyn std::error::Error>> {
     let addr: std::net::SocketAddr = addr.parse()?;

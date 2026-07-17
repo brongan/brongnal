@@ -72,12 +72,13 @@ impl Service {
                     .get_key_provider(public_key)
                     .await
                     .map_err(|e| Status::internal(e.to_string()))?
-                    && owner != provider {
-                        return Err(Status::permission_denied(format!(
-                            "The public key being added is already associated with another provider: 0x{}",
-                            hex::encode(owner)
-                        )));
-                    }
+                    && owner != provider
+                {
+                    return Err(Status::permission_denied(format!(
+                        "The public key being added is already associated with another provider: 0x{}",
+                        hex::encode(owner)
+                    )));
+                }
 
                 let _inserted = self
                     .storage
