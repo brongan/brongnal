@@ -268,7 +268,7 @@
           ) ''
             cargo test --workspace --verbose
             LD_LIBRARY_PATH="$PWD/target/debug" \
-              flutter test -d linux test_driver/app_test.dart
+              flutter test -d linux integration_test/app_test.dart
           '';
         };
 

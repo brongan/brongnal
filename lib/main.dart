@@ -132,7 +132,10 @@ void main() async {
   await runBrongnalApp();
 }
 
-Future<void> runBrongnalApp({String? dbDirOverride}) async {
+Future<void> runBrongnalApp({
+  String? dbDirOverride,
+  Future<void> Function(MessageModel)? onMessageReceived,
+}) async {
   setupWindow();
 
   final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -178,7 +181,11 @@ Future<void> runBrongnalApp({String? dbDirOverride}) async {
     }
   }
 
-  runApp(BrongnalApp(username: savedUsername, core: core));
+  runApp(BrongnalApp(
+    username: savedUsername,
+    core: core,
+    onMessageReceived: onMessageReceived ?? _onMessageReceived,
+  ));
 }
 
 void setupWindow() {
@@ -192,9 +199,15 @@ void setupWindow() {
 }
 
 class BrongnalApp extends StatefulWidget {
-  const BrongnalApp({super.key, required this.username, required this.core});
+  const BrongnalApp({
+    super.key,
+    required this.username,
+    required this.core,
+    required this.onMessageReceived,
+  });
   final String? username;
   final BrongnalCore core;
+  final Future<void> Function(MessageModel) onMessageReceived;
 
   @override
   State<BrongnalApp> createState() => _BrongnalAppState();
@@ -237,7 +250,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
       child = ChangeNotifierProvider(
         create: (context) => ChatHistory(
             username: username!,
-            onMessageReceived: _onMessageReceived,
+            onMessageReceived: widget.onMessageReceived,
             core: widget.core),
         child: Navigator(
           pages: [

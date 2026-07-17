@@ -25,7 +25,10 @@ void main() {
       final tempDir = Directory.systemTemp.createTempSync('brongnal_test_');
       debugPrint('Using temporary database directory: ${tempDir.path}');
 
-      await app.runBrongnalApp(dbDirOverride: tempDir.path);
+      await app.runBrongnalApp(
+        dbDirOverride: tempDir.path,
+        onMessageReceived: (_) async {},
+      );
       await tester.pumpAndSettle();
 
       // Verify we are on the registration screen
