@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'package:brongnal_app/src/rust/bridge.dart';
-import 'package:brongnal_app/src/rust/frb_generated.dart';
+import 'package:brongnal_app/src/rust/bridge.dart' as bridge;
 
 abstract class BrongnalCore {
   Future<void> startHub({
@@ -17,14 +16,14 @@ abstract class BrongnalCore {
     required String databaseDirectory,
   });
 
-  Future<MessageModel> sendMessage({
+  Future<bridge.MessageModel> sendMessage({
     required String recipient,
     required String text,
   });
 
-  Future<List<MessageModel>> getAllMessages();
+  Future<List<bridge.MessageModel>> getAllMessages();
 
-  Stream<MessageModel> subscribeMessages();
+  Stream<bridge.MessageModel> subscribeMessages();
 }
 
 class RustBrongnalCore implements BrongnalCore {
@@ -37,7 +36,7 @@ class RustBrongnalCore implements BrongnalCore {
     String? fcmToken,
     String? backendAddress,
   }) {
-    return RustLib.instance.api.crateBridgeStartHub(
+    return bridge.startHub(
       databaseDirectory: databaseDirectory,
       username: username,
       fcmToken: fcmToken,
@@ -52,7 +51,7 @@ class RustBrongnalCore implements BrongnalCore {
     required String backendAddress,
     required String databaseDirectory,
   }) {
-    return RustLib.instance.api.crateBridgeRegisterUser(
+    return bridge.registerUser(
       username: username,
       fcmToken: fcmToken,
       backendAddress: backendAddress,
@@ -61,20 +60,20 @@ class RustBrongnalCore implements BrongnalCore {
   }
 
   @override
-  Future<MessageModel> sendMessage({
+  Future<bridge.MessageModel> sendMessage({
     required String recipient,
     required String text,
   }) {
-    return RustLib.instance.api.crateBridgeSendMessage(recipient: recipient, text: text);
+    return bridge.sendMessage(recipient: recipient, text: text);
   }
 
   @override
-  Future<List<MessageModel>> getAllMessages() {
-    return RustLib.instance.api.crateBridgeGetAllMessages();
+  Future<List<bridge.MessageModel>> getAllMessages() {
+    return bridge.getAllMessages();
   }
 
   @override
-  Stream<MessageModel> subscribeMessages() {
-    return RustLib.instance.api.crateBridgeSubscribeMessages();
+  Stream<bridge.MessageModel> subscribeMessages() {
+    return bridge.subscribeMessages();
   }
 }
