@@ -25,6 +25,7 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.direnv/
 .flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
@@ -44,7 +45,7 @@ app.*.map.json
 
 # Rust
 /target
-result
+/result*
 
 # Generated messages
 */**/messages/

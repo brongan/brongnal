@@ -65,24 +65,25 @@
         '';
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
         src = lib.cleanSource ./.;
+        androidNdkVersion = "28.2.13676358";
         androidComposition = pkgs.androidenv.composeAndroidPackages {
           # rust_builder requires API 34, flutter_local_notifications requires
-          # API 35, and Flutter 3.35 builds the app against API 36.
+          # API 35, and Flutter 3.38 builds the app against API 36.
           platformVersions = [ "34" "35" "36" ];
           buildToolsVersions = [ "35.0.0" ];
           cmakeVersions = [ "3.22.1" ];
           includeNDK = true;
-          ndkVersions = [ "27.0.12077973" ];
+          ndkVersions = [ androidNdkVersion ];
         };
         androidSdk = androidComposition.androidsdk;
         androidHome = "${androidSdk}/libexec/android-sdk";
-        flutterAndroid = pkgs.flutter335.override {
+        flutterAndroid = pkgs.flutter.override {
           supportedTargetFlutterPlatforms = [
             "universal"
             "android"
           ];
         };
-        flutterDevelopment = pkgs.flutter335.override {
+        flutterDevelopment = pkgs.flutter.override {
           supportedTargetFlutterPlatforms = [
             "universal"
             "android"
@@ -163,7 +164,7 @@
               -t ${toolchain} "$out/bin/server"
           '';
         });
-        apk = pkgs.flutter335.buildFlutterApplication {
+        apk = pkgs.flutter.buildFlutterApplication {
           pname = "brongnal-apk";
           version = "1.0.0";
           inherit src;
