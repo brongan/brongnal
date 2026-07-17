@@ -172,6 +172,7 @@ Future<void> runBrongnalApp({
       await core.startHub(
         databaseDirectory: dbPath,
         username: savedUsername,
+        fcmToken: fcmToken,
         backendAddress: AppConfig.defaultBackendAddr,
       );
       watch.stop();
