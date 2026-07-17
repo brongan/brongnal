@@ -66,7 +66,9 @@
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
         src = lib.cleanSource ./.;
         androidComposition = pkgs.androidenv.composeAndroidPackages {
-          platformVersions = [ "36" ];
+          # rust_builder requires API 34, flutter_local_notifications requires
+          # API 35, and Flutter 3.35 builds the app against API 36.
+          platformVersions = [ "34" "35" "36" ];
           buildToolsVersions = [ "35.0.0" ];
           cmakeVersions = [ "3.22.1" ];
           includeNDK = true;
