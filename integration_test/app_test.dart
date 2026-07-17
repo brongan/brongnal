@@ -21,7 +21,6 @@ void main() {
     testWidgets('verify registration and message sending', (tester) async {
       // Clear shared preferences to ensure we are on the registration screen
       SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
       final tempDir = Directory.systemTemp.createTempSync('brongnal_test_');
       debugPrint('Using temporary database directory: ${tempDir.path}');
 
