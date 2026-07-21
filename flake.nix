@@ -72,7 +72,30 @@
           esac
         '';
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
-        src = lib.cleanSource ./.;
+        rustSrc = lib.fileset.toSource {
+          root = ./.;
+          fileset = lib.fileset.unions [
+            ./Cargo.toml
+            ./Cargo.lock
+            ./native
+          ];
+        };
+        # native/ is deliberately absent: the apk consumes prebuilt libhub.so
+        # derivations (hubAndroidLibs) instead of compiling Rust in-sandbox.
+        # nix/pubspec.lock.json is included because preBuild reads it from $src;
+        # nix/gradle-deps.json enters via the mitmCache input instead.
+        apkSrc = lib.fileset.toSource {
+          root = ./.;
+          fileset = lib.fileset.unions [
+            ./android
+            ./lib
+            ./rust_builder
+            ./nix/pubspec.lock.json
+            ./pubspec.yaml
+            ./pubspec.lock
+            ./firebase.json
+          ];
+        };
         androidNdkVersion = "28.2.13676358";
         androidComposition = pkgs.androidenv.composeAndroidPackages {
           # rust_builder requires API 34, flutter_local_notifications requires
@@ -156,7 +179,7 @@
           toolchain
         ];
         args = {
-          inherit src;
+          src = rustSrc;
           version = "0.1.0";
           strictDeps = true;
           cargoExtraArgs = "--package=server";
@@ -166,27 +189,58 @@
           buildInputs = [sqliteStatic];
           pname = "server";
         };
-        # Cargokit's run_build_tool.sh bootstraps its Dart build_tool with a
-        # `dart pub get` at gradle time, which needs pub.dev. Materialize the
-        # build_tool's exact-pinned dependencies from its own pubspec.lock and
-        # hand them to pub as path overrides so the bootstrap works offline.
-        cargokitBuildToolDeps = pkgs.pub2nix.readPubspecLock {
-          src = ./rust_builder/cargokit/build_tool;
-          pubspecLock = lib.importJSON ./nix/cargokit-pubspec.lock.json;
+        # libhub.so cross-compiled per Android ABI in dedicated derivations so
+        # the Rust dependency tree is compiled once per target and cached; the
+        # apk derivation only copies the finished libraries (see the cargokit
+        # shim in postPatch). The clang wrapper name pins the Android API level
+        # and must match the app's minSdkVersion (Flutter 3.44 default: 24).
+        androidMinSdk = "24";
+        ndkBin = "${androidHome}/ndk/${androidNdkVersion}/toolchains/llvm/prebuilt/linux-x86_64/bin";
+        androidAbis = {
+          "arm64-v8a" = {
+            triple = "aarch64-linux-android";
+            cc = "aarch64-linux-android${androidMinSdk}-clang";
+          };
+          "armeabi-v7a" = {
+            triple = "armv7-linux-androideabi";
+            cc = "armv7a-linux-androideabi${androidMinSdk}-clang";
+          };
+          "x86_64" = {
+            triple = "x86_64-linux-android";
+            cc = "x86_64-linux-android${androidMinSdk}-clang";
+          };
         };
-        cargokitPubspecOverrides = pkgs.writeText "cargokit-pubspec-overrides.yaml" (
-          builtins.toJSON {
-            dependency_overrides =
-              lib.mapAttrs (
-                name: depSrc: {path = "${depSrc}/${depSrc.packageRoot}";}
-              )
-              cargokitBuildToolDeps.dependencySources;
-          }
+        hubLibFor = abi: target: let
+          shoutTriple = lib.toUpper (builtins.replaceStrings ["-"] ["_"] target.triple);
+          snakeTriple = builtins.replaceStrings ["-"] ["_"] target.triple;
+          hubArgs =
+            {
+              src = rustSrc;
+              pname = "hub-${abi}";
+              version = "0.1.0";
+              strictDeps = true;
+              doCheck = false;
+              cargoExtraArgs = "--package=hub";
+              CARGO_BUILD_TARGET = target.triple;
+              nativeBuildInputs = [pkgs.protobuf];
+            }
+            // {
+              "CARGO_TARGET_${shoutTriple}_LINKER" = "${ndkBin}/${target.cc}";
+              "CC_${snakeTriple}" = "${ndkBin}/${target.cc}";
+              "AR_${snakeTriple}" = "${ndkBin}/llvm-ar";
+            };
+        in
+          craneLib.buildPackage (hubArgs
+            // {
+              cargoArtifacts = craneLib.buildDepsOnly hubArgs;
+            });
+        hubAndroidLibs = pkgs.linkFarm "hub-android-libs" (
+          lib.mapAttrsToList (abi: target: {
+            name = "${abi}/libhub.so";
+            path = "${hubLibFor abi target}/lib/libhub.so";
+          })
+          androidAbis
         );
-        # Vendored crates for the cargo build cargokit runs inside gradle; the
-        # workspace-level .cargo/config.toml redirects crates.io to the vendor
-        # dir so it needs no network in the sandbox.
-        cargoVendor = craneLib.vendorCargoDeps {inherit src;};
         nativeArtifacts = craneLib.buildDepsOnly args;
         myServer = craneLib.buildPackage (args
           // {
@@ -199,7 +253,7 @@
         apk = pkgs.flutter.buildFlutterApplication {
           pname = "brongnal-apk";
           version = "1.0.0";
-          inherit src;
+          src = apkSrc;
           targetFlutterPlatform = "linux";
           pubspecLock = lib.importJSON ./nix/pubspec.lock.json;
 
@@ -211,8 +265,6 @@
             pkgs.ninja
             pkgs.pkg-config
             pkgs.protobuf
-            rustup
-            toolchain
           ];
 
           mitmCache = gradle.fetchDeps {
@@ -240,17 +292,36 @@
           ANDROID_HOME = androidHome;
           ANDROID_SDK_ROOT = androidHome;
           JAVA_HOME = pkgs.jdk17.home;
-          CARGO_NET_OFFLINE = "true";
           dontUseCmakeConfigure = true;
 
           postPatch = ''
-            patchShebangs rust_builder/cargokit/run_build_tool.sh
-            substituteInPlace rust_builder/cargokit/run_build_tool.sh \
-              --replace-fail '"$DART" pub get --no-precompile' \
-              'install -m644 ${cargokitPubspecOverrides} pubspec_overrides.yaml
-            "$DART" pub get --no-precompile --offline'
-            mkdir -p .cargo
-            cat ${cargoVendor}/config.toml >> .cargo/config.toml
+            # Gradle's contract with cargokit: exec this script with env vars
+            # naming the wanted platforms and an output dir; it puts a
+            # libhub.so per ABI there. Satisfy it by copying the prebuilt
+            # libraries instead of bootstrapping dart/rustup/cargo in-sandbox.
+            cat > rust_builder/cargokit/run_build_tool.sh <<'EOF'
+            #!${pkgs.runtimeShell}
+            set -eu
+            [ "$1" = build-gradle ] || {
+              echo "cargokit shim: unsupported command $1" >&2
+              exit 1
+            }
+            IFS=,
+            for platform in $CARGOKIT_TARGET_PLATFORMS; do
+              case "$platform" in
+                android-arm) abi=armeabi-v7a ;;
+                android-arm64) abi=arm64-v8a ;;
+                android-x64) abi=x86_64 ;;
+                *)
+                  echo "cargokit shim: no prebuilt libhub.so for $platform" >&2
+                  exit 1
+                  ;;
+              esac
+              mkdir -p "$CARGOKIT_OUTPUT_DIR/$abi"
+              cp ${hubAndroidLibs}/"$abi"/libhub.so "$CARGOKIT_OUTPUT_DIR/$abi/"
+            done
+            EOF
+            chmod +x rust_builder/cargokit/run_build_tool.sh
             cp ${gradlew} android/gradlew
             chmod +x android/gradlew
             echo 'android.aapt2FromMavenOverride=${androidHome}/build-tools/35.0.0/aapt2' \
