@@ -150,8 +150,8 @@
           ];
         };
         gradleUnwrapped = pkgs.gradle-packages.mkGradle {
-          version = "8.13";
-          hash = "sha256-IPGxF2I3JUpvwgTYQ0GW+hGkz7OHVnUZxhVW6HEK7Xg=";
+          version = "8.14.3";
+          hash = "sha256-vXEQIhNJMGCVbsIp2Ua+7lcVjb2J0OYrkbyg+ixfNTE=";
           defaultJava = pkgs.jdk17;
         };
         gradle = pkgs.callPackage pkgs.gradle-packages.wrapGradle {
