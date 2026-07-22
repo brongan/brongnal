@@ -72,14 +72,42 @@
           esac
         '';
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
-        rustSrc = lib.fileset.toSource {
-          root = ./.;
-          fileset = lib.fileset.unions [
-            ./Cargo.toml
-            ./Cargo.lock
-            ./native
-          ];
+        # Sliced workspace sources: full code for the crates in `keep`, but only
+        # the manifest plus an empty stub target for the other members. Cargo
+        # needs every member's manifest to resolve the workspace and verify
+        # Cargo.lock, yet only compiles the requested package's graph -- so
+        # code edits in excluded crates cannot invalidate the build, while
+        # manifest edits (which affect the lock) still do.
+        rustMembers = ["client" "gossamer" "hub" "proto" "protocol" "server"];
+        rustStubTarget = {
+          client = "src/lib.rs";
+          gossamer = "src/lib.rs";
+          hub = "src/lib.rs";
+          proto = "src/lib.rs";
+          protocol = "src/lib.rs";
+          server = "src/main.rs";
         };
+        rustSrcFor = keep: let
+          stubbed = lib.subtractLists keep rustMembers;
+          filtered = lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions (
+              [./Cargo.toml ./Cargo.lock]
+              ++ map (m: ./native + "/${m}") keep
+              ++ map (m: ./native + "/${m}/Cargo.toml") stubbed
+            );
+          };
+        in
+          pkgs.runCommand "rust-src-${lib.concatStringsSep "-" keep}" {} ''
+            cp -r ${filtered} $out
+            chmod -R u+w $out
+            ${lib.concatMapStrings (m: ''
+              mkdir -p "$out/native/${m}/$(dirname "${rustStubTarget.${m}}")"
+              : > "$out/native/${m}/${rustStubTarget.${m}}"
+            '') stubbed}
+          '';
+        hubRustSrc = rustSrcFor ["hub" "client" "proto" "protocol"];
+        serverRustSrc = rustSrcFor ["server" "client" "gossamer" "proto" "protocol"];
         # native/ is deliberately absent: the apk consumes prebuilt libhub.so
         # derivations (hubAndroidLibs) instead of compiling Rust in-sandbox.
         # nix/pubspec.lock.json is included because preBuild reads it from $src;
@@ -179,7 +207,7 @@
           toolchain
         ];
         args = {
-          src = rustSrc;
+          src = serverRustSrc;
           version = "0.1.0";
           strictDeps = true;
           cargoExtraArgs = "--package=server";
@@ -215,7 +243,7 @@
           snakeTriple = builtins.replaceStrings ["-"] ["_"] target.triple;
           hubArgs =
             {
-              src = rustSrc;
+              src = hubRustSrc;
               pname = "hub-${abi}";
               version = "0.1.0";
               strictDeps = true;
