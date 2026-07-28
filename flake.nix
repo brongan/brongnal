@@ -502,6 +502,7 @@
               flutterDevelopment
               pkgs.flutter_rust_bridge_codegen
               pkgs.jdk17
+              pkgs.yubico-piv-tool
               rustup
             ];
           ANDROID_HOME = androidHome;
