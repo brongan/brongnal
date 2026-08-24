@@ -35,10 +35,11 @@
         inherit (pkgs) lib;
         toolchain = pkgs.rust-bin.nightly.latest.default.override {
           extensions = ["rust-src"];
-          # The ABIs `flutter build apk` produces by default; musl is the server.
+          # Android ABIs Cargokit may request in debug builds; musl is the server.
           targets = [
             "aarch64-linux-android"
             "armv7-linux-androideabi"
+            "i686-linux-android"
             "x86_64-linux-android"
             "x86_64-unknown-linux-musl"
           ];
@@ -63,14 +64,18 @@
             target)
               case "$2" in
                 list)
-                  printf '%s\\n' \
+                  printf '%s\n' \
                     aarch64-linux-android \
                     armv7-linux-androideabi \
+                    i686-linux-android \
                     x86_64-linux-android \
                     x86_64-unknown-linux-gnu \
                     x86_64-unknown-linux-musl
                   ;;
-                add) exit 0 ;;
+                add)
+                  echo "rustup shim: requested target is not in the pinned toolchain" >&2
+                  exit 1
+                  ;;
               esac
               ;;
             component) exit 0 ;;
