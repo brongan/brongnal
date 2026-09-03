@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "gossamer/v1/gossamer.proto",
                 "application/v1/application.proto",
             ],
-            &["proto"],
+            &["."],
         )
         .unwrap();
     Ok(())
