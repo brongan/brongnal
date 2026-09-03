@@ -120,7 +120,6 @@ Future<String?> notificationsToken(FirebaseMessaging messaging) async {
   if (settings.authorizationStatus == AuthorizationStatus.authorized) {
     debugPrint('User granted permission: ${settings.authorizationStatus}');
     final String? token = await messaging.getToken();
-    debugPrint('Firebase Token: $token');
     return token;
   }
   return null;
