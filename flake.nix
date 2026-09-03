@@ -51,52 +51,23 @@
             hash = "sha256-xxdBo5rxuWiq5YMRPpVp2+0JX1lKvvzrT8z5Rq8S9g0=";
           };
         };
-        toolchain = pkgs.rust-bin.nightly.latest.default.override {
-          extensions = ["rust-src"];
-          # Android ABIs Cargokit may request in debug builds; musl is the server.
-          targets = [
-            "aarch64-linux-android"
-            "armv7-linux-androideabi"
-            "i686-linux-android"
-            "x86_64-linux-android"
-            "x86_64-unknown-linux-musl"
-          ];
-        };
-        # Fake rustup. Cargokit drives the toolchain through rustup (`toolchain
-        # list`, `target add`, `rustup run <tc> cargo ...`), but this flake pins
-        # the toolchain as a store path, so the stub answers "installed" and
-        # passes through to the cargo on PATH. Dev-shell/test path only; the apk
-        # shims cargokit out (see apk postPatch).
+        toolchain = pkgs.rust-bin.fromRustupToolchainFile ./native/hub/rust-toolchain.toml;
+        # Fake rustup. The native-assets hook drives the toolchain through
+        # rustup, but this flake pins the toolchain as a store path, so the stub
+        # answers "installed" and passes through to cargo on PATH.
         rustup = pkgs.writeShellScriptBin "rustup" ''
           case "$1" in
             run)
               shift 2
               exec "$@"
               ;;
-            toolchain)
-              case "$2" in
-                list) echo "nightly-x86_64-unknown-linux-gnu (default)" ;;
-                install) exit 0 ;;
-              esac
+            show)
+              echo "Nix toolchain from native/hub/rust-toolchain.toml"
               ;;
-            target)
-              case "$2" in
-                list)
-                  printf '%s\n' \
-                    aarch64-linux-android \
-                    armv7-linux-androideabi \
-                    i686-linux-android \
-                    x86_64-linux-android \
-                    x86_64-unknown-linux-gnu \
-                    x86_64-unknown-linux-musl
-                  ;;
-                add)
-                  echo "rustup shim: requested target is not in the pinned toolchain" >&2
-                  exit 1
-                  ;;
-              esac
+            *)
+              echo "rustup shim: unsupported command: $*" >&2
+              exit 1
               ;;
-            component) exit 0 ;;
           esac
         '';
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
@@ -135,34 +106,32 @@
             '') stubbed}
           '';
         hubRustSrc = rustSrcFor ["hub" "client" "proto" "protocol"];
+        hubCargoVendor = craneLib.vendorCargoDeps {src = hubRustSrc;};
         serverRustSrc = rustSrcFor ["server" "client" "gossamer" "proto" "protocol"];
-        # native/ is deliberately absent: the apk consumes prebuilt libhub.so
-        # derivations (hubAndroidLibs) instead of compiling Rust in-sandbox.
         # nix/pubspec.lock.json is included because preBuild reads it from $src;
         # nix/gradle-deps.json enters via the mitmCache input instead.
         apkSrc = lib.fileset.toSource {
           root = ./.;
           fileset = lib.fileset.unions [
             ./android
+            ./Cargo.lock
+            ./Cargo.toml
+            ./hook
             ./lib
-            ./rust_builder
+            ./native
             ./nix/pubspec.lock.json
             ./pubspec.yaml
             ./pubspec.lock
             ./firebase.json
           ];
         };
-        # Must equal Flutter's pinned NDK default (FlutterExtension.kt); ndkBin
-        # bakes this string into the clang paths below.
+        # The NDK used by the Android native-assets hook.
         androidNdkVersion = "28.2.13676358";
         androidComposition = pkgs.androidenv.composeAndroidPackages {
-          # rust_builder plugin compiles against API 34, flutter_local_notifications
-          # against API 35, and Flutter 3.44 builds the app against API 36.
+          # These cover the app, Flutter, and native plugin compile SDKs.
           platformVersions = ["34" "35" "36"];
           buildToolsVersions = ["35.0.0"];
-          # Required: AGP auto-detects android/app/src/main/cpp/CMakeLists.txt
-          # and generates a configureCMakeRelease task, which needs this exact
-          # cmake in the SDK (removing it fails with CXX1300).
+          # Native plugins may still cause AGP to configure CMake.
           cmakeVersions = ["3.22.1"];
           includeNDK = true;
           ndkVersions = [androidNdkVersion];
@@ -265,58 +234,6 @@
           buildInputs = [sqliteStatic];
           pname = "server";
         };
-        # libhub.so cross-compiled per Android ABI in dedicated derivations so
-        # the Rust dependency tree is compiled once per target and cached; the
-        # apk derivation only copies the finished libraries (see the cargokit
-        # shim in postPatch). The clang wrapper name pins the Android API level
-        # and must match the app's minSdkVersion (Flutter 3.44 default: 24).
-        androidMinSdk = "24";
-        ndkBin = "${androidHome}/ndk/${androidNdkVersion}/toolchains/llvm/prebuilt/linux-x86_64/bin";
-        androidAbis = {
-          "arm64-v8a" = {
-            triple = "aarch64-linux-android";
-            cc = "aarch64-linux-android${androidMinSdk}-clang";
-          };
-          "armeabi-v7a" = {
-            triple = "armv7-linux-androideabi";
-            cc = "armv7a-linux-androideabi${androidMinSdk}-clang";
-          };
-          "x86_64" = {
-            triple = "x86_64-linux-android";
-            cc = "x86_64-linux-android${androidMinSdk}-clang";
-          };
-        };
-        hubLibFor = abi: target: let
-          shoutTriple = lib.toUpper (builtins.replaceStrings ["-"] ["_"] target.triple);
-          snakeTriple = builtins.replaceStrings ["-"] ["_"] target.triple;
-          hubArgs =
-            {
-              src = hubRustSrc;
-              pname = "hub-${abi}";
-              version = "0.1.0";
-              strictDeps = true;
-              doCheck = false;
-              cargoExtraArgs = "--package=hub";
-              CARGO_BUILD_TARGET = target.triple;
-              nativeBuildInputs = [pkgs.protobuf];
-            }
-            // {
-              "CARGO_TARGET_${shoutTriple}_LINKER" = "${ndkBin}/${target.cc}";
-              "CC_${snakeTriple}" = "${ndkBin}/${target.cc}";
-              "AR_${snakeTriple}" = "${ndkBin}/llvm-ar";
-            };
-        in
-          craneLib.buildPackage (hubArgs
-            // {
-              cargoArtifacts = craneLib.buildDepsOnly hubArgs;
-            });
-        hubAndroidLibs = pkgs.linkFarm "hub-android-libs" (
-          lib.mapAttrsToList (abi: target: {
-            name = "${abi}/libhub.so";
-            path = "${hubLibFor abi target}/lib/libhub.so";
-          })
-          androidAbis
-        );
         nativeArtifacts = craneLib.buildDepsOnly args;
         myServer = craneLib.buildPackage (args
           // {
@@ -338,14 +255,15 @@
           targetFlutterPlatform = "linux";
           pubspecLock = lib.importJSON ./nix/pubspec.lock.json;
 
-          # cmake + ninja: AGP auto-detects android/app/src/main/cpp/CMakeLists.txt
-          # and generates a configureCMakeRelease task that needs both.
+          # The native-assets hook invokes Cargo and needs the pinned Rust
+          # toolchain plus protoc in the isolated build environment.
           nativeBuildInputs = [
             androidSdk
             gradle
-            pkgs.cmake
             pkgs.jdk17
-            pkgs.ninja
+            pkgs.protobuf
+            rustup
+            toolchain
           ];
 
           # The recorded maven universe (nix/gradle-deps.json), replayed offline.
@@ -381,35 +299,10 @@
           dontUseCmakeConfigure = true;
 
           postPatch = ''
-            # Gradle's contract with cargokit: exec this script with env vars
-            # naming the wanted platforms and an output dir; it puts a
-            # libhub.so per ABI there. Satisfy it by copying the prebuilt
-            # libraries instead of bootstrapping dart/rustup/cargo in-sandbox.
-            cat > rust_builder/cargokit/run_build_tool.sh <<'EOF'
-            #!${pkgs.runtimeShell}
-            set -eu
-            [ "$1" = build-gradle ] || {
-              echo "cargokit shim: unsupported command $1" >&2
-              exit 1
-            }
-            IFS=,
-            for platform in $CARGOKIT_TARGET_PLATFORMS; do
-              case "$platform" in
-                android-arm) abi=armeabi-v7a ;;
-                android-arm64) abi=arm64-v8a ;;
-                android-x64) abi=x86_64 ;;
-                *)
-                  echo "cargokit shim: no prebuilt libhub.so for $platform" >&2
-                  exit 1
-                  ;;
-              esac
-              mkdir -p "$CARGOKIT_OUTPUT_DIR/$abi"
-              cp ${hubAndroidLibs}/"$abi"/libhub.so "$CARGOKIT_OUTPUT_DIR/$abi/"
-            done
-            EOF
-            chmod +x rust_builder/cargokit/run_build_tool.sh
             cp ${gradlew} android/gradlew
             chmod +x android/gradlew
+            mkdir -p .cargo
+            cp ${hubCargoVendor}/config.toml .cargo/config.toml
             # Use the SDK's aapt2 binary rather than the one maven ships as a
             # prebuilt (prebuilt ELF binaries don't run in the nix sandbox).
             echo 'android.aapt2FromMavenOverride=${androidHome}/build-tools/35.0.0/aapt2' \
@@ -429,7 +322,7 @@
           dontDartBuild = true;
           # Rewrite the nix-generated package config into pubspec_overrides.yaml
           # path overrides, so `flutter pub get --offline` resolves every hosted
-          # package from the store instead of pub.dev; hub points at rust_builder.
+          # package from the store instead of pub.dev.
           preBuild = ''
             ${pkgs.jq}/bin/jq --slurpfile lock nix/pubspec.lock.json '
               {
@@ -441,7 +334,6 @@
                       value: { path: (.rootUri | sub("^file://"; "")) }
                     })
                   | from_entries
-                  | .hub = { path: "rust_builder" }
                 )
               }
             ' .dart_tool/package_config.json > pubspec_overrides.yaml

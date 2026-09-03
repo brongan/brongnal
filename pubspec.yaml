@@ -8,6 +8,7 @@ environment:
   sdk: '>=3.10.0 <4.0.0'
 
 dependencies:
+  code_assets: ^1.2.1
   flutter:
     sdk: flutter
 
@@ -29,8 +30,7 @@ dependencies:
   xdg_directories: ^1.1.0
   flutter_local_notifications: ^19.1.0
   timeago: ^3.2.2
-  hub:
-    path: rust_builder
+  flutter_rust_bridge_hooks: 2.13.0
 
 dev_dependencies:
   flutter_test:

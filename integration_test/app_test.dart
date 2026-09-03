@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:brongnal_app/src/rust/bridge.dart' as bridge;
-import 'package:brongnal_app/src/rust/frb_generated.dart';
+import 'package:brongnal_app/src/rust/initialize.dart';
 import 'package:brongnal_app/main.dart' as app;
 import 'package:brongnal_app/common/config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +13,7 @@ void main() {
 
   group('End-to-end test', () {
     setUpAll(() async {
-      await RustLib.init();
+      await initializeRustLib();
       await bridge.startMockServer(port: 50051);
       AppConfig.setBackendOverride("http://localhost:50051");
     });

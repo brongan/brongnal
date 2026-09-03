@@ -9,7 +9,7 @@ import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
 import 'package:brongnal_app/common/core.dart';
 import 'package:brongnal_app/src/rust/bridge.dart' show MessageModel;
-import 'package:brongnal_app/src/rust/frb_generated.dart';
+import 'package:brongnal_app/src/rust/initialize.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -30,9 +30,7 @@ Future<void> _onMessageReceived(MessageModel message) async {
 }
 
 Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
-  if (!RustLib.instance.initialized) {
-    await RustLib.init();
-  }
+  await initializeRustLib();
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final username = prefs.getString("username");
 
@@ -157,9 +155,7 @@ Future<void> runBrongnalApp({
     AppConfig.setDatabaseOverride(dbDirOverride);
   }
 
-  if (!RustLib.instance.initialized) {
-    await RustLib.init();
-  }
+  await initializeRustLib();
 
   // Determine database directory
   final String dbPath =
