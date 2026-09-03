@@ -416,11 +416,11 @@
       "dependency": "direct main",
       "description": {
         "name": "flutter_rust_bridge",
-        "sha256": "37ef40bc6f863652e865f0b2563ea07f0d3c58d8efad803cc01933a4b2ee067e",
+        "sha256": "ec69331e2335ab4d456c0a9fc700892c2c85b72b9c0cb39df3ecfe8833d5d5c8",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "2.11.1"
+      "version": "2.13.0"
     },
     "flutter_test": {
       "dependency": "direct dev",
@@ -699,11 +699,11 @@
       "dependency": "transitive",
       "description": {
         "name": "meta",
-        "sha256": "23f08335362185a5ea2ad3a4e597f1375e78bce8a040df5c600c8d3552ef2394",
+        "sha256": "1741988757a65eb6b36abe716829688cf01910bbf91c34354ff7ec1c3de2b349",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "1.17.0"
+      "version": "1.18.0"
     },
     "mime": {
       "dependency": "transitive",
@@ -1085,11 +1085,11 @@
       "dependency": "transitive",
       "description": {
         "name": "test_api",
-        "sha256": "8161c84903fd860b26bfdefb7963b3f0b68fee7adea0f59ef805ecca346f0c7a",
+        "sha256": "949a932224383300f01be9221c39180316445ecb8e7547f70a41a35bf421fb9e",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "0.7.10"
+      "version": "0.7.11"
     },
     "timeago": {
       "dependency": "direct main",
@@ -1243,7 +1243,7 @@
     }
   },
   "sdks": {
-    "dart": ">=3.9.0-0 <4.0.0",
+    "dart": ">=3.10.0 <4.0.0",
     "flutter": ">=3.27.0"
   }
 }

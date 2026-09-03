@@ -33,6 +33,24 @@
         };
         sqliteStatic = pkgs.pkgsStatic.sqlite;
         inherit (pkgs) lib;
+        frbCodegenVersion = "2.13.0";
+        frbCodegenSrc = pkgs.fetchFromGitHub {
+          owner = "fzyzcjy";
+          repo = "flutter_rust_bridge";
+          tag = "v${frbCodegenVersion}";
+          hash = "sha256-NMM5QyqoduhXMpV9b6b3qRpfwqWtHkoucVN4xO81+fw=";
+          fetchSubmodules = true;
+        };
+        frbCodegen = pkgs.flutter_rust_bridge_codegen.overrideAttrs {
+          version = frbCodegenVersion;
+          src = frbCodegenSrc;
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            pname = "flutter_rust_bridge_codegen";
+            version = frbCodegenVersion;
+            src = frbCodegenSrc;
+            hash = "sha256-xxdBo5rxuWiq5YMRPpVp2+0JX1lKvvzrT8z5Rq8S9g0=";
+          };
+        };
         toolchain = pkgs.rust-bin.nightly.latest.default.override {
           extensions = ["rust-src"];
           # Android ABIs Cargokit may request in debug builds; musl is the server.
@@ -467,7 +485,7 @@
               nativeDevelopmentTools
               ++ [
                 flutterDevelopment
-                pkgs.flutter_rust_bridge_codegen
+                frbCodegen
               ]
             ) ''
               flutter_rust_bridge_codegen generate \
@@ -505,7 +523,7 @@
             ++ [
               androidSdk
               flutterDevelopment
-              pkgs.flutter_rust_bridge_codegen
+              frbCodegen
               pkgs.jdk17
               pkgs.yubico-piv-tool
               rustup
