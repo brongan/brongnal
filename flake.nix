@@ -423,6 +423,17 @@
               pkgs.yubico-piv-tool
               rustup
             ];
+          shellHook = ''
+            flutter() (
+              export HOME="''${XDG_STATE_HOME:-$HOME/.local/state}/flutter"
+              command flutter "$@"
+            )
+
+            dart() (
+              export HOME="''${XDG_STATE_HOME:-$HOME/.local/state}/flutter"
+              command dart "$@"
+            )
+          '';
           ANDROID_HOME = androidHome;
           ANDROID_SDK_ROOT = androidHome;
           FLUTTER_ROOT = "${flutterDevelopment}";
