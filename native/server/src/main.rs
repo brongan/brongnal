@@ -36,6 +36,10 @@ pub async fn db_cleanup(connection: tokio_rusqlite::Connection) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("failed to install Ring as the default rustls crypto provider");
+
     tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
         .with_level(true)
@@ -52,10 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Creating Sentry guard.");
         Some(sentry::init((
             dsn,
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                ..Default::default()
-            },
+            sentry::ClientOptions::new().maybe_release(sentry::release_name!()),
         )))
     } else {
         warn!("Not creating Sentry guard.");
@@ -64,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let reflection_service = Builder::configure()
         .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
-        .build()
+        .build_v1()
         .unwrap();
     let server_addr = (IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080).into();
 
@@ -77,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         };
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal");
     let db_path: PathBuf = if let Ok(db_dir) = std::env::var("DB") {
         [&db_dir, "brongnal.db3"].iter().collect()
     } else {

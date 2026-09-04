@@ -1,5 +1,5 @@
 use chacha20poly1305::{
-    aead::{Aead, AeadCore, OsRng, Payload},
+    aead::{Aead, Generate, Payload},
     ChaCha20Poly1305, Nonce,
 };
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ pub enum AeadError {
 }
 
 pub fn encrypt_data(payload: Payload, cipher: &ChaCha20Poly1305) -> Result<Vec<u8>, AeadError> {
-    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+    let nonce = Nonce::generate();
     let ciphertext = cipher
         .encrypt(&nonce, payload)
         .map_err(|_| AeadError::Allocate)?;
@@ -44,8 +44,9 @@ pub fn decrypt_data(
 
     let nonce_bytes = &ciphertext[1..(NONCE_LEN + 1)];
     let msg = &ciphertext[(NONCE_LEN + 1)..];
+    let nonce = Nonce::try_from(nonce_bytes).map_err(|_| AeadError::InvalidCiphertext)?;
     cipher
-        .decrypt(Nonce::from_slice(nonce_bytes), Payload { msg, aad })
+        .decrypt(&nonce, Payload { msg, aad })
         .map_err(|_| AeadError::Decrypt)
 }
 
@@ -54,13 +55,13 @@ mod tests {
     use crate::aead::*;
     use anyhow::Result;
     use ary::ary;
-    use chacha20poly1305::KeyInit;
+    use chacha20poly1305::{Key, KeyInit};
 
     #[test]
     fn aead_roundtrip_success() -> Result<()> {
         let msg = b"Hello I am a plaintext.";
         let aad = &[];
-        let cipher = ChaCha20Poly1305::new(&ChaCha20Poly1305::generate_key(&mut OsRng));
+        let cipher = ChaCha20Poly1305::new(&Key::generate());
 
         let ciphertext = encrypt_data(Payload { msg, aad }, &cipher)?;
         let decrypted_data = decrypt_data(&ciphertext, aad, &cipher)?;
@@ -71,7 +72,7 @@ mod tests {
 
     #[test]
     fn invalid_ciphertext() {
-        let cipher = ChaCha20Poly1305::new(&ChaCha20Poly1305::generate_key(&mut OsRng));
+        let cipher = ChaCha20Poly1305::new(&Key::generate());
 
         assert_eq!(
             decrypt_data(&ary![VERSION_TAG, in b"123456789"], &[], &cipher),
@@ -82,7 +83,7 @@ mod tests {
     #[test]
     fn invalid_tag() -> Result<()> {
         let msg = b"Hello I am a plaintext.";
-        let cipher = ChaCha20Poly1305::new(&ChaCha20Poly1305::generate_key(&mut OsRng));
+        let cipher = ChaCha20Poly1305::new(&Key::generate());
 
         let mut ciphertext = encrypt_data(Payload { msg, aad: &[] }, &cipher)?;
         *ciphertext.first_mut().unwrap() = 0;
@@ -98,7 +99,7 @@ mod tests {
     fn decryption_failure() -> Result<()> {
         let msg = b"Hello I am a plaintext.";
         let aad = &[];
-        let cipher = ChaCha20Poly1305::new(&ChaCha20Poly1305::generate_key(&mut OsRng));
+        let cipher = ChaCha20Poly1305::new(&Key::generate());
 
         let mut ciphertext = encrypt_data(Payload { msg, aad }, &cipher)?;
         *ciphertext.last_mut().unwrap() = 0;

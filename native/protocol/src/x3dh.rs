@@ -289,8 +289,8 @@ mod tests {
         initiate_send_get_sk, SignedPreKey, X3DHSendKeyAgreement,
     };
     use anyhow::Result;
-    use chacha20poly1305::aead::OsRng;
     use ed25519_dalek::SigningKey;
+    use rand::rng;
     use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519StaticSecret};
 
     // 1. Bob publishes his identity key and prekeys to a server.
@@ -298,16 +298,16 @@ mod tests {
     // 3. Bob receives and processes Alice's initial message.
     #[test]
     fn x3dh_key_agreement_opk() -> Result<()> {
-        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_ik = SigningKey::generate(&mut rng());
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
         let bob_spk_secret = bob_spk.bundle[0].clone().0;
         let bob_spk = SignedPreKey {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
-        let alice_ik = SigningKey::generate(&mut OsRng);
+        let alice_ik = SigningKey::generate(&mut rng());
 
-        let opk = X25519StaticSecret::random_from_rng(OsRng);
+        let opk = X25519StaticSecret::random();
         let opk_pub = X25519PublicKey::from(&opk);
 
         let X3DHSendKeyAgreement {
@@ -328,14 +328,14 @@ mod tests {
 
     #[test]
     fn x3dh_key_agreement() -> Result<()> {
-        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_ik = SigningKey::generate(&mut rng());
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
         let bob_spk_secret = bob_spk.bundle[0].clone().0;
         let bob_spk = SignedPreKey {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
-        let alice_ik = SigningKey::generate(&mut OsRng);
+        let alice_ik = SigningKey::generate(&mut rng());
 
         let X3DHSendKeyAgreement { ek, sk } =
             initiate_send_get_sk(bob_ik.verifying_key(), &bob_spk, None, &alice_ik)?;
@@ -355,17 +355,17 @@ mod tests {
     #[test]
     fn x3dh_send_recv_opk() -> Result<()> {
         // 1. Bob publishes his identity key and prekeys to a server.
-        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_ik = SigningKey::generate(&mut rng());
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
         let bob_spk_secret = bob_spk.bundle[0].clone().0;
         let bob_spk = SignedPreKey {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
-        let bob_opk_priv = X25519StaticSecret::random_from_rng(OsRng);
+        let bob_opk_priv = X25519StaticSecret::random();
         let bob_opk_pub = X25519PublicKey::from(&bob_opk_priv);
 
-        let alice_ik = SigningKey::generate(&mut OsRng);
+        let alice_ik = SigningKey::generate(&mut rng());
 
         let plaintext = "Hello Bob!";
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
@@ -394,14 +394,14 @@ mod tests {
     #[test]
     fn x3dh_send_recv() -> Result<()> {
         // 1. Bob publishes his identity key and prekeys to a server.
-        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_ik = SigningKey::generate(&mut rng());
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
         let bob_spk_secret = bob_spk.bundle[0].clone().0;
         let bob_spk = SignedPreKey {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
-        let alice_ik = SigningKey::generate(&mut OsRng);
+        let alice_ik = SigningKey::generate(&mut rng());
 
         // 2. Alice fetches a "prekey bundle" from the server, and uses it to send an initial message to Bob.
         let bundle = PreKeyBundle {
@@ -428,19 +428,19 @@ mod tests {
 
     #[test]
     fn x3dh_invalid_bundle_signature() -> Result<()> {
-        let bob_spk = create_prekey_bundle(&SigningKey::generate(&mut OsRng), 1);
+        let bob_spk = create_prekey_bundle(&SigningKey::generate(&mut rng()), 1);
         let bob_spk = SignedPreKey {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
 
         let bundle = PreKeyBundle {
-            ik: SigningKey::generate(&mut OsRng).verifying_key(),
+            ik: SigningKey::generate(&mut rng()).verifying_key(),
             opk: None,
             spk: bob_spk.clone(),
         };
         assert_eq!(
-            initiate_send(bundle, &SigningKey::generate(&mut OsRng), b"Hello Bob!"),
+            initiate_send(bundle, &SigningKey::generate(&mut rng()), b"Hello Bob!"),
             Err(X3DHError::SignatureValidation)
         );
 
@@ -449,14 +449,14 @@ mod tests {
 
     #[test]
     fn x3dh_invalid_ciphertext() -> Result<()> {
-        let bob_ik = SigningKey::generate(&mut OsRng);
+        let bob_ik = SigningKey::generate(&mut rng());
         let bob_spk = create_prekey_bundle(&bob_ik, 1);
         let bob_spk_secret = bob_spk.bundle[0].clone().0;
         let bob_spk = SignedPreKey {
             pre_key: bob_spk.bundle[0].1,
             signature: bob_spk.signature,
         };
-        let alice_ik = SigningKey::generate(&mut OsRng);
+        let alice_ik = SigningKey::generate(&mut rng());
 
         let bundle = PreKeyBundle {
             ik: bob_ik.verifying_key(),

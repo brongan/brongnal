@@ -14,16 +14,16 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
 [dependencies]
 client = { path = "../client" }
-prost = "0.12.6"
+prost = "0.14.4"
 proto = { path = "../proto" }
 flutter_rust_bridge = "=2.13.0"
 thiserror = "1.0"
-tokio-rusqlite = { version = "0.6.0", features = ["bundled"] }
+tokio-rusqlite = { version = "0.7.0", features = ["bundled"] }
 tokio = { version = "1.44.1", features = ["full"] }
-tonic = { version = "0.11.0", features = ["tls-webpki-roots", "transport", "codegen"] }
+tonic = { version = "0.14.6", features = ["tls-webpki-roots", "transport", "codegen"] }
 webpki-roots = "0.26.8"
 tokio-stream = { version = "0.1.17", features = ["net"] }
-ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde"] }
+ed25519-dalek = { version = "3.0.0", features = ["rand_core", "serde"] }
 serde = "1.0.219"
 lazy_static = "1.5"
 tracing = "0.1"

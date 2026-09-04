@@ -52,7 +52,7 @@ impl From<SignedPreKey> for SignedPreKeyProto {
     fn from(val: SignedPreKey) -> Self {
         SignedPreKeyProto {
             pre_key: Some(val.pre_key.to_bytes().to_vec()),
-            signature: Some(val.signature.to_vec()),
+            signature: Some(val.signature.to_bytes().to_vec()),
         }
     }
 }
@@ -65,7 +65,7 @@ impl From<SignedPreKeys> for SignedPreKeysProto {
                 .into_iter()
                 .map(|key| key.to_bytes().to_vec())
                 .collect(),
-            signature: Some(val.signature.to_vec()),
+            signature: Some(val.signature.to_bytes().to_vec()),
         }
     }
 }
@@ -233,7 +233,7 @@ impl From<GossamerSignedMessage> for gossamer::SignedMessage {
         let contents: gossamer::Message = val.message.into();
         Self {
             contents: Some(contents.encode_to_vec()),
-            signature: Some(val.signature.to_vec()),
+            signature: Some(val.signature.to_bytes().to_vec()),
             identity_key: Some(val.identity_key.as_bytes().to_vec()),
         }
     }

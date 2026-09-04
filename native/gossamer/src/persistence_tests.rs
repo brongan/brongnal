@@ -1,7 +1,7 @@
 use super::*;
 use ed25519_dalek::SigningKey;
 use proto::gossamer::SignedMessage;
-use rand_core::OsRng;
+use rand::rng;
 
 async fn setup_db() -> GossamerStorage {
     let conn = Connection::open_in_memory().await.unwrap();
@@ -19,7 +19,7 @@ async fn test_schema_initialization() {
 async fn test_append_key_success() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key = SigningKey::generate(&mut OsRng).verifying_key();
+    let key = SigningKey::generate(&mut rng()).verifying_key();
 
     let appended = db.append_key(provider.clone(), key).await.unwrap();
     assert!(appended);
@@ -33,7 +33,7 @@ async fn test_append_key_success() {
 async fn test_append_key_idempotency() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key = SigningKey::generate(&mut OsRng).verifying_key();
+    let key = SigningKey::generate(&mut rng()).verifying_key();
 
     db.append_key(provider.clone(), key).await.unwrap();
     let appended_second_time = db.append_key(provider.clone(), key).await.unwrap();
@@ -46,8 +46,8 @@ async fn test_append_key_idempotency() {
 async fn test_append_multiple_keys_for_same_provider() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key1 = SigningKey::generate(&mut OsRng).verifying_key();
-    let key2 = SigningKey::generate(&mut OsRng).verifying_key();
+    let key1 = SigningKey::generate(&mut rng()).verifying_key();
+    let key2 = SigningKey::generate(&mut rng()).verifying_key();
 
     db.append_key(provider.clone(), key1).await.unwrap();
     db.append_key(provider.clone(), key2).await.unwrap();
@@ -60,7 +60,7 @@ async fn test_append_multiple_keys_for_same_provider() {
 async fn test_has_key_authorized() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key = SigningKey::generate(&mut OsRng).verifying_key();
+    let key = SigningKey::generate(&mut rng()).verifying_key();
     db.append_key(provider.clone(), key).await.unwrap();
 
     assert!(db.has_key(provider, key).await.unwrap());
@@ -70,8 +70,8 @@ async fn test_has_key_authorized() {
 async fn test_has_key_unauthorized() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key1 = SigningKey::generate(&mut OsRng).verifying_key();
-    let key2 = SigningKey::generate(&mut OsRng).verifying_key();
+    let key1 = SigningKey::generate(&mut rng()).verifying_key();
+    let key2 = SigningKey::generate(&mut rng()).verifying_key();
     db.append_key(provider, key1).await.unwrap();
 
     let other_provider = b"bob".to_vec();
@@ -82,7 +82,7 @@ async fn test_has_key_unauthorized() {
 async fn test_get_key_provider_mapping() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key = SigningKey::generate(&mut OsRng).verifying_key();
+    let key = SigningKey::generate(&mut rng()).verifying_key();
     db.append_key(provider.clone(), key).await.unwrap();
 
     let found_provider = db.get_key_provider(key).await.unwrap();
@@ -93,7 +93,7 @@ async fn test_get_key_provider_mapping() {
 async fn test_revoke_key_success() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key = SigningKey::generate(&mut OsRng).verifying_key();
+    let key = SigningKey::generate(&mut rng()).verifying_key();
     db.append_key(provider.clone(), key).await.unwrap();
 
     let revoked = db.revoke_key(provider.clone(), key).await.unwrap();
@@ -106,7 +106,7 @@ async fn test_revoke_key_success() {
 async fn test_revoke_key_not_found() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key = SigningKey::generate(&mut OsRng).verifying_key();
+    let key = SigningKey::generate(&mut rng()).verifying_key();
 
     let revoked = db.revoke_key(provider, key).await.unwrap();
     assert!(!revoked);
@@ -116,7 +116,7 @@ async fn test_revoke_key_not_found() {
 async fn test_append_message_fk_constraint_success() {
     let db = setup_db().await;
     let provider = b"alice".to_vec();
-    let key = SigningKey::generate(&mut OsRng).verifying_key();
+    let key = SigningKey::generate(&mut rng()).verifying_key();
     db.append_key(provider.clone(), key).await.unwrap();
 
     let msg = SignedMessage {
@@ -148,9 +148,9 @@ async fn test_get_ledger_grouping() {
     let db = setup_db().await;
     let alice = b"alice".to_vec();
     let bob = b"bob".to_vec();
-    let key_a1 = SigningKey::generate(&mut OsRng).verifying_key();
-    let key_a2 = SigningKey::generate(&mut OsRng).verifying_key();
-    let key_b1 = SigningKey::generate(&mut OsRng).verifying_key();
+    let key_a1 = SigningKey::generate(&mut rng()).verifying_key();
+    let key_a2 = SigningKey::generate(&mut rng()).verifying_key();
+    let key_b1 = SigningKey::generate(&mut rng()).verifying_key();
 
     db.append_key(alice.clone(), key_a1).await.unwrap();
     db.append_key(alice.clone(), key_a2).await.unwrap();

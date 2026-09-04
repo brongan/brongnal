@@ -48,11 +48,11 @@ pub fn create_prekey_bundle(signing_key: &SigningKey, num_keys: u32) -> X3DHPreK
 mod tests {
     use crate::bundle::*;
     use anyhow::Result;
-    use chacha20poly1305::aead::OsRng;
+    use rand::rng;
 
     #[test]
     fn create_verify_bundle_success() -> Result<()> {
-        let key = SigningKey::generate(&mut OsRng);
+        let key = SigningKey::generate(&mut rng());
         for bundle_size in [0, 1, 4] {
             let signed_bundle = create_prekey_bundle(&key, bundle_size);
             let bundle_keys: Vec<X25519PublicKey> = signed_bundle
@@ -66,7 +66,7 @@ mod tests {
                 &signed_bundle.signature,
             )?;
 
-            let other_key = SigningKey::generate(&mut OsRng);
+            let other_key = SigningKey::generate(&mut rng());
             assert!(verify_bundle(
                 &VerifyingKey::from(&other_key),
                 &bundle_keys,

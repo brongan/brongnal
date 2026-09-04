@@ -362,12 +362,15 @@
         dockerImage = pkgs.dockerTools.streamLayeredImage {
           name = "brongnal";
           tag = "latest";
-          contents = [myServer];
+          contents = [myServer pkgs.cacert];
           config = {
             Cmd = [
               "${myServer}/bin/server"
             ];
-            Env = ["RUST_LOG=info"];
+            Env = [
+              "RUST_LOG=info"
+              "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
+            ];
           };
         };
       in {

@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde", "zeroize"] }
-prost = "0.12.6"
+ed25519-dalek = { version = "3.0.0", features = ["rand_core", "serde", "zeroize"] }
+prost = "0.14.4"
 protocol = { path = "../protocol/" }
 thiserror = "1.0.69"
-tonic = "0.11.0"
-x25519-dalek = { version = "2.0.1", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
+tonic = "0.14.6"
+tonic-prost = "0.14.6"
+x25519-dalek = { version = "3.0.0", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }
 
 [build-dependencies]
-tonic-build = "0.11.0"
-tonic-reflection = { version = "0.11.0", features = ["server"] }
+tonic-prost-build = "0.14.6"
+tonic-reflection = { version = "0.14.6", features = ["server"] }
 

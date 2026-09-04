@@ -337,7 +337,7 @@ async fn register_username(
     let signed_message = SignedMessage {
         contents: Some(contents),
         identity_key: Some(ik.verifying_key().as_bytes().to_vec()),
-        signature: Some(signature.to_vec()),
+        signature: Some(signature.to_bytes().to_vec()),
     };
     let request = Request::new(ActionRequest {
         message: Some(signed_message),

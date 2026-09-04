@@ -4,7 +4,7 @@ use crate::service::Service;
 use ed25519_dalek::{Signer, SigningKey};
 use prost::Message;
 use proto::gossamer::{ActionRequest, GetLedgerRequest, SignedMessage};
-use rand_core::OsRng;
+use rand::rng;
 use tokio_rusqlite::Connection;
 use tonic::Request;
 
@@ -32,7 +32,7 @@ fn create_signed_action(
 
     SignedMessage {
         contents: Some(encoded),
-        signature: Some(signature.to_vec()),
+        signature: Some(signature.to_bytes().to_vec()),
         identity_key: Some(signer.verifying_key().to_bytes().to_vec()),
     }
 }
@@ -40,7 +40,7 @@ fn create_signed_action(
 #[tokio::test]
 async fn test_action_claim_new_provider_success() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
 
     // New user claims 'alice' using their own key
     let action = create_signed_action(
@@ -61,8 +61,8 @@ async fn test_action_claim_new_provider_success() {
 #[tokio::test]
 async fn test_action_claim_denied_if_not_self_signed() {
     let service = setup_service().await;
-    let attacker_key = SigningKey::generate(&mut OsRng);
-    let victim_key = SigningKey::generate(&mut OsRng);
+    let attacker_key = SigningKey::generate(&mut rng());
+    let victim_key = SigningKey::generate(&mut rng());
 
     // Attacker tries to claim 'victim' identity for the victims key, but signs with attackers key
     let action = create_signed_action(
@@ -84,8 +84,8 @@ async fn test_action_claim_denied_if_not_self_signed() {
 #[tokio::test]
 async fn test_action_append_key_success_with_existing_auth() {
     let service = setup_service().await;
-    let alice_key1 = SigningKey::generate(&mut OsRng);
-    let alice_key2 = SigningKey::generate(&mut OsRng);
+    let alice_key1 = SigningKey::generate(&mut rng());
+    let alice_key2 = SigningKey::generate(&mut rng());
 
     // 1. Initial claim
     let claim = create_signed_action(
@@ -120,7 +120,7 @@ async fn test_action_append_key_success_with_existing_auth() {
 #[tokio::test]
 async fn test_action_key_theft_denied() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
 
     // 1. Alice claims 'alice'
     let alice_claim = create_signed_action(
@@ -160,9 +160,9 @@ async fn test_action_key_theft_denied() {
 #[tokio::test]
 async fn test_action_append_key_unauthorized_signer_denied() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
-    let attacker_key = SigningKey::generate(&mut OsRng);
-    let new_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
+    let attacker_key = SigningKey::generate(&mut rng());
+    let new_key = SigningKey::generate(&mut rng());
 
     // 1. Alice claims 'alice'
     let alice_claim = create_signed_action(
@@ -198,8 +198,8 @@ async fn test_action_append_key_unauthorized_signer_denied() {
 #[tokio::test]
 async fn test_action_existing_user_theft_denied() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
-    let bob_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
+    let bob_key = SigningKey::generate(&mut rng());
 
     // 1. Alice claims 'alice'
     let alice_claim = create_signed_action(
@@ -253,7 +253,7 @@ async fn test_action_existing_user_theft_denied() {
 #[tokio::test]
 async fn test_action_revoke_key_success() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
 
     // 1. Claim
     let claim = create_signed_action(
@@ -288,8 +288,8 @@ async fn test_action_revoke_key_success() {
 #[tokio::test]
 async fn test_action_revoke_key_unauthorized_signer_denied() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
-    let attacker_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
+    let attacker_key = SigningKey::generate(&mut rng());
 
     // 1. Alice claims 'alice'
     let alice_claim = create_signed_action(
@@ -325,8 +325,8 @@ async fn test_action_revoke_key_unauthorized_signer_denied() {
 #[tokio::test]
 async fn test_action_revoke_nonexistent_key_denied() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
-    let fake_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
+    let fake_key = SigningKey::generate(&mut rng());
 
     // 1. Alice claims 'alice'
     let alice_claim = create_signed_action(
@@ -362,7 +362,7 @@ async fn test_action_revoke_nonexistent_key_denied() {
 #[tokio::test]
 async fn test_action_invalid_signature_denied() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
 
     let mut action = create_signed_action(
         &alice_key,
@@ -390,7 +390,7 @@ async fn test_action_invalid_signature_denied() {
 #[tokio::test]
 async fn test_get_ledger_mapping() {
     let service = setup_service().await;
-    let alice_key = SigningKey::generate(&mut OsRng);
+    let alice_key = SigningKey::generate(&mut rng());
 
     let claim = create_signed_action(
         &alice_key,

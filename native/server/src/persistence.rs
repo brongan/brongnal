@@ -76,7 +76,7 @@ impl SqliteStorage {
         let persisted_spk = {
             let serialized_spk = spk.clone();
             self.0
-                .call(move |connection| {
+                .call(move |connection| -> rusqlite::Result<_> {
                     connection.execute(
                         "INSERT OR IGNORE INTO device (ik, spk, time) VALUES ($1, $2, ?3)",
                         params![ik, serialized_spk, time_now()],
@@ -107,7 +107,7 @@ impl SqliteStorage {
         let ik_bytes = ik.to_bytes();
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 let spk = spk;
                 // Returns the first row updated so that a missing key results in an error.
                 let _: Vec<u8> = connection.query_row(
@@ -136,7 +136,7 @@ impl SqliteStorage {
         let ik = ik.to_bytes();
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 let mut stmt = connection
                     .prepare("INSERT INTO opk_queue (ik, opk, time) VALUES (?1, ?2, ?3)")
                     .unwrap();
@@ -156,7 +156,7 @@ impl SqliteStorage {
         let ik = ik.to_bytes();
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 let spk: Vec<u8> = connection.query_row(
                     "SELECT spk FROM device WHERE ik = ?1",
                     params![ik],
@@ -175,7 +175,7 @@ impl SqliteStorage {
         let ik = ik.to_bytes();
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 let key: Option<[u8;32]> = match connection.query_row(
                         "DELETE FROM opk_queue WHERE opk = ( SELECT opk FROM opk_queue WHERE ik = ?1 ORDER BY time LIMIT 1) RETURNING opk", 
                         params![ik],
@@ -200,7 +200,7 @@ impl SqliteStorage {
         let recipient = recipient.to_bytes();
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 connection.execute(
                     "INSERT INTO mailbox (message, ik, time) VALUES (?1, ?2, ?3)",
                     (message.encode_to_vec(), recipient, time_now()),
@@ -217,7 +217,7 @@ impl SqliteStorage {
         let recipient = recipient.to_bytes();
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 let mut stmt =
                     connection.prepare("DELETE FROM mailbox WHERE ik = ?1 RETURNING message")?;
                 let message_iter = stmt
@@ -241,7 +241,7 @@ impl SqliteStorage {
         let ik = ik.to_bytes();
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 match connection.query_row(
                     "SELECT COUNT(*) FROM opk_queue WHERE ik = $1",
                     [ik],
@@ -249,7 +249,7 @@ impl SqliteStorage {
                 ) {
                     Ok(value) => Ok(value),
                     Err(Error::QueryReturnedNoRows) => Ok(0),
-                    Err(e) => Err(tokio_rusqlite::Error::Rusqlite(e)),
+                    Err(e) => Err(e),
                 }
             })
             .await
@@ -261,7 +261,7 @@ impl SqliteStorage {
     pub async fn set_fcm_token(&self, ik: &VerifyingKey, token: String) -> tonic::Result<()> {
         let ik = ik.to_bytes();
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 connection.execute(
                     "INSERT INTO firebasetoken (ik, token, insertion_time) VALUES (?1, ?2, ?3)",
                     params![ik, token, time_now()],
@@ -284,7 +284,7 @@ impl SqliteStorage {
         let min_time = time_now().saturating_sub(max_age.as_secs());
 
         self.0
-            .call(move |connection| {
+            .call(move |connection| -> rusqlite::Result<_> {
                 let token: Option<String> = match connection.query_row(
                     "SELECT token FROM firebasetoken WHERE ik = ?1 AND insertion_time > ?2",
                     params![ik, min_time],
@@ -310,7 +310,7 @@ pub async fn clean_mailboxes(
     let expired = time_now() - ttl.as_secs();
     connection
         .call(move |connection| {
-            Ok(connection.execute("DELETE FROM mailbox WHERE time < $0", params![expired])?)
+            connection.execute("DELETE FROM mailbox WHERE time < $0", params![expired])
         })
         .await
 }
@@ -319,9 +319,9 @@ pub async fn clean_mailboxes(
 mod tests {
     use crate::persistence::*;
     use anyhow::Result;
-    use chacha20poly1305::aead::OsRng;
     use client::X3DHClient;
     use ed25519_dalek::SigningKey;
+    use rand::rng;
     use tokio_rusqlite::Connection;
     use tonic::Code;
 
@@ -376,7 +376,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_keys_not_found() -> Result<()> {
-        let identity_key = SigningKey::generate(&mut OsRng);
+        let identity_key = SigningKey::generate(&mut rng());
         let storage = SqliteStorage::new(Connection::open_in_memory().await?).await?;
         assert_eq!(
             storage
@@ -391,7 +391,7 @@ mod tests {
 
     #[tokio::test]
     async fn pop_empty_opks_none() -> Result<()> {
-        let identity_key = SigningKey::generate(&mut OsRng);
+        let identity_key = SigningKey::generate(&mut rng());
         let storage = SqliteStorage::new(Connection::open_in_memory().await?).await?;
         assert_eq!(
             storage.pop_opk(&VerifyingKey::from(&identity_key)).await?,
@@ -418,7 +418,7 @@ mod tests {
 
     #[tokio::test]
     async fn updating_spk_user_not_found() -> Result<()> {
-        let identity_key = VerifyingKey::from(&SigningKey::generate(&mut OsRng));
+        let identity_key = VerifyingKey::from(&SigningKey::generate(&mut rng()));
         let storage = SqliteStorage::new(Connection::open_in_memory().await?).await?;
         assert_eq!(
             storage
@@ -453,7 +453,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_message_unknown_user() -> Result<()> {
-        let identity_key = SigningKey::generate(&mut OsRng);
+        let identity_key = SigningKey::generate(&mut rng());
         let storage = SqliteStorage::new(Connection::open_in_memory().await?).await?;
         assert_eq!(
             storage
@@ -490,7 +490,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_fcm_token_user_not_found() -> Result<()> {
-        let ik = SigningKey::generate(&mut OsRng);
+        let ik = SigningKey::generate(&mut rng());
         let token = String::from("abcd123");
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn).await?;

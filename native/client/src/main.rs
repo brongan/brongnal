@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
         .with(filter)
         .try_init()?;
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal")?;
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("brongnal");
     let db_path = xdg_dirs.place_data_file(format!("{}_keys.sqlite", name))?;
     let connection = Connection::open(db_path).await?;
     let client = Arc::new(X3DHClient::new(connection.clone()).await?);

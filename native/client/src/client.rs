@@ -1,11 +1,11 @@
 use crate::{ClientError, ClientResult};
 use base64::{engine::general_purpose::STANDARD as base64, Engine as _};
-use chacha20poly1305::aead::OsRng;
 use chrono::DateTime;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use proto::ApplicationMessage;
 use protocol::bundle::{create_prekey_bundle, sign_bundle};
 use protocol::x3dh;
+use rand::rng;
 use rusqlite::{params, Connection};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::info;
@@ -138,7 +138,7 @@ fn lazy_init_identity_key(connection: &Connection) -> rusqlite::Result<SigningKe
         return Ok(ik);
     }
     info!("Creating initial identity key.");
-    let identity_key = SigningKey::generate(&mut OsRng);
+    let identity_key = SigningKey::generate(&mut rng());
     insert_identity_key(&identity_key, connection)?;
     Ok(identity_key)
 }
@@ -293,7 +293,7 @@ impl X3DHClient {
             .call(|connection| {
                 create_tables(connection)?;
                 lazy_init_pre_key(connection)?;
-                Ok(lazy_init_identity_key(connection)?)
+                lazy_init_identity_key(connection)
             })
             .await
             .map_err(ClientError::TokioSqlite)?;
@@ -312,11 +312,11 @@ impl X3DHClient {
         let key: [u8; 32] = self
             .connection
             .call(move |connection| {
-                Ok(connection.query_row(
+                connection.query_row(
                     "DELETE from keys WHERE public_key=?1 RETURNING private_key",
                     params![one_time_prekey.to_bytes()],
                     |row| row.get(0),
-                )?)
+                )
             })
             .await
             .map_err(|_| ClientError::WipeOpk(pubkey))?;
@@ -332,9 +332,9 @@ impl X3DHClient {
         let pubkey = base64::encode(pre_key.to_bytes());
         info!("Loading pre key: {pubkey}");
         let key: [u8; 32] = self.connection.call(move |connection| {
-            Ok(connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1",
+            connection.query_row("SELECT private_key FROM keys WHERE public_key = ?1 ORDER BY creation_time DESC LIMIT 1",
                 params![pre_key.to_bytes()],
-                |row| row.get(0))?)
+                |row| row.get(0))
         }).await?;
         Ok(X25519StaticSecret::from(key))
     }
@@ -370,11 +370,7 @@ impl X3DHClient {
             opks.bundle.into_iter().map(|opk| opk.0).collect();
         self.connection
             .call(move |connection| {
-                Ok(insert_pre_keys(
-                    &persisted_pre_keys,
-                    KeyType::OneTimePre,
-                    connection,
-                )?)
+                insert_pre_keys(&persisted_pre_keys, KeyType::OneTimePre, connection)
             })
             .await?;
 
@@ -395,9 +391,7 @@ impl X3DHClient {
             .call(move |connection| {
                 add_user(connection, &sender, None, None)?;
                 add_user(connection, &receiver, None, None)?;
-                Ok(persist_state(
-                    connection, &sender, &receiver, &message, state,
-                )?)
+                persist_state(connection, &sender, &receiver, &message, state)
             })
             .await
             .map_err(ClientError::TokioSqlite)
@@ -409,21 +403,21 @@ impl X3DHClient {
         state: MessageState,
     ) -> ClientResult<()> {
         self.connection
-            .call(move |connection| Ok(update_state(connection, message_id, state)?))
+            .call(move |connection| update_state(connection, message_id, state))
             .await
             .map_err(ClientError::TokioSqlite)
     }
 
     pub async fn get_message(&self, id: MessageId) -> ClientResult<MessageModel> {
         self.connection
-            .call(move |connection| Ok(get_message(connection, id)?))
+            .call(move |connection| get_message(connection, id))
             .await
             .map_err(ClientError::TokioSqlite)
     }
 
     pub async fn get_messages(&self) -> ClientResult<Vec<MessageModel>> {
         self.connection
-            .call(move |connection| Ok(get_conversations(connection)?))
+            .call(move |connection| get_conversations(connection))
             .await
             .map_err(ClientError::TokioSqlite)
     }

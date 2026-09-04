@@ -1,5 +1,4 @@
 use blake2::{Blake2b512, Digest};
-use chacha20poly1305::aead::OsRng;
 use x25519_dalek::{
     EphemeralSecret as X25519EphemeralSecret, PublicKey as X25519PublicKey, SharedSecret,
 };
@@ -10,7 +9,7 @@ struct MessageKey([u8; 32]);
 
 // GENERATE_DH(): Returns a new Diffie-Hellman key pair.
 fn generate_dh() -> X25519EphemeralSecret {
-    X25519EphemeralSecret::random_from_rng(OsRng)
+    X25519EphemeralSecret::random()
 }
 
 // DH(dh_pair, dh_pub): Returns the output from the Diffie-Hellman calculation between the private key from the DH key pair dh_pair and the DH public key dh_pub. If the DH function rejects invalid public keys, then this function may raise an exception which terminates processing.
