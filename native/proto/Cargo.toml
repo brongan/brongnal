@@ -7,7 +7,7 @@ edition = "2021"
 ed25519-dalek = { version = "3.0.0", features = ["rand_core", "serde", "zeroize"] }
 prost = "0.14.4"
 protocol = { path = "../protocol/" }
-thiserror = "1.0.69"
+thiserror = "2.0.20"
 tonic = "0.14.6"
 tonic-prost = "0.14.6"
 x25519-dalek = { version = "3.0.0", features = ["getrandom", "static_secrets", "reusable_secrets", "serde", "zeroize"] }

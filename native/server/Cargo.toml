@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.97"
-base64 = "0.22.1"
+anyhow = "1.0.104"
+base64 = "0.23.1"
 blake2 = "0.11.0"
 chacha20poly1305 = "0.11.0"
 ed25519-dalek = { version = "3.0.0", features = [
@@ -13,15 +13,15 @@ ed25519-dalek = { version = "3.0.0", features = [
 	"serde",
 	"zeroize",
 ] }
-futures = "0.3.30"
-gcp_auth = { version = "0.12.3", features = ["webpki-roots"] }
+futures = "0.3.34"
+gcp_auth = { version = "0.12.7", features = ["webpki-roots"] }
 gossamer = { path = "../gossamer/" }
 prost = "0.14.4"
 proto = { path = "../proto/" }
 protocol = { path = "../protocol/" }
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
 	"json",
-	"rustls-tls-webpki-roots",
+	"rustls-no-provider",
 ] }
 rusqlite = { version = "0.37.0", features = [] }
 rustls = { version = "0.23.43", default-features = false, features = ["ring", "std"] }
@@ -32,15 +32,15 @@ sentry = { version = "0.49.2", default-features = false, features = [
 	"contexts",
 	"panic",
 ] }
-serde_json = "1.0.140"
-thiserror = "2.0.12"
-tokio = { version = "1.44.1", features = ["rt-multi-thread", "macros"] }
+serde_json = "1.0.151"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
 tokio-rusqlite = { version = "0.7.0", features = [] }
-tokio-stream = "0.1.17"
+tokio-stream = "0.1.19"
 tonic = "0.14.6"
 tonic-reflection = { version = "0.14.6", features = ["server"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 x25519-dalek = { version = "3.0.0", features = [
 	"getrandom",
 	"static_secrets",
