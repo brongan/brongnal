@@ -75,13 +75,13 @@ void main() {
       retry = 0;
       final messageFinder = find.byWidgetPredicate((widget) =>
           widget is RichText && widget.text.toPlainText().contains(testMsg));
-      while (messageFinder.evaluate().isEmpty && retry < 10) {
+      while (messageFinder.evaluate().length < 2 && retry < 10) {
         await tester.pump(const Duration(milliseconds: 500));
         retry++;
       }
 
-      // Verify message appears in list (at least one, possibly two due to self-messaging)
-      expect(messageFinder, findsAtLeastNWidgets(1));
+      // Verify both the sent copy and the decrypted, live-received copy.
+      expect(messageFinder, findsNWidgets(2));
     });
   });
 }

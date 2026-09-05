@@ -15,7 +15,6 @@ ed25519-dalek = { version = "3.0.0", features = [
 ] }
 futures = "0.3.34"
 gcp_auth = { version = "0.12.7", features = ["webpki-roots"] }
-gossamer = { path = "../gossamer/" }
 prost = "0.14.4"
 proto = { path = "../proto/" }
 protocol = { path = "../protocol/" }
@@ -53,4 +52,3 @@ xdg = "3.0.0"
 [dev-dependencies]
 client = { path = "../client/" }
 rand = "0.10.2"
-

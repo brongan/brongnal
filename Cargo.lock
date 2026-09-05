@@ -362,7 +362,6 @@ dependencies = [
  "anyhow",
  "async-stream",
  "base64 0.23.1",
- "blake2",
  "chacha20poly1305",
  "chrono",
  "ed25519-dalek",
@@ -945,28 +944,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
-name = "gossamer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake2",
- "ed25519-dalek",
- "hex",
- "prost",
- "proto",
- "protocol",
- "rand 0.10.2",
- "rusqlite",
- "tokio",
- "tokio-rusqlite",
- "tonic",
- "tonic-reflection",
- "tracing",
- "tracing-subscriber",
- "xdg",
-]
-
-[[package]]
 name = "h2"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1117,7 +1094,6 @@ dependencies = [
  "flutter_rust_bridge",
  "lazy_static",
  "log",
- "prost",
  "proto",
  "serde",
  "thiserror",
@@ -1613,28 +1589,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num_enum"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d0bca838442ec211fa11de3a8b0e0e8f3a4522575b5c4c06ed722e005036f26"
-dependencies = [
- "num_enum_derive",
- "rustversion",
-]
-
-[[package]]
-name = "num_enum_derive"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "objc2"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1964,15 +1918,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-crate"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
-dependencies = [
- "toml_edit",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2060,7 +2005,6 @@ dependencies = [
  "chacha20poly1305",
  "ed25519-dalek",
  "hkdf",
- "num_enum",
  "rand 0.10.2",
  "serde",
  "sha2",
@@ -2582,7 +2526,6 @@ dependencies = [
  "ed25519-dalek",
  "futures",
  "gcp_auth",
- "gossamer",
  "prost",
  "proto",
  "protocol",
@@ -2916,36 +2859,6 @@ dependencies = [
  "libc",
  "pin-project-lite",
  "tokio",
-]
-
-[[package]]
-name = "toml_datetime"
-version = "1.1.1+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3165f65f62e28e0115a00b2ebdd37eb6f3b641855f9d636d3cd4103767159ad7"
-dependencies = [
- "serde_core",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.25.13+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6975367e4d2ef766d86af01ffad14b622fecc8d4357a998fbc4deb6e9bacaf9b"
-dependencies = [
- "indexmap",
- "toml_datetime",
- "toml_parser",
- "winnow",
-]
-
-[[package]]
-name = "toml_parser"
-version = "1.1.3+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
-dependencies = [
- "winnow",
 ]
 
 [[package]]
@@ -3561,15 +3474,6 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
-
-[[package]]
-name = "winnow"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "wit-bindgen"

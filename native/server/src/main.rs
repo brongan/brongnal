@@ -1,10 +1,9 @@
 #![feature(duration_constructors)]
+#[cfg(test)]
+mod brongnal_tests;
 use crate::push_notifications::FirebaseCloudMessagingClient;
 use brongnal::BrongnalController;
-use gossamer::persistence::GossamerStorage;
-use gossamer::service::Service as GossamerService;
 use persistence::{clean_mailboxes, SqliteStorage};
-use proto::gossamer::gossamer_service_server::GossamerServiceServer as GossamerServer;
 use proto::service::brongnal_service_server::BrongnalServiceServer as BrongnalServer;
 use proto::FILE_DESCRIPTOR_SET;
 use sentry::ClientInitGuard;
@@ -88,15 +87,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let connection = Connection::open(db_path).await?;
     tokio::spawn(db_cleanup(connection.clone()));
 
-    let controller =
-        BrongnalController::new(SqliteStorage::new(connection.clone()).await?, fcm_client);
-    let gossamer = GossamerService::new(GossamerStorage::new(connection).await?);
+    let controller = BrongnalController::new(SqliteStorage::new(connection).await?, fcm_client);
 
     info!("Brongnal Server listening at: {server_addr}");
 
     Server::builder()
         .add_service(BrongnalServer::new(controller))
-        .add_service(GossamerServer::new(gossamer))
         .add_service(reflection_service)
         .serve(server_addr)
         .await?;

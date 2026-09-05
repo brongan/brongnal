@@ -96,6 +96,6 @@ grpcurl signal.brongan.com:443 describe
 
 `native/` contains rust code.
 `hub` is the flutter frontending binding package and depends on `client` and `proto`.
-`server` implements the `gossamer` and `service` RPC services and depends on `proto` and `protocol`.
+`server` implements the `service` RPC service and depends on `proto` and `protocol`.
 `client` depends on `proto` and `protocol` and implmenets the client.
 `proto` defines protobufs at both the RPC level and serialized messages below the protocol level.

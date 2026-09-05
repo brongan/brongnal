@@ -1,26 +1,21 @@
 #![feature(trivial_bounds)]
 #![feature(iterator_try_collect)]
 use anyhow::Context;
-use async_stream::{stream, try_stream};
-use blake2::{Blake2b, Digest};
+use async_stream::try_stream;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
 use client::MessageState;
 pub use client::X3DHClient;
-use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use ed25519_dalek::{SigningKey, VerifyingKey};
 use prost::Message as _;
 use proto::application::Message as ApplicationMessageProto;
 use proto::application::RatchetMessage as RatchetProto;
-use proto::gossamer::gossamer_service_client::GossamerServiceClient;
-use proto::gossamer::{ActionRequest, GetLedgerRequest, Ledger as LedgerProto, SignedMessage};
 use proto::service::brongnal_service_client::BrongnalServiceClient;
 use proto::service::{
-    Message as MessageProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
+    IdentityKeyRequest, Message as MessageProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
     RetrieveMessagesRequest, SendMessageRequest,
 };
 use proto::{parse_verifying_key, ApplicationMessage, RatchetMessage};
-use protocol::x3dh::{
-    initiate_recv, initiate_send, Message as X3DHMessage, PreKeyBundle, X3DHError,
-};
+use protocol::x3dh::{initiate_recv, initiate_send, Message as X3DHMessage, X3DHError};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -38,7 +33,6 @@ use crate::client::MessageModel;
 pub mod client;
 
 type BrongnalClient = BrongnalServiceClient<Channel>;
-type GossamerClient = GossamerServiceClient<Channel>;
 type ClientResult<T> = Result<T, ClientError>;
 
 #[derive(Error, Debug)]
@@ -108,58 +102,20 @@ fn into_message_stream(
 #[derive(Clone)]
 pub struct User {
     brongnal: BrongnalClient,
-    gossamer: GossamerClient,
     x3dh: Arc<X3DHClient>,
     username: String,
-}
-
-pub trait Ledger: Send + Sync {
-    fn validate_username(&self, username: &str, ik: &VerifyingKey) -> bool;
-}
-
-struct HashLedger(HashMap<Vec<u8>, Vec<VerifyingKey>>);
-
-impl From<LedgerProto> for HashLedger {
-    fn from(ledger: LedgerProto) -> Self {
-        HashLedger(
-            ledger
-                .users
-                .into_iter()
-                .map(|user| {
-                    (
-                        user.provider.unwrap(),
-                        user.public_keys
-                            .into_iter()
-                            .map(|key| parse_verifying_key(&key).unwrap())
-                            .collect(),
-                    )
-                })
-                .collect(),
-        )
-    }
-}
-
-impl Ledger for HashLedger {
-    fn validate_username(&self, username: &str, ik: &VerifyingKey) -> bool {
-        let provider =
-            Blake2b::<blake2::digest::typenum::U32>::digest(username.as_bytes()).to_vec();
-        match self.0.get(&provider) {
-            Some(cached) => cached.contains(ik),
-            None => false,
-        }
-    }
 }
 
 pub struct MessageSubscriber {
     stream: Streaming<MessageProto>,
     ik: SigningKey,
     x3dh: Arc<X3DHClient>,
-    ledger: Box<dyn Ledger>,
+    brongnal: BrongnalClient,
     username: String,
 }
 
 impl MessageSubscriber {
-    pub fn into_stream(self) -> impl Stream<Item = ClientResult<MessageModel>> {
+    pub fn into_stream(mut self) -> impl Stream<Item = ClientResult<MessageModel>> {
         try_stream! {
             let messages = into_message_stream(self.stream);
             tokio::pin!(messages);
@@ -186,7 +142,14 @@ impl MessageSubscriber {
                     )?;
                     // TODO: Handle the ratchet header.
                     let ratchet_message: RatchetMessage = RatchetProto::decode(&*decrypted)?.try_into()?;
-                    if !self.ledger.validate_username(&ratchet_message.message.sender, &message.ik) {
+                    let sender_key = match get_identity_key(&mut self.brongnal, &ratchet_message.message.sender).await {
+                        Ok(key) => key,
+                        Err(e) => {
+                            warn!("Failed to look up claimed sender: {e}");
+                            continue;
+                        }
+                    };
+                    if sender_key != message.ik {
                         warn!("Message failed username validation. Claimed sender: {}", &ratchet_message.message.sender);
                         continue;
                     }
@@ -224,11 +187,9 @@ impl User {
         let channel = tonic::transport::Endpoint::from_shared(addr)
             .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
             .connect_lazy();
-        let brongnal = BrongnalClient::new(channel.clone());
-        let gossamer = GossamerClient::new(channel);
+        let brongnal = BrongnalClient::new(channel);
         Ok(User {
             brongnal,
-            gossamer,
             x3dh,
             username,
         })
@@ -236,16 +197,13 @@ impl User {
 
     #[tracing::instrument(skip(self))]
     pub async fn register(&mut self, fcm_token: Option<String>) -> ClientResult<()> {
-        let mut gossamer = self.gossamer.clone();
         let mut brongnal = self.brongnal.clone();
-        register_username(&mut gossamer, self.x3dh.get_ik(), self.username.clone()).await?;
-        register_device(&mut brongnal, &self.x3dh, fcm_token).await?;
+        register_device(&mut brongnal, &self.x3dh, &self.username, fcm_token).await?;
         Ok(())
     }
 
     pub async fn get_messages(&self) -> ClientResult<MessageSubscriber> {
         let mut brongnal = self.brongnal.clone();
-        let mut gossamer = self.gossamer.clone();
         let ik = self.x3dh.get_ik();
         let stream = brongnal
             .retrieve_messages(RetrieveMessagesRequest {
@@ -253,19 +211,17 @@ impl User {
             })
             .await?
             .into_inner();
-        let ledger: Box<HashLedger> = Box::new(get_ledger(&mut gossamer).await?.into());
         Ok(MessageSubscriber {
             stream,
             ik,
             x3dh: self.x3dh.clone(),
-            ledger,
+            brongnal,
             username: self.username.clone(),
         })
     }
 
     pub async fn send_message(&self, peer_username: String, message: String) -> ClientResult<i64> {
         let mut brongnal = self.brongnal.clone();
-        let mut gossamer = self.gossamer.clone();
         // TODO: Create Ratchet Header
         let ratchet_message = RatchetMessage {
             header: None,
@@ -275,22 +231,20 @@ impl User {
             },
         };
         let ik = self.x3dh.get_ik();
-        let keys = get_keys(&mut gossamer, &peer_username).await?;
-        let mut bundles = Vec::with_capacity(keys.len());
-        for key in keys {
-            let recipient = key.as_bytes().to_vec();
-            let request = Request::new(PreKeyBundleRequest {
-                identity_key: Some(recipient),
-            });
-            bundles.push(
-                brongnal
-                    .request_pre_keys(request)
-                    .await?
-                    .into_inner()
-                    .try_into()?,
-            );
-        }
-        let requests = send_message_requests(bundles, ik, ratchet_message);
+        let recipient = get_identity_key(&mut brongnal, &peer_username).await?;
+        let bundle = brongnal
+            .request_pre_keys(PreKeyBundleRequest {
+                identity_key: Some(recipient.to_bytes().to_vec()),
+            })
+            .await?
+            .into_inner()
+            .try_into()?;
+        let ratchet_message: RatchetProto = ratchet_message.into();
+        let (_, encrypted) = initiate_send(bundle, &ik, &ratchet_message.encode_to_vec())?;
+        let request = SendMessageRequest {
+            recipient_identity_key: Some(recipient.to_bytes().to_vec()),
+            message: Some(encrypted.into()),
+        };
 
         let row_id = self
             .x3dh
@@ -301,7 +255,7 @@ impl User {
                 MessageState::Sending,
             )
             .await?;
-        brongnal.send_message(Request::new(requests)).await?;
+        brongnal.send_message(tokio_stream::once(request)).await?;
         self.x3dh
             .persist_message_state(row_id, MessageState::Sent)
             .await?;
@@ -317,38 +271,10 @@ impl User {
     }
 }
 
-async fn register_username(
-    stub: &mut GossamerClient,
-    ik: SigningKey,
-    name: String,
-) -> ClientResult<()> {
-    info!("Registering {name}!");
-    let provider = Blake2b::<blake2::digest::typenum::U32>::digest(name.as_bytes()).to_vec();
-
-    let message = protocol::gossamer::Message {
-        provider,
-        public_key: ik.verifying_key(),
-        action: protocol::gossamer::Action::AppendKey,
-    };
-    let message: proto::gossamer::Message = message.into();
-    let contents = message.encode_to_vec();
-    let signature = ik.sign(&contents);
-
-    let signed_message = SignedMessage {
-        contents: Some(contents),
-        identity_key: Some(ik.verifying_key().as_bytes().to_vec()),
-        signature: Some(signature.to_bytes().to_vec()),
-    };
-    let request = Request::new(ActionRequest {
-        message: Some(signed_message),
-    });
-    stub.action(request).await?;
-    Ok(())
-}
-
 async fn register_device(
     stub: &mut BrongnalClient,
     x3dh_client: &X3DHClient,
+    username: &str,
     fcm_token: Option<String>,
 ) -> ClientResult<()> {
     let ik = x3dh_client.get_ik().verifying_key().as_bytes().to_vec();
@@ -361,6 +287,7 @@ async fn register_device(
         signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
         one_time_key_bundle: Some(x3dh_client.create_opks(0).await?.into()),
         fcm_token,
+        username: Some(username.to_owned()),
     });
     let res = stub.register_pre_key_bundle(request).await?.into_inner();
     info!("Registered. {} keys remaining!", res.num_keys());
@@ -371,65 +298,20 @@ async fn register_device(
             signed_pre_key: Some(x3dh_client.get_spk().await?.into()),
             one_time_key_bundle: Some(x3dh_client.create_opks(100).await?.into()),
             fcm_token: None,
+            username: Some(username.to_owned()),
         });
         stub.register_pre_key_bundle(request).await?.into_inner();
     }
     Ok(())
 }
 
-fn send_message_requests(
-    bundles: Vec<PreKeyBundle>,
-    ik: SigningKey,
-    message: RatchetMessage,
-) -> impl Stream<Item = SendMessageRequest> {
-    let message: RatchetProto = message.into();
-    stream! {
-        for bundle in bundles {
-            let recipient_identity_key = Some(bundle.ik.as_bytes().to_vec());
-            let (_sk, x3dh_message) = match initiate_send(
-                bundle,
-                &ik,
-                &message.encode_to_vec(),
-            ) {
-                Ok((sk, message)) => (sk, message),
-                Err(e) => {
-                    error!("Failed to x3dh::initiate_send: {e}");
-                    continue
-                },
-            };
-
-            info!("Sending message:{message:?}\n{x3dh_message}\n");
-
-            yield SendMessageRequest {
-                recipient_identity_key,
-                message: Some(x3dh_message.into()),
-            };
-        }
-    }
-}
-
-async fn get_ledger(stub: &mut GossamerClient) -> ClientResult<LedgerProto> {
-    let request = Request::new(GetLedgerRequest {});
-    let ledger = stub.get_ledger(request).await?.into_inner();
-    Ok(ledger)
-}
-
-async fn get_keys(
-    stub: &mut GossamerClient,
-    peer_username: &str,
-) -> ClientResult<Vec<VerifyingKey>> {
-    let recipient_user_id =
-        Blake2b::<blake2::digest::typenum::U32>::digest(peer_username.as_bytes()).to_vec();
-    let ledger = get_ledger(stub).await?;
-    Ok(ledger
-        .users
-        .into_iter()
-        .filter(|user| user.provider() == recipient_user_id)
-        .flat_map(|user| {
-            user.public_keys
-                .into_iter()
-                .map(|key| parse_verifying_key(&key).unwrap())
-                .collect::<Vec<_>>()
+async fn get_identity_key(stub: &mut BrongnalClient, username: &str) -> ClientResult<VerifyingKey> {
+    let response = stub
+        .get_identity_key(IdentityKeyRequest {
+            username: Some(username.to_owned()),
         })
-        .collect::<Vec<_>>())
+        .await?
+        .into_inner();
+    parse_verifying_key(response.identity_key())
+        .map_err(|_| ClientError::Grpc(tonic::Status::data_loss("invalid directory identity key")))
 }

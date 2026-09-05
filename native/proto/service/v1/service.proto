@@ -3,6 +3,7 @@ package service.v1;
 
 service BrongnalService {
   rpc RegisterPreKeyBundle(RegisterPreKeyBundleRequest) returns (RegisterPreKeyBundleResponse);
+  rpc GetIdentityKey(IdentityKeyRequest) returns (IdentityKeyResponse);
   rpc RequestPreKeys(PreKeyBundleRequest) returns (PreKeyBundle);
   rpc SendMessage(stream SendMessageRequest) returns (SendMessageResponse);
   rpc RetrieveMessages(RetrieveMessagesRequest) returns (stream Message);
@@ -36,6 +37,17 @@ message RegisterPreKeyBundleRequest {
 
   // Firebase Cloud Messaging Token
   optional string fcmToken = 4;
+
+  optional string username = 5;
+}
+
+message IdentityKeyRequest {
+  optional string username = 1;
+}
+
+message IdentityKeyResponse {
+  // ED25519 public key registered for this username.
+  optional bytes identity_key = 1;
 }
 
 message RegisterPreKeyBundleResponse {

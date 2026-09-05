@@ -77,10 +77,9 @@
         # Cargo.lock, yet only compiles the requested package's graph -- so
         # code edits in excluded crates cannot invalidate the build, while
         # manifest edits (which affect the lock) still do.
-        rustMembers = ["client" "gossamer" "hub" "proto" "protocol" "server"];
+        rustMembers = ["client" "hub" "proto" "protocol" "server"];
         rustStubTarget = {
           client = "src/lib.rs";
-          gossamer = "src/lib.rs";
           hub = "src/lib.rs";
           proto = "src/lib.rs";
           protocol = "src/lib.rs";
@@ -107,7 +106,7 @@
           '';
         hubRustSrc = rustSrcFor ["hub" "client" "proto" "protocol"];
         hubCargoVendor = craneLib.vendorCargoDeps {src = hubRustSrc;};
-        serverRustSrc = rustSrcFor ["server" "client" "gossamer" "proto" "protocol"];
+        serverRustSrc = rustSrcFor ["server" "client" "proto" "protocol"];
         # nix/pubspec.lock.json is included because preBuild reads it from $src;
         # nix/gradle-deps.json enters via the mitmCache input instead.
         apkSrc = lib.fileset.toSource {

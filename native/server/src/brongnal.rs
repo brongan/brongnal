@@ -5,9 +5,10 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use prost::Message as _;
 use proto::service::brongnal_service_server::BrongnalService;
 use proto::service::{
-    Message as MessageProto, PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest,
-    RegisterPreKeyBundleRequest, RegisterPreKeyBundleResponse, RetrieveMessagesRequest,
-    SendMessageRequest, SendMessageResponse, SignedPreKey as SignedPreKeyProto,
+    IdentityKeyRequest, IdentityKeyResponse, Message as MessageProto,
+    PreKeyBundle as PreKeyBundleProto, PreKeyBundleRequest, RegisterPreKeyBundleRequest,
+    RegisterPreKeyBundleResponse, RetrieveMessagesRequest, SendMessageRequest, SendMessageResponse,
+    SignedPreKey as SignedPreKeyProto,
 };
 use proto::{parse_verifying_key, parse_x25519_public_key};
 use protocol::bundle::verify_bundle;
@@ -61,12 +62,13 @@ impl BrongnalController {
     #[instrument(name="", skip(self, ik, spk, pre_keys), fields(ik = base64.encode(ik), pre_keys = pre_keys.len()))]
     async fn handle_register_pre_key_bundle(
         &self,
+        username: &str,
         ik: &VerifyingKey,
         spk: SignedPreKeyProto,
         pre_keys: Vec<X25519PublicKey>,
         fcm_token: Option<String>,
     ) -> Result<RegisterPreKeyBundleResponse> {
-        self.storage.add_user(ik, spk).await?;
+        self.storage.add_user(username, ik, spk).await?;
         self.storage.add_opks(ik, pre_keys).await?;
         if let Some(fcm_token) = fcm_token {
             self.storage.set_fcm_token(ik, fcm_token).await?;
@@ -147,12 +149,31 @@ impl BrongnalController {
 
 #[tonic::async_trait]
 impl BrongnalService for BrongnalController {
+    async fn get_identity_key(
+        &self,
+        request: Request<IdentityKeyRequest>,
+    ) -> Result<Response<IdentityKeyResponse>> {
+        let request = request.into_inner();
+        let username = request
+            .username
+            .ok_or_else(|| Status::invalid_argument("missing username"))?;
+        let key = self.storage.get_identity_key(&username).await?;
+        Ok(Response::new(IdentityKeyResponse {
+            identity_key: Some(key.to_bytes().to_vec()),
+        }))
+    }
+
     #[instrument(skip(self, request))]
     async fn register_pre_key_bundle(
         &self,
         request: Request<RegisterPreKeyBundleRequest>,
     ) -> Result<Response<RegisterPreKeyBundleResponse>> {
         let request = request.into_inner();
+        let username = request
+            .username
+            .as_deref()
+            .filter(|name| !name.is_empty() && name.len() <= 48)
+            .ok_or_else(|| Status::invalid_argument("username must contain 1 to 48 bytes"))?;
         let ik = parse_verifying_key(request.identity_key())
             .map_err(|_| Status::invalid_argument("request has invalid identity_key"))?;
         let spk_proto = request
@@ -179,7 +200,7 @@ impl BrongnalService for BrongnalController {
         })?;
         let fcm_token = request.fcm_token;
         let response = self
-            .handle_register_pre_key_bundle(&ik, spk_proto, pre_keys, fcm_token)
+            .handle_register_pre_key_bundle(username, &ik, spk_proto, pre_keys, fcm_token)
             .await
             .inspect_err(|e| error!(%e, "Failed to register pre key bundle"))?;
         Ok(Response::new(response))

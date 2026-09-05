@@ -1,9 +1,6 @@
 use application::contents::ContentType;
 use application::{Contents, Sender};
 use ed25519_dalek::{Signature, VerifyingKey};
-use prost::Message as _;
-use protocol::gossamer::Message;
-use protocol::gossamer::SignedMessage as GossamerSignedMessage;
 use protocol::x3dh::Message as X3DHMessage;
 use protocol::x3dh::PreKeyBundle;
 use protocol::x3dh::SignedPreKey;
@@ -32,10 +29,6 @@ pub fn parse_verifying_key(key: &[u8]) -> Result<VerifyingKey, KeyError> {
 pub fn parse_x25519_public_key(key: &[u8]) -> Result<X25519PublicKey, KeyError> {
     let key: [u8; 32] = key.try_into().map_err(|_| KeyError::InvalidX25519Key)?;
     Ok(X25519PublicKey::from(key))
-}
-
-pub mod gossamer {
-    tonic::include_proto!("gossamer.v1");
 }
 
 pub mod service {
@@ -152,90 +145,6 @@ impl TryInto<PreKeyBundle> for PreKeyBundleProto {
             .try_into()?;
 
         Ok(PreKeyBundle { ik, opk, spk })
-    }
-}
-
-impl TryInto<Message> for gossamer::Message {
-    type Error = tonic::Status;
-
-    fn try_into(self) -> Result<Message, Self::Error> {
-        let public_key = parse_verifying_key(self.public_key()).map_err(|e| {
-            Status::invalid_argument(format!("AppendKey has invalid public_key: {e}"))
-        })?;
-
-        let action = (self.action() as i32).try_into().map_err(|_| {
-            Status::invalid_argument(format!("invalid action: {}", self.action().as_str_name()))
-        })?;
-
-        let provider = self
-            .provider
-            .ok_or(Status::invalid_argument("message missing provider"))?;
-
-        Ok(Message {
-            provider,
-            public_key,
-            action,
-        })
-    }
-}
-
-impl From<Message> for gossamer::Message {
-    fn from(
-        Message {
-            provider,
-            public_key,
-            action,
-        }: Message,
-    ) -> Self {
-        Self {
-            provider: Some(provider),
-            public_key: Some(public_key.as_bytes().to_vec()),
-            action: Some(action as i32),
-        }
-    }
-}
-
-impl TryInto<GossamerSignedMessage> for gossamer::SignedMessage {
-    type Error = tonic::Status;
-    fn try_into(self) -> Result<GossamerSignedMessage, Self::Error> {
-        let signature = Signature::from_slice(self.signature()).map_err(|_| {
-            Status::invalid_argument("SignedMessage has an invalid X25519 Signature")
-        })?;
-        let identity_key = parse_verifying_key(self.identity_key()).map_err(|e| {
-            Status::invalid_argument(format!(
-                "SignedMessage has invalid sender_identity_key: {e}"
-            ))
-        })?;
-        let contents = self.contents();
-        identity_key
-            .verify_strict(contents, &signature)
-            .map_err(|_| Status::unauthenticated("SignedMessage signature invalid."))?;
-
-        let message = gossamer::Message::decode(contents)
-            .map_err(|_| Status::invalid_argument("contents are not serialized signed message."))?
-            .try_into()
-            .map_err(|_| {
-                Status::invalid_argument(
-                    "signed message does not contain correctly serialized message",
-                )
-            })?;
-
-        Ok(GossamerSignedMessage {
-            message,
-            identity_key,
-            signature,
-        })
-    }
-}
-
-impl From<GossamerSignedMessage> for gossamer::SignedMessage {
-    fn from(val: GossamerSignedMessage) -> Self {
-        let contents: gossamer::Message = val.message.into();
-        Self {
-            contents: Some(contents.encode_to_vec()),
-            signature: Some(val.signature.to_bytes().to_vec()),
-            identity_key: Some(val.identity_key.as_bytes().to_vec()),
-        }
     }
 }
 

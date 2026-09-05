@@ -5,6 +5,7 @@ use proto::service::Message as MessageProto;
 use proto::service::SignedPreKey as SignedPreKeyProto;
 use rusqlite::params;
 use rusqlite::Error;
+use rusqlite::OptionalExtension;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::Status;
@@ -33,6 +34,7 @@ impl SqliteStorage {
                     BEGIN;
                     CREATE TABLE IF NOT EXISTS device (
                         ik BLOB PRIMARY KEY,
+                        username TEXT NOT NULL UNIQUE,
                         spk BLOB NOT NULL,
                         time INTEGER NOT NULL
                     );
@@ -65,38 +67,61 @@ impl SqliteStorage {
 }
 
 impl SqliteStorage {
-    /// Add a new identity to the storage.
-    /// Attempts to overwrite an identity key returns an error.
-    /// Updates to the user's signed pre key are allowed.
+    /// Register one identity key per username. Repeating the same registration is allowed.
     #[instrument(skip(self, ik, spk))]
-    pub async fn add_user(&self, ik: &VerifyingKey, spk: SignedPreKeyProto) -> tonic::Result<()> {
+    pub async fn add_user(
+        &self,
+        username: &str,
+        ik: &VerifyingKey,
+        spk: SignedPreKeyProto,
+    ) -> tonic::Result<()> {
+        let username = username.to_owned();
         let spk = spk.encode_to_vec();
         let ik = ik.to_bytes();
 
-        let persisted_spk = {
+        let persisted = {
             let serialized_spk = spk.clone();
             self.0
                 .call(move |connection| -> rusqlite::Result<_> {
                     connection.execute(
-                        "INSERT OR IGNORE INTO device (ik, spk, time) VALUES ($1, $2, ?3)",
-                        params![ik, serialized_spk, time_now()],
+                        "INSERT OR IGNORE INTO device (ik, username, spk, time) VALUES (?1, ?2, ?3, ?4)",
+                        params![ik, username, serialized_spk, time_now()],
                     )?;
-                    let persisted_spk: Vec<u8> = connection.query_row(
-                        "SELECT spk FROM device where ik = ?1",
-                        params![ik],
-                        |row| row.get(0),
-                    )?;
-                    Ok(persisted_spk)
+                    connection.query_row(
+                        "SELECT ik, spk FROM device WHERE username = ?1",
+                        params![username],
+                        |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?)),
+                    ).optional()
                 })
                 .await
                 .map_err(|e| Status::internal(format!("Failed to register user: {e}")))?
         };
-        if spk != persisted_spk {
+        if persisted != Some((ik.to_vec(), spk)) {
             return Err(Status::already_exists(
-                "A user already exists with this key.",
+                "Username or identity key is already registered.",
             ));
         }
         Ok(())
+    }
+
+    pub async fn get_identity_key(&self, username: &str) -> tonic::Result<VerifyingKey> {
+        let username = username.to_owned();
+        let key = self
+            .0
+            .call(move |connection| -> rusqlite::Result<_> {
+                connection
+                    .query_row(
+                        "SELECT ik FROM device WHERE username = ?1",
+                        params![username],
+                        |row| row.get::<_, Vec<u8>>(0),
+                    )
+                    .optional()
+            })
+            .await
+            .map_err(|e| Status::internal(format!("Failed to look up username: {e}")))?
+            .ok_or_else(|| Status::not_found("username not found"))?;
+        proto::parse_verifying_key(&key)
+            .map_err(|_| Status::internal("stored identity key is invalid"))
     }
 
     /// Replaces the signed pre key for a given identity.
@@ -326,13 +351,60 @@ mod tests {
     use tonic::Code;
 
     #[tokio::test]
+    async fn username_directory_survives_storage_reinitialization() -> Result<()> {
+        let conn = Connection::open_in_memory().await?;
+        let storage = SqliteStorage::new(conn.clone()).await?;
+        let alice = X3DHClient::new(Connection::open_in_memory().await?).await?;
+        let key = alice.get_ik().verifying_key();
+        storage
+            .add_user("alice", &key, alice.get_spk().await?.into())
+            .await?;
+        drop(storage);
+        let storage = SqliteStorage::new(conn).await?;
+        assert_eq!(storage.get_identity_key("alice").await?, key);
+        assert_eq!(
+            storage
+                .get_identity_key("missing")
+                .await
+                .unwrap_err()
+                .code(),
+            Code::NotFound
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn username_cannot_be_overwritten_by_another_key() -> Result<()> {
+        let storage = SqliteStorage::new(Connection::open_in_memory().await?).await?;
+        let alice = X3DHClient::new(Connection::open_in_memory().await?).await?;
+        let other = X3DHClient::new(Connection::open_in_memory().await?).await?;
+        let key = alice.get_ik().verifying_key();
+        storage
+            .add_user("alice", &key, alice.get_spk().await?.into())
+            .await?;
+        let error = storage
+            .add_user(
+                "alice",
+                &other.get_ik().verifying_key(),
+                other.get_spk().await?.into(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), Code::AlreadyExists);
+        assert_eq!(storage.get_identity_key("alice").await?, key);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn add_user_get_keys_success() -> Result<()> {
         let conn = Connection::open_in_memory().await?;
         let storage = SqliteStorage::new(conn.clone()).await?;
         let alice = X3DHClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
-        storage.add_user(&alice_ik, alice_spk.clone()).await?;
+        storage
+            .add_user("alice", &alice_ik, alice_spk.clone())
+            .await?;
         assert_eq!(storage.get_current_spk(&alice_ik).await?, alice_spk);
         Ok(())
     }
@@ -344,8 +416,12 @@ mod tests {
         let alice = X3DHClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
-        storage.add_user(&alice_ik, alice_spk.clone()).await?;
-        storage.add_user(&alice_ik, alice_spk.clone()).await?;
+        storage
+            .add_user("alice", &alice_ik, alice_spk.clone())
+            .await?;
+        storage
+            .add_user("alice", &alice_ik, alice_spk.clone())
+            .await?;
 
         Ok(())
     }
@@ -357,14 +433,16 @@ mod tests {
         let alice = X3DHClient::new(conn).await?;
         let alice_ik = VerifyingKey::from(&alice.get_ik());
         let alice_spk: SignedPreKeyProto = alice.get_spk().await.unwrap().into();
-        storage.add_user(&alice_ik, alice_spk.clone()).await?;
+        storage
+            .add_user("alice", &alice_ik, alice_spk.clone())
+            .await?;
 
         let alice2 = X3DHClient::new(Connection::open_in_memory().await?).await?;
         let alice2_spk: SignedPreKeyProto = alice2.get_spk().await.unwrap().into();
 
         assert_eq!(
             storage
-                .add_user(&alice_ik, alice2_spk)
+                .add_user("alice", &alice_ik, alice2_spk)
                 .await
                 .err()
                 .map(|e| e.code()),
@@ -408,7 +486,7 @@ mod tests {
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let keys = bob.create_opks(1).await?.pre_keys;
         storage
-            .add_user(&bob_ik, bob.get_spk().await?.into())
+            .add_user("bob", &bob_ik, bob.get_spk().await?.into())
             .await?;
         storage.add_opks(&bob_ik, keys.clone()).await?;
         assert_eq!(storage.pop_opk(&bob_ik).await?, Some(keys[0]));
@@ -438,7 +516,7 @@ mod tests {
         let bob = X3DHClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let bob_spk: SignedPreKeyProto = bob.get_spk().await.unwrap().into();
-        storage.add_user(&bob_ik, bob_spk.clone()).await?;
+        storage.add_user("bob", &bob_ik, bob_spk.clone()).await?;
 
         // Create a different spk and overwrite it.
         let new_spk = SignedPreKeyProto {
@@ -473,7 +551,9 @@ mod tests {
         let bob = X3DHClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().await.unwrap();
-        storage.add_user(&bob_ik, bob_spk.clone().into()).await?;
+        storage
+            .add_user("bob", &bob_ik, bob_spk.clone().into())
+            .await?;
 
         let message_proto = MessageProto {
             sender_identity_key: Some(b"alice identity key".to_vec()),
@@ -512,7 +592,7 @@ mod tests {
         let bob = X3DHClient::new(conn).await?;
         let bob_ik = VerifyingKey::from(&bob.get_ik());
         let bob_spk: protocol::x3dh::SignedPreKey = bob.get_spk().await.unwrap();
-        storage.add_user(&bob_ik, bob_spk.into()).await?;
+        storage.add_user("bob", &bob_ik, bob_spk.into()).await?;
 
         let token = String::from("abcd123");
         storage.set_fcm_token(&bob_ik, token.clone()).await?;
