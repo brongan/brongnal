@@ -1,0 +1,11 @@
+[package]
+name = "play-publish"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dirs = "7.0.0"
+google-androidpublisher3 = { version = "7.0.0", default-features = false, features = ["yup-oauth2", "ring"] }
+mime = "0.3"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "fs"] }

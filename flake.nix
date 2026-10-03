@@ -77,10 +77,11 @@
         # Cargo.lock, yet only compiles the requested package's graph -- so
         # code edits in excluded crates cannot invalidate the build, while
         # manifest edits (which affect the lock) still do.
-        rustMembers = ["client" "hub" "proto" "protocol" "server"];
+        rustMembers = ["client" "hub" "play-publish" "proto" "protocol" "server"];
         rustStubTarget = {
           client = "src/lib.rs";
           hub = "src/lib.rs";
+          play-publish = "src/main.rs";
           proto = "src/lib.rs";
           protocol = "src/lib.rs";
           server = "src/main.rs";
@@ -358,6 +359,14 @@
             runHook postInstall
           '';
         };
+        playPublish = craneLib.buildPackage {
+          src = rustSrcFor ["play-publish"];
+          pname = "play-publish";
+          version = "0.1.0";
+          strictDeps = true;
+          cargoExtraArgs = "--package=play-publish";
+        };
+
         dockerImage = pkgs.dockerTools.streamLayeredImage {
           name = "brongnal";
           tag = "latest";
@@ -444,7 +453,7 @@
         };
 
         packages = {
-          inherit apk myServer dockerImage;
+          inherit apk myServer dockerImage playPublish;
           default = myServer;
         };
       }

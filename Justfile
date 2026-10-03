@@ -47,3 +47,7 @@ release:
 		-providerClass sun.security.pkcs11.SunPKCS11 -providerArg "$cfg" \
 		"$aab" "X.509 Certificate for Digital Signature"
 	echo "signed $aab"
+
+# sign and publish a release AAB to the Play closed testing track
+publish: release
+	nix run .#playPublish
