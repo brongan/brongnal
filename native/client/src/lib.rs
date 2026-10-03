@@ -24,8 +24,8 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
-use tonic::transport::Channel;
-use tonic::{Request, Streaming};
+use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
+use tonic::{Request, Status, Streaming};
 use tracing::{error, info, warn};
 
 use crate::client::MessageModel;
@@ -52,7 +52,7 @@ pub enum ClientError {
     #[error("failed to retrieve pre key")]
     GetPreKey(rusqlite::Error),
     #[error("grpc error: {0}")]
-    Grpc(#[from] tonic::Status),
+    Grpc(#[from] Status),
     #[error("send decrypted message error: {0}")]
     Send(#[from] SendError<ApplicationMessageProto>),
     #[error("x3dh error: {0}")]
@@ -184,8 +184,9 @@ impl User {
     /// The underlying Channel connects on first RPC and auto-reconnects on failure.
     #[tracing::instrument(skip(x3dh))]
     pub fn new(addr: String, x3dh: Arc<X3DHClient>, username: String) -> ClientResult<Self> {
-        let channel = tonic::transport::Endpoint::from_shared(addr)
-            .map_err(|e| ClientError::Grpc(tonic::Status::unavailable(e.to_string())))?
+        let channel = Endpoint::from_shared(addr)
+            .and_then(|endpoint| endpoint.tls_config(ClientTlsConfig::new().with_webpki_roots()))
+            .map_err(|e| ClientError::Grpc(Status::unavailable(e.to_string())))?
             .connect_lazy();
         let brongnal = BrongnalClient::new(channel);
         Ok(User {
@@ -313,5 +314,5 @@ async fn get_identity_key(stub: &mut BrongnalClient, username: &str) -> ClientRe
         .await?
         .into_inner();
     parse_verifying_key(response.identity_key())
-        .map_err(|_| ClientError::Grpc(tonic::Status::data_loss("invalid directory identity key")))
+        .map_err(|_| ClientError::Grpc(Status::data_loss("invalid directory identity key")))
 }
