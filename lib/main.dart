@@ -119,8 +119,11 @@ Future<String?> notificationsToken(FirebaseMessaging messaging) async {
 
   if (settings.authorizationStatus == AuthorizationStatus.authorized) {
     debugPrint('User granted permission: ${settings.authorizationStatus}');
-    final String? token = await messaging.getToken();
-    return token;
+    try {
+      return await messaging.getToken();
+    } on FirebaseException catch (e) {
+      debugPrint("Failed to get FCM token: $e");
+    }
   }
   return null;
 }
