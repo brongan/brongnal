@@ -1,7 +1,8 @@
 use anyhow::Result;
 use client::client::MessageModel;
 use client::{User, X3DHClient};
-use nom::character::complete::{alphanumeric1, multispace1};
+use nom::bytes::complete::take_till1;
+use nom::character::complete::multispace1;
 use nom::IResult;
 use std::io::stdin;
 use std::io::BufRead;
@@ -24,7 +25,7 @@ struct Command {
 }
 
 fn parse_command(input: &str) -> IResult<&str, Command> {
-    let (input, name) = alphanumeric1(input)?;
+    let (input, name) = take_till1(char::is_whitespace)(input)?;
     let (message, _spaces) = multispace1(input)?;
     Ok((
         "",
