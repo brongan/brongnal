@@ -73,8 +73,10 @@ void main() {
 
       // Wait for message to appear in list (it might take a moment to round-trip through Rust and back)
       retry = 0;
-      final messageFinder = find.byWidgetPredicate((widget) =>
-          widget is RichText && widget.text.toPlainText().contains(testMsg));
+      final messageFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText && widget.text.toPlainText().contains(testMsg),
+      );
       while (messageFinder.evaluate().length < 2 && retry < 10) {
         await tester.pump(const Duration(milliseconds: 500));
         retry++;

@@ -6,17 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-enum Sender {
-  other,
-  self,
-}
+enum Sender { other, self }
 
 class ChatScreen extends StatelessWidget {
-  const ChatScreen({
-    super.key,
-    required this.self,
-    required this.peer,
-  });
+  const ChatScreen({super.key, required this.self, required this.peer});
 
   final String self;
   final String peer;
@@ -42,14 +35,16 @@ class ChatScreen extends StatelessWidget {
                 controller: scrollController,
                 itemBuilder: (context, i) {
                   return MessageWidget(
-                      message: messages[i].text,
-                      time: DateTime.fromMillisecondsSinceEpoch(
-                          (1000 * messages[i].dbRecvTime.toInt())),
-                      sender: messages[i].sender == self
-                          ? Sender.self
-                          : Sender.other,
-                      // TODO: only add this icon for the last message in a set from a given sender.
-                      state: messages[i].state);
+                    message: messages[i].text,
+                    time: DateTime.fromMillisecondsSinceEpoch(
+                      (1000 * messages[i].dbRecvTime.toInt()),
+                    ),
+                    sender: messages[i].sender == self
+                        ? Sender.self
+                        : Sender.other,
+                    // TODO: only add this icon for the last message in a set from a given sender.
+                    state: messages[i].state,
+                  );
                 },
               ),
             ),
@@ -108,8 +103,9 @@ class _SendMessageWidgetState extends State<SendMessageWidget> {
               focusNode: myFocusNode,
               controller: messageInput,
               decoration: InputDecoration(
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 hintText: "Brongnal message",
                 suffixIcon: const StubIconButton(
                   icon: Icons.photo_camera_outlined,
@@ -129,7 +125,9 @@ class _SendMessageWidgetState extends State<SendMessageWidget> {
           ),
         ),
         const StubIconButton(
-            icon: Icons.add_circle, name: "Add an attachment."),
+          icon: Icons.add_circle,
+          name: "Add an attachment.",
+        ),
       ],
     );
   }
@@ -167,17 +165,17 @@ class MessageWidget extends StatelessWidget {
       alignment = Alignment.centerLeft;
     }
 
-    var readIcon = Icon(
-      getIcon(state),
-      color: textColor,
-      size: 18,
-    );
+    var readIcon = Icon(getIcon(state), color: textColor, size: 18);
 
     return Align(
       alignment: alignment,
       child: Container(
         margin: EdgeInsets.only(
-            left: leftPadding, right: rightPadding, top: 10, bottom: 10),
+          left: leftPadding,
+          right: rightPadding,
+          top: 10,
+          bottom: 10,
+        ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color: bubbleColor,
@@ -187,9 +185,7 @@ class MessageWidget extends StatelessWidget {
           textAlign: TextAlign.left,
           text: TextSpan(
             text: message,
-            style: theme.textTheme.bodySmall!.copyWith(
-              color: Colors.white,
-            ),
+            style: theme.textTheme.bodySmall!.copyWith(color: Colors.white),
             children: [
               const TextSpan(text: ' '),
               TextSpan(
@@ -220,12 +216,15 @@ AppBar getConversationAppBar(BuildContext context, String name) {
           ),
         ),
         Flexible(
-            child: Text(name,
-                overflow: TextOverflow.fade,
-                style: theme.titleTextStyle!.copyWith(
-                  fontSize: 20,
-                  color: Colors.white,
-                ))),
+          child: Text(
+            name,
+            overflow: TextOverflow.fade,
+            style: theme.titleTextStyle!.copyWith(
+              fontSize: 20,
+              color: Colors.white,
+            ),
+          ),
+        ),
         Icon(Icons.account_circle, size: 16),
       ],
     ),

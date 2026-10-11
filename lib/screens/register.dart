@@ -21,8 +21,10 @@ class Register extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.all(20.0),
-                child: Text('Connect with Brongnal',
-                    style: theme.textTheme.displayLarge),
+                child: Text(
+                  'Connect with Brongnal',
+                  style: theme.textTheme.displayLarge,
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.all(40.0),
@@ -38,11 +40,14 @@ class Register extends StatelessWidget {
                 ),
               ),
               ElevatedButton(
-                child: const Text('Register',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 36,
-                        fontFamily: 'Roboto')),
+                child: const Text(
+                  'Register',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontFamily: 'Roboto',
+                  ),
+                ),
                 onPressed: () async {
                   final String username = usernameInput.text;
                   if (username.isEmpty) return;
@@ -51,9 +56,10 @@ class Register extends StatelessWidget {
 
                   try {
                     await core.registerUser(
-                        username: username,
-                        backendAddress: AppConfig.defaultBackendAddr,
-                        databaseDirectory: dbPath);
+                      username: username,
+                      backendAddress: AppConfig.defaultBackendAddr,
+                      databaseDirectory: dbPath,
+                    );
 
                     final SharedPreferences prefs =
                         await SharedPreferences.getInstance();

@@ -18,19 +18,21 @@ class ConversationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
-        itemCount: conversations.length,
-        itemBuilder: (context, i) {
-          final peer = conversations.keys.elementAt(i);
-          return Conversation(
-            avatar: CircleAvatar(
-                backgroundColor: Colors.primaries[i % Colors.primaries.length],
-                radius: 25,
-                child: Text(peer.substring(0, 2))),
-            lastMessage: conversations.values.elementAt(i).last,
-            self: self,
-            peer: peer,
-          );
-        });
+      itemCount: conversations.length,
+      itemBuilder: (context, i) {
+        final peer = conversations.keys.elementAt(i);
+        return Conversation(
+          avatar: CircleAvatar(
+            backgroundColor: Colors.primaries[i % Colors.primaries.length],
+            radius: 25,
+            child: Text(peer.substring(0, 2)),
+          ),
+          lastMessage: conversations.values.elementAt(i).last,
+          self: self,
+          peer: peer,
+        );
+      },
+    );
   }
 }
 
@@ -51,22 +53,16 @@ class Conversation extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final time = DateTime.fromMillisecondsSinceEpoch(
-        1000 * lastMessage.dbRecvTime.toInt());
-
-    var readIcon = Icon(
-      getIcon(lastMessage.state),
-      color: textColor,
-      size: 18,
+      1000 * lastMessage.dbRecvTime.toInt(),
     );
+
+    var readIcon = Icon(getIcon(lastMessage.state), color: textColor, size: 18);
     return TextButton(
       onPressed: () {
         Navigator.push(
           context,
           MaterialPageRoute<void>(
-            builder: (context) => ChatScreen(
-              self: self,
-              peer: peer,
-            ),
+            builder: (context) => ChatScreen(self: self, peer: peer),
           ),
         );
       },
@@ -74,10 +70,7 @@ class Conversation extends StatelessWidget {
       child: SizedBox(
         child: Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: avatar,
-            ),
+            Padding(padding: const EdgeInsets.all(12.0), child: avatar),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(8.0),

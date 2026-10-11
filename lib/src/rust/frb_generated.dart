@@ -35,12 +35,8 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
   /// Initialize flutter_rust_bridge in mock mode.
   /// No libraries for FFI are loaded.
-  static void initMock({
-    required RustLibApi api,
-  }) {
-    instance.initMockImpl(
-      api: api,
-    );
+  static void initMock({required RustLibApi api}) {
+    instance.initMockImpl(api: api);
   }
 
   /// Dispose flutter_rust_bridge
@@ -74,11 +70,11 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
-    stem: 'hub',
-    ioDirectory: 'native/hub/target/release/',
-    webPrefix: 'pkg/',
-    wasmBindgenName: 'wasm_bindgen',
-  );
+        stem: 'hub',
+        ioDirectory: 'native/hub/target/release/',
+        webPrefix: 'pkg/',
+        wasmBindgenName: 'wasm_bindgen',
+      );
 }
 
 abstract class RustLibApi extends BaseApi {
@@ -86,20 +82,24 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateBridgeInitApp();
 
-  Future<void> crateBridgeRegisterUser(
-      {required String username,
-      String? fcmToken,
-      required String backendAddress,
-      required String databaseDirectory});
+  Future<void> crateBridgeRegisterUser({
+    required String username,
+    String? fcmToken,
+    required String backendAddress,
+    required String databaseDirectory,
+  });
 
-  Future<MessageModel> crateBridgeSendMessage(
-      {required String recipient, required String text});
+  Future<MessageModel> crateBridgeSendMessage({
+    required String recipient,
+    required String text,
+  });
 
-  Future<void> crateBridgeStartHub(
-      {required String databaseDirectory,
-      String? username,
-      String? fcmToken,
-      String? backendAddress});
+  Future<void> crateBridgeStartHub({
+    required String databaseDirectory,
+    String? username,
+    String? fcmToken,
+    String? backendAddress,
+  });
 
   Future<void> crateBridgeStartMockServer({required int port});
 
@@ -116,198 +116,227 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<List<MessageModel>> crateBridgeGetAllMessages() {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 1, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_list_message_model,
-        decodeErrorData: sse_decode_bridge_error,
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_message_model,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateBridgeGetAllMessagesConstMeta,
+        argValues: [],
+        apiImpl: this,
       ),
-      constMeta: kCrateBridgeGetAllMessagesConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateBridgeGetAllMessagesConstMeta => const TaskConstMeta(
-        debugName: "get_all_messages",
-        argNames: [],
-      );
+  TaskConstMeta get kCrateBridgeGetAllMessagesConstMeta =>
+      const TaskConstMeta(debugName: "get_all_messages", argNames: []);
 
   @override
   Future<void> crateBridgeInitApp() {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 2, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: null,
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateBridgeInitAppConstMeta,
+        argValues: [],
+        apiImpl: this,
       ),
-      constMeta: kCrateBridgeInitAppConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateBridgeInitAppConstMeta => const TaskConstMeta(
-        debugName: "init_app",
-        argNames: [],
-      );
+  TaskConstMeta get kCrateBridgeInitAppConstMeta =>
+      const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
-  Future<void> crateBridgeRegisterUser(
-      {required String username,
-      String? fcmToken,
-      required String backendAddress,
-      required String databaseDirectory}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_String(username, serializer);
-        sse_encode_opt_String(fcmToken, serializer);
-        sse_encode_String(backendAddress, serializer);
-        sse_encode_String(databaseDirectory, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 3, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_bridge_error,
+  Future<void> crateBridgeRegisterUser({
+    required String username,
+    String? fcmToken,
+    required String backendAddress,
+    required String databaseDirectory,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(username, serializer);
+          sse_encode_opt_String(fcmToken, serializer);
+          sse_encode_String(backendAddress, serializer);
+          sse_encode_String(databaseDirectory, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateBridgeRegisterUserConstMeta,
+        argValues: [username, fcmToken, backendAddress, databaseDirectory],
+        apiImpl: this,
       ),
-      constMeta: kCrateBridgeRegisterUserConstMeta,
-      argValues: [username, fcmToken, backendAddress, databaseDirectory],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateBridgeRegisterUserConstMeta => const TaskConstMeta(
-        debugName: "register_user",
-        argNames: [
-          "username",
-          "fcmToken",
-          "backendAddress",
-          "databaseDirectory"
-        ],
-      );
+    debugName: "register_user",
+    argNames: ["username", "fcmToken", "backendAddress", "databaseDirectory"],
+  );
 
   @override
-  Future<MessageModel> crateBridgeSendMessage(
-      {required String recipient, required String text}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_String(recipient, serializer);
-        sse_encode_String(text, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 4, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_message_model,
-        decodeErrorData: sse_decode_bridge_error,
+  Future<MessageModel> crateBridgeSendMessage({
+    required String recipient,
+    required String text,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(recipient, serializer);
+          sse_encode_String(text, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_message_model,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateBridgeSendMessageConstMeta,
+        argValues: [recipient, text],
+        apiImpl: this,
       ),
-      constMeta: kCrateBridgeSendMessageConstMeta,
-      argValues: [recipient, text],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateBridgeSendMessageConstMeta => const TaskConstMeta(
-        debugName: "send_message",
-        argNames: ["recipient", "text"],
-      );
+    debugName: "send_message",
+    argNames: ["recipient", "text"],
+  );
 
   @override
-  Future<void> crateBridgeStartHub(
-      {required String databaseDirectory,
-      String? username,
-      String? fcmToken,
-      String? backendAddress}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_String(databaseDirectory, serializer);
-        sse_encode_opt_String(username, serializer);
-        sse_encode_opt_String(fcmToken, serializer);
-        sse_encode_opt_String(backendAddress, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 5, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_bridge_error,
+  Future<void> crateBridgeStartHub({
+    required String databaseDirectory,
+    String? username,
+    String? fcmToken,
+    String? backendAddress,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(databaseDirectory, serializer);
+          sse_encode_opt_String(username, serializer);
+          sse_encode_opt_String(fcmToken, serializer);
+          sse_encode_opt_String(backendAddress, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateBridgeStartHubConstMeta,
+        argValues: [databaseDirectory, username, fcmToken, backendAddress],
+        apiImpl: this,
       ),
-      constMeta: kCrateBridgeStartHubConstMeta,
-      argValues: [databaseDirectory, username, fcmToken, backendAddress],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateBridgeStartHubConstMeta => const TaskConstMeta(
-        debugName: "start_hub",
-        argNames: [
-          "databaseDirectory",
-          "username",
-          "fcmToken",
-          "backendAddress"
-        ],
-      );
+    debugName: "start_hub",
+    argNames: ["databaseDirectory", "username", "fcmToken", "backendAddress"],
+  );
 
   @override
   Future<void> crateBridgeStartMockServer({required int port}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_u_16(port, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 6, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_bridge_error,
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_16(port, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateBridgeStartMockServerConstMeta,
+        argValues: [port],
+        apiImpl: this,
       ),
-      constMeta: kCrateBridgeStartMockServerConstMeta,
-      argValues: [port],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateBridgeStartMockServerConstMeta => const TaskConstMeta(
-        debugName: "start_mock_server",
-        argNames: ["port"],
-      );
+  TaskConstMeta get kCrateBridgeStartMockServerConstMeta =>
+      const TaskConstMeta(debugName: "start_mock_server", argNames: ["port"]);
 
   @override
   Stream<MessageModel> crateBridgeSubscribeMessages() {
     final sink = RustStreamSink<MessageModel>();
-    unawaited(handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_StreamSink_message_model_Sse(sink, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_bridge_error,
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_message_model_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 7,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_bridge_error,
+          ),
+          constMeta: kCrateBridgeSubscribeMessagesConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
       ),
-      constMeta: kCrateBridgeSubscribeMessagesConstMeta,
-      argValues: [sink],
-      apiImpl: this,
-    )));
+    );
     return sink.stream;
   }
 
   TaskConstMeta get kCrateBridgeSubscribeMessagesConstMeta =>
-      const TaskConstMeta(
-        debugName: "subscribe_messages",
-        argNames: ["sink"],
-      );
+      const TaskConstMeta(debugName: "subscribe_messages", argNames: ["sink"]);
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -317,7 +346,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   RustStreamSink<MessageModel> dco_decode_StreamSink_message_model_Sse(
-      dynamic raw) {
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     throw UnimplementedError();
   }
@@ -333,17 +363,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
       case 0:
-        return BridgeError_RegistrationFailed(
-          dco_decode_String(raw[1]),
-        );
+        return BridgeError_RegistrationFailed(dco_decode_String(raw[1]));
       case 1:
-        return BridgeError_InitializationFailed(
-          dco_decode_String(raw[1]),
-        );
+        return BridgeError_InitializationFailed(dco_decode_String(raw[1]));
       case 2:
-        return BridgeError_MessageSendFailed(
-          dco_decode_String(raw[1]),
-        );
+        return BridgeError_MessageSendFailed(dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -427,7 +451,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   RustStreamSink<MessageModel> sse_decode_StreamSink_message_model_Sse(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     throw UnimplementedError('Unreachable ()');
   }
@@ -473,7 +498,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   List<MessageModel> sse_decode_list_message_model(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -500,11 +526,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_state = sse_decode_message_state(deserializer);
     var var_text = sse_decode_String(deserializer);
     return MessageModel(
-        sender: var_sender,
-        receiver: var_receiver,
-        dbRecvTime: var_dbRecvTime,
-        state: var_state,
-        text: var_text);
+      sender: var_sender,
+      receiver: var_receiver,
+      dbRecvTime: var_dbRecvTime,
+      state: var_state,
+      text: var_text,
+    );
   }
 
   @protected
@@ -550,22 +577,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_AnyhowException(
-      AnyhowException self, SseSerializer serializer) {
+    AnyhowException self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.message, serializer);
   }
 
   @protected
   void sse_encode_StreamSink_message_model_Sse(
-      RustStreamSink<MessageModel> self, SseSerializer serializer) {
+    RustStreamSink<MessageModel> self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(
-        self.setupAndSerialize(
-            codec: SseCodec(
+      self.setupAndSerialize(
+        codec: SseCodec(
           decodeSuccessData: sse_decode_message_model,
           decodeErrorData: sse_decode_AnyhowException,
-        )),
-        serializer);
+        ),
+      ),
+      serializer,
+    );
   }
 
   @protected
@@ -604,7 +637,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_list_message_model(
-      List<MessageModel> self, SseSerializer serializer) {
+    List<MessageModel> self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -614,7 +649,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_list_prim_u_8_strict(
-      Uint8List self, SseSerializer serializer) {
+    Uint8List self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);

@@ -6,29 +6,17 @@ import 'package:brongnal_app/screens/compose.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-enum HomepagePopupItem {
-  newGroup,
-  markAllRead,
-  inviteFriends,
-  settings,
-}
+enum HomepagePopupItem { newGroup, markAllRead, inviteFriends, settings }
 
 class Home extends StatefulWidget {
-  const Home({
-    super.key,
-    required this.username,
-  });
+  const Home({super.key, required this.username});
   final String username;
 
   @override
   State<Home> createState() => _HomeState();
 }
 
-enum SelectedDestination {
-  chats,
-  calls,
-  stories,
-}
+enum SelectedDestination { chats, calls, stories }
 
 class _HomeState extends State<Home> {
   SelectedDestination _destination = SelectedDestination.chats;
@@ -46,60 +34,66 @@ class _HomeState extends State<Home> {
     final Widget body;
 
     if (_destination == SelectedDestination.chats) {
-      body = Consumer<ChatHistory>(builder: (context, conversations, child) {
-        return ConversationsScreen(
-          self: username,
-          conversations: conversations.items,
-        );
-      });
+      body = Consumer<ChatHistory>(
+        builder: (context, conversations, child) {
+          return ConversationsScreen(
+            self: username,
+            conversations: conversations.items,
+          );
+        },
+      );
     } else {
       body = Text("TODO", style: theme.textTheme.bodyMedium);
     }
 
     return Scaffold(
-        appBar: getHomeAppBar(context),
-        drawer: getHomeDrawer(context),
-        backgroundColor: theme.colorScheme.surface,
-        body: SafeArea(child: body),
-        floatingActionButton: BrongnalFloatingActionButtons(
-            self: username, destination: _destination),
-        bottomNavigationBar: NavigationBar(
-          backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
-          indicatorColor: theme.navigationBarTheme.indicatorColor,
-          height: 66,
-          animationDuration: const Duration(milliseconds: 1000),
-          destinations: [
-            NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline_outlined,
-                  size: theme.iconTheme.size),
-              selectedIcon: Icon(Icons.chat_bubble, size: theme.iconTheme.size),
-              label: 'Chats',
+      appBar: getHomeAppBar(context),
+      drawer: getHomeDrawer(context),
+      backgroundColor: theme.colorScheme.surface,
+      body: SafeArea(child: body),
+      floatingActionButton: BrongnalFloatingActionButtons(
+        self: username,
+        destination: _destination,
+      ),
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: theme.bottomNavigationBarTheme.backgroundColor,
+        indicatorColor: theme.navigationBarTheme.indicatorColor,
+        height: 66,
+        animationDuration: const Duration(milliseconds: 1000),
+        destinations: [
+          NavigationDestination(
+            icon: Icon(
+              Icons.chat_bubble_outline_outlined,
+              size: theme.iconTheme.size,
             ),
-            NavigationDestination(
-              icon: Icon(Icons.call_outlined, size: theme.iconTheme.size),
-              selectedIcon: Icon(Icons.call, size: theme.iconTheme.size),
-              label: 'Calls',
-            ),
-            NavigationDestination(
-              icon:
-                  Icon(Icons.amp_stories_outlined, size: theme.iconTheme.size),
-              selectedIcon: Icon(Icons.amp_stories, size: theme.iconTheme.size),
-              label: 'Stories',
-            ),
-          ],
-          selectedIndex: _destination.index,
-          onDestinationSelected: (int index) {
-            setState(() {
-              if (index == 1) {
-                _destination = SelectedDestination.calls;
-              } else if (index == 2) {
-                _destination = SelectedDestination.stories;
-              } else {
-                _destination = SelectedDestination.chats;
-              }
-            });
-          },
-        ));
+            selectedIcon: Icon(Icons.chat_bubble, size: theme.iconTheme.size),
+            label: 'Chats',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.call_outlined, size: theme.iconTheme.size),
+            selectedIcon: Icon(Icons.call, size: theme.iconTheme.size),
+            label: 'Calls',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.amp_stories_outlined, size: theme.iconTheme.size),
+            selectedIcon: Icon(Icons.amp_stories, size: theme.iconTheme.size),
+            label: 'Stories',
+          ),
+        ],
+        selectedIndex: _destination.index,
+        onDestinationSelected: (int index) {
+          setState(() {
+            if (index == 1) {
+              _destination = SelectedDestination.calls;
+            } else if (index == 2) {
+              _destination = SelectedDestination.stories;
+            } else {
+              _destination = SelectedDestination.chats;
+            }
+          });
+        },
+      ),
+    );
   }
 
   Drawer getHomeDrawer(BuildContext context) {
@@ -109,52 +103,53 @@ class _HomeState extends State<Home> {
         padding: EdgeInsets.zero,
         children: <Widget>[
           DrawerHeader(
-            decoration: BoxDecoration(
-              color: theme.backgroundColor,
+            decoration: BoxDecoration(color: theme.backgroundColor),
+            child: Column(
+              children: [
+                const Text('Settings', style: TextStyle(fontSize: 24)),
+                AccountInfo(
+                  avatar: CircleAvatar(
+                    backgroundColor: AppBarTheme.of(context).foregroundColor,
+                    child: const Text('BR', style: TextStyle(fontSize: 24)),
+                  ),
+                  name: username,
+                  username: "${username.toLowerCase()}.69",
+                ),
+              ],
             ),
-            child: Column(children: [
-              const Text(
-                'Settings',
-                style: TextStyle(
-                  fontSize: 24,
-                ),
-              ),
-              AccountInfo(
-                avatar: CircleAvatar(
-                  backgroundColor: AppBarTheme.of(context).foregroundColor,
-                  child: const Text('BR', style: TextStyle(fontSize: 24)),
-                ),
-                name: username,
-                username: "${username.toLowerCase()}.69",
-              )
-            ]),
           ),
           ListTile(
             leading: const Icon(Icons.account_circle),
             title: const Text('Account'),
             onTap: () {
-              Navigator.push(context, MaterialPageRoute<void>(
-                builder: (BuildContext context) {
-                  return Scaffold(
-                      appBar: AppBar(
-                        title: const Text("Account"),
-                      ),
-                      body: const Text("TODO"));
-                },
-              ));
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) {
+                    return Scaffold(
+                      appBar: AppBar(title: const Text("Account")),
+                      body: const Text("TODO"),
+                    );
+                  },
+                ),
+              );
             },
           ),
           ListTile(
             leading: const Icon(Icons.message),
             title: const Text('Appearance'),
             onTap: () {
-              Navigator.push(context, MaterialPageRoute<void>(
-                builder: (BuildContext context) {
-                  return Scaffold(
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (BuildContext context) {
+                    return Scaffold(
                       appBar: AppBar(title: const Text("Appearance")),
-                      body: const Text("TODO"));
-                },
-              ));
+                      body: const Text("TODO"),
+                    );
+                  },
+                ),
+              );
             },
           ),
         ],
@@ -173,10 +168,7 @@ class _HomeState extends State<Home> {
             icon: CircleAvatar(
               radius: 16,
               backgroundColor: theme.foregroundColor,
-              child: const Text(
-                'BR',
-                style: TextStyle(fontSize: 16),
-              ),
+              child: const Text('BR', style: TextStyle(fontSize: 16)),
             ),
             onPressed: () {
               Scaffold.of(context).openDrawer();
@@ -194,23 +186,23 @@ class _HomeState extends State<Home> {
           iconSize: appbarIconThemeSize,
           itemBuilder: (BuildContext context) =>
               <PopupMenuEntry<HomepagePopupItem>>[
-            const PopupMenuItem<HomepagePopupItem>(
-              value: HomepagePopupItem.newGroup,
-              child: Text('New Group'),
-            ),
-            const PopupMenuItem<HomepagePopupItem>(
-              value: HomepagePopupItem.markAllRead,
-              child: Text('Mark All Read'),
-            ),
-            const PopupMenuItem<HomepagePopupItem>(
-              value: HomepagePopupItem.inviteFriends,
-              child: Text('Invite Friends'),
-            ),
-            const PopupMenuItem<HomepagePopupItem>(
-              value: HomepagePopupItem.settings,
-              child: Text('Settings'),
-            ),
-          ],
+                const PopupMenuItem<HomepagePopupItem>(
+                  value: HomepagePopupItem.newGroup,
+                  child: Text('New Group'),
+                ),
+                const PopupMenuItem<HomepagePopupItem>(
+                  value: HomepagePopupItem.markAllRead,
+                  child: Text('Mark All Read'),
+                ),
+                const PopupMenuItem<HomepagePopupItem>(
+                  value: HomepagePopupItem.inviteFriends,
+                  child: Text('Invite Friends'),
+                ),
+                const PopupMenuItem<HomepagePopupItem>(
+                  value: HomepagePopupItem.settings,
+                  child: Text('Settings'),
+                ),
+              ],
         ),
       ],
     );
@@ -235,24 +227,15 @@ class AccountInfo extends StatelessWidget {
       height: 60,
       child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: avatar,
-          ),
+          Padding(padding: const EdgeInsets.all(8.0), child: avatar),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(4.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    name,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    username,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(name, overflow: TextOverflow.ellipsis),
+                  Text(username, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -300,8 +283,11 @@ class BrongnalFloatingActionButton extends StatelessWidget {
 
 class BrongnalFloatingActionButtons extends StatelessWidget {
   final SelectedDestination destination;
-  const BrongnalFloatingActionButtons(
-      {super.key, required this.destination, required this.self});
+  const BrongnalFloatingActionButtons({
+    super.key,
+    required this.destination,
+    required this.self,
+  });
   final String self;
 
   @override
@@ -323,17 +309,23 @@ class BrongnalFloatingActionButtons extends StatelessWidget {
               child: FloatingActionButton(
                 backgroundColor: backgroundColor,
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute<void>(
-                    builder: (BuildContext context) {
-                      return ComposeMessage(self: self);
-                    },
-                  ));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (BuildContext context) {
+                        return ComposeMessage(self: self);
+                      },
+                    ),
+                  );
                 },
                 heroTag: "Send a message.",
-                child: Icon(Icons.create_outlined,
-                    color: textColor, size: theme.iconTheme.size),
+                child: Icon(
+                  Icons.create_outlined,
+                  color: textColor,
+                  size: theme.iconTheme.size,
+                ),
               ),
-            )
+            ),
           ],
         );
       case SelectedDestination.calls:

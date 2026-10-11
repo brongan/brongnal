@@ -11,32 +11,37 @@ part 'bridge.freezed.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `HubState`, `STATE`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `initialize`
 
-Future<void> startHub(
-        {required String databaseDirectory,
-        String? username,
-        String? fcmToken,
-        String? backendAddress}) =>
-    RustLib.instance.api.crateBridgeStartHub(
-        databaseDirectory: databaseDirectory,
-        username: username,
-        fcmToken: fcmToken,
-        backendAddress: backendAddress);
+Future<void> startHub({
+  required String databaseDirectory,
+  String? username,
+  String? fcmToken,
+  String? backendAddress,
+}) => RustLib.instance.api.crateBridgeStartHub(
+  databaseDirectory: databaseDirectory,
+  username: username,
+  fcmToken: fcmToken,
+  backendAddress: backendAddress,
+);
 
-Future<void> registerUser(
-        {required String username,
-        String? fcmToken,
-        required String backendAddress,
-        required String databaseDirectory}) =>
-    RustLib.instance.api.crateBridgeRegisterUser(
-        username: username,
-        fcmToken: fcmToken,
-        backendAddress: backendAddress,
-        databaseDirectory: databaseDirectory);
+Future<void> registerUser({
+  required String username,
+  String? fcmToken,
+  required String backendAddress,
+  required String databaseDirectory,
+}) => RustLib.instance.api.crateBridgeRegisterUser(
+  username: username,
+  fcmToken: fcmToken,
+  backendAddress: backendAddress,
+  databaseDirectory: databaseDirectory,
+);
 
-Future<MessageModel> sendMessage(
-        {required String recipient, required String text}) =>
-    RustLib.instance.api
-        .crateBridgeSendMessage(recipient: recipient, text: text);
+Future<MessageModel> sendMessage({
+  required String recipient,
+  required String text,
+}) => RustLib.instance.api.crateBridgeSendMessage(
+  recipient: recipient,
+  text: text,
+);
 
 Future<List<MessageModel>> getAllMessages() =>
     RustLib.instance.api.crateBridgeGetAllMessages();
@@ -51,15 +56,12 @@ Future<void> startMockServer({required int port}) =>
 sealed class BridgeError with _$BridgeError implements FrbException {
   const BridgeError._();
 
-  const factory BridgeError.registrationFailed(
-    String field0,
-  ) = BridgeError_RegistrationFailed;
-  const factory BridgeError.initializationFailed(
-    String field0,
-  ) = BridgeError_InitializationFailed;
-  const factory BridgeError.messageSendFailed(
-    String field0,
-  ) = BridgeError_MessageSendFailed;
+  const factory BridgeError.registrationFailed(String field0) =
+      BridgeError_RegistrationFailed;
+  const factory BridgeError.initializationFailed(String field0) =
+      BridgeError_InitializationFailed;
+  const factory BridgeError.messageSendFailed(String field0) =
+      BridgeError_MessageSendFailed;
 }
 
 class MessageModel {
@@ -97,10 +99,4 @@ class MessageModel {
           text == other.text;
 }
 
-enum MessageState {
-  sending,
-  sent,
-  delivered,
-  read,
-  ;
-}
+enum MessageState { sending, sent, delivered, read }

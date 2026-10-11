@@ -12,7 +12,8 @@ part of 'bridge.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
+  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
+);
 
 /// @nodoc
 mixin _$BridgeError {
@@ -22,50 +23,44 @@ mixin _$BridgeError {
     required TResult Function(String field0) registrationFailed,
     required TResult Function(String field0) initializationFailed,
     required TResult Function(String field0) messageSendFailed,
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function(String field0)? registrationFailed,
     TResult? Function(String field0)? initializationFailed,
     TResult? Function(String field0)? messageSendFailed,
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function(String field0)? registrationFailed,
     TResult Function(String field0)? initializationFailed,
     TResult Function(String field0)? messageSendFailed,
     required TResult orElse(),
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeError_RegistrationFailed value)
-        registrationFailed,
+    registrationFailed,
     required TResult Function(BridgeError_InitializationFailed value)
-        initializationFailed,
+    initializationFailed,
     required TResult Function(BridgeError_MessageSendFailed value)
-        messageSendFailed,
-  }) =>
-      throw _privateConstructorUsedError;
+    messageSendFailed,
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult? Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult? Function(BridgeError_MessageSendFailed value)? messageSendFailed,
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult Function(BridgeError_MessageSendFailed value)? messageSendFailed,
     required TResult orElse(),
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
 
   /// Create a copy of BridgeError
   /// with the given fields replaced by the non-null parameter values.
@@ -77,8 +72,9 @@ mixin _$BridgeError {
 /// @nodoc
 abstract class $BridgeErrorCopyWith<$Res> {
   factory $BridgeErrorCopyWith(
-          BridgeError value, $Res Function(BridgeError) then) =
-      _$BridgeErrorCopyWithImpl<$Res, BridgeError>;
+    BridgeError value,
+    $Res Function(BridgeError) then,
+  ) = _$BridgeErrorCopyWithImpl<$Res, BridgeError>;
   @useResult
   $Res call({String field0});
 }
@@ -97,15 +93,16 @@ class _$BridgeErrorCopyWithImpl<$Res, $Val extends BridgeError>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({
-    Object? field0 = null,
-  }) {
-    return _then(_value.copyWith(
-      field0: null == field0
-          ? _value.field0
-          : field0 // ignore: cast_nullable_to_non_nullable
-              as String,
-    ) as $Val);
+  $Res call({Object? field0 = null}) {
+    return _then(
+      _value.copyWith(
+            field0: null == field0
+                ? _value.field0
+                : field0 // ignore: cast_nullable_to_non_nullable
+                      as String,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -113,9 +110,9 @@ class _$BridgeErrorCopyWithImpl<$Res, $Val extends BridgeError>
 abstract class _$$BridgeError_RegistrationFailedImplCopyWith<$Res>
     implements $BridgeErrorCopyWith<$Res> {
   factory _$$BridgeError_RegistrationFailedImplCopyWith(
-          _$BridgeError_RegistrationFailedImpl value,
-          $Res Function(_$BridgeError_RegistrationFailedImpl) then) =
-      __$$BridgeError_RegistrationFailedImplCopyWithImpl<$Res>;
+    _$BridgeError_RegistrationFailedImpl value,
+    $Res Function(_$BridgeError_RegistrationFailedImpl) then,
+  ) = __$$BridgeError_RegistrationFailedImplCopyWithImpl<$Res>;
   @override
   @useResult
   $Res call({String field0});
@@ -123,27 +120,27 @@ abstract class _$$BridgeError_RegistrationFailedImplCopyWith<$Res>
 
 /// @nodoc
 class __$$BridgeError_RegistrationFailedImplCopyWithImpl<$Res>
-    extends _$BridgeErrorCopyWithImpl<$Res,
-        _$BridgeError_RegistrationFailedImpl>
+    extends
+        _$BridgeErrorCopyWithImpl<$Res, _$BridgeError_RegistrationFailedImpl>
     implements _$$BridgeError_RegistrationFailedImplCopyWith<$Res> {
   __$$BridgeError_RegistrationFailedImplCopyWithImpl(
-      _$BridgeError_RegistrationFailedImpl _value,
-      $Res Function(_$BridgeError_RegistrationFailedImpl) _then)
-      : super(_value, _then);
+    _$BridgeError_RegistrationFailedImpl _value,
+    $Res Function(_$BridgeError_RegistrationFailedImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of BridgeError
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({
-    Object? field0 = null,
-  }) {
-    return _then(_$BridgeError_RegistrationFailedImpl(
-      null == field0
-          ? _value.field0
-          : field0 // ignore: cast_nullable_to_non_nullable
-              as String,
-    ));
+  $Res call({Object? field0 = null}) {
+    return _then(
+      _$BridgeError_RegistrationFailedImpl(
+        null == field0
+            ? _value.field0
+            : field0 // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
   }
 }
 
@@ -178,9 +175,12 @@ class _$BridgeError_RegistrationFailedImpl
   @override
   @pragma('vm:prefer-inline')
   _$$BridgeError_RegistrationFailedImplCopyWith<
-          _$BridgeError_RegistrationFailedImpl>
-      get copyWith => __$$BridgeError_RegistrationFailedImplCopyWithImpl<
-          _$BridgeError_RegistrationFailedImpl>(this, _$identity);
+    _$BridgeError_RegistrationFailedImpl
+  >
+  get copyWith =>
+      __$$BridgeError_RegistrationFailedImplCopyWithImpl<
+        _$BridgeError_RegistrationFailedImpl
+      >(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -220,11 +220,11 @@ class _$BridgeError_RegistrationFailedImpl
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeError_RegistrationFailed value)
-        registrationFailed,
+    registrationFailed,
     required TResult Function(BridgeError_InitializationFailed value)
-        initializationFailed,
+    initializationFailed,
     required TResult Function(BridgeError_MessageSendFailed value)
-        messageSendFailed,
+    messageSendFailed,
   }) {
     return registrationFailed(this);
   }
@@ -234,7 +234,7 @@ class _$BridgeError_RegistrationFailedImpl
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult? Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult? Function(BridgeError_MessageSendFailed value)? messageSendFailed,
   }) {
     return registrationFailed?.call(this);
@@ -245,7 +245,7 @@ class _$BridgeError_RegistrationFailedImpl
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult Function(BridgeError_MessageSendFailed value)? messageSendFailed,
     required TResult orElse(),
   }) {
@@ -269,17 +269,18 @@ abstract class BridgeError_RegistrationFailed extends BridgeError {
   @override
   @JsonKey(includeFromJson: false, includeToJson: false)
   _$$BridgeError_RegistrationFailedImplCopyWith<
-          _$BridgeError_RegistrationFailedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+    _$BridgeError_RegistrationFailedImpl
+  >
+  get copyWith => throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$BridgeError_InitializationFailedImplCopyWith<$Res>
     implements $BridgeErrorCopyWith<$Res> {
   factory _$$BridgeError_InitializationFailedImplCopyWith(
-          _$BridgeError_InitializationFailedImpl value,
-          $Res Function(_$BridgeError_InitializationFailedImpl) then) =
-      __$$BridgeError_InitializationFailedImplCopyWithImpl<$Res>;
+    _$BridgeError_InitializationFailedImpl value,
+    $Res Function(_$BridgeError_InitializationFailedImpl) then,
+  ) = __$$BridgeError_InitializationFailedImplCopyWithImpl<$Res>;
   @override
   @useResult
   $Res call({String field0});
@@ -287,27 +288,27 @@ abstract class _$$BridgeError_InitializationFailedImplCopyWith<$Res>
 
 /// @nodoc
 class __$$BridgeError_InitializationFailedImplCopyWithImpl<$Res>
-    extends _$BridgeErrorCopyWithImpl<$Res,
-        _$BridgeError_InitializationFailedImpl>
+    extends
+        _$BridgeErrorCopyWithImpl<$Res, _$BridgeError_InitializationFailedImpl>
     implements _$$BridgeError_InitializationFailedImplCopyWith<$Res> {
   __$$BridgeError_InitializationFailedImplCopyWithImpl(
-      _$BridgeError_InitializationFailedImpl _value,
-      $Res Function(_$BridgeError_InitializationFailedImpl) _then)
-      : super(_value, _then);
+    _$BridgeError_InitializationFailedImpl _value,
+    $Res Function(_$BridgeError_InitializationFailedImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of BridgeError
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({
-    Object? field0 = null,
-  }) {
-    return _then(_$BridgeError_InitializationFailedImpl(
-      null == field0
-          ? _value.field0
-          : field0 // ignore: cast_nullable_to_non_nullable
-              as String,
-    ));
+  $Res call({Object? field0 = null}) {
+    return _then(
+      _$BridgeError_InitializationFailedImpl(
+        null == field0
+            ? _value.field0
+            : field0 // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
   }
 }
 
@@ -342,9 +343,12 @@ class _$BridgeError_InitializationFailedImpl
   @override
   @pragma('vm:prefer-inline')
   _$$BridgeError_InitializationFailedImplCopyWith<
-          _$BridgeError_InitializationFailedImpl>
-      get copyWith => __$$BridgeError_InitializationFailedImplCopyWithImpl<
-          _$BridgeError_InitializationFailedImpl>(this, _$identity);
+    _$BridgeError_InitializationFailedImpl
+  >
+  get copyWith =>
+      __$$BridgeError_InitializationFailedImplCopyWithImpl<
+        _$BridgeError_InitializationFailedImpl
+      >(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -384,11 +388,11 @@ class _$BridgeError_InitializationFailedImpl
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeError_RegistrationFailed value)
-        registrationFailed,
+    registrationFailed,
     required TResult Function(BridgeError_InitializationFailed value)
-        initializationFailed,
+    initializationFailed,
     required TResult Function(BridgeError_MessageSendFailed value)
-        messageSendFailed,
+    messageSendFailed,
   }) {
     return initializationFailed(this);
   }
@@ -398,7 +402,7 @@ class _$BridgeError_InitializationFailedImpl
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult? Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult? Function(BridgeError_MessageSendFailed value)? messageSendFailed,
   }) {
     return initializationFailed?.call(this);
@@ -409,7 +413,7 @@ class _$BridgeError_InitializationFailedImpl
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult Function(BridgeError_MessageSendFailed value)? messageSendFailed,
     required TResult orElse(),
   }) {
@@ -433,17 +437,18 @@ abstract class BridgeError_InitializationFailed extends BridgeError {
   @override
   @JsonKey(includeFromJson: false, includeToJson: false)
   _$$BridgeError_InitializationFailedImplCopyWith<
-          _$BridgeError_InitializationFailedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+    _$BridgeError_InitializationFailedImpl
+  >
+  get copyWith => throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$BridgeError_MessageSendFailedImplCopyWith<$Res>
     implements $BridgeErrorCopyWith<$Res> {
   factory _$$BridgeError_MessageSendFailedImplCopyWith(
-          _$BridgeError_MessageSendFailedImpl value,
-          $Res Function(_$BridgeError_MessageSendFailedImpl) then) =
-      __$$BridgeError_MessageSendFailedImplCopyWithImpl<$Res>;
+    _$BridgeError_MessageSendFailedImpl value,
+    $Res Function(_$BridgeError_MessageSendFailedImpl) then,
+  ) = __$$BridgeError_MessageSendFailedImplCopyWithImpl<$Res>;
   @override
   @useResult
   $Res call({String field0});
@@ -454,23 +459,23 @@ class __$$BridgeError_MessageSendFailedImplCopyWithImpl<$Res>
     extends _$BridgeErrorCopyWithImpl<$Res, _$BridgeError_MessageSendFailedImpl>
     implements _$$BridgeError_MessageSendFailedImplCopyWith<$Res> {
   __$$BridgeError_MessageSendFailedImplCopyWithImpl(
-      _$BridgeError_MessageSendFailedImpl _value,
-      $Res Function(_$BridgeError_MessageSendFailedImpl) _then)
-      : super(_value, _then);
+    _$BridgeError_MessageSendFailedImpl _value,
+    $Res Function(_$BridgeError_MessageSendFailedImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of BridgeError
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({
-    Object? field0 = null,
-  }) {
-    return _then(_$BridgeError_MessageSendFailedImpl(
-      null == field0
-          ? _value.field0
-          : field0 // ignore: cast_nullable_to_non_nullable
-              as String,
-    ));
+  $Res call({Object? field0 = null}) {
+    return _then(
+      _$BridgeError_MessageSendFailedImpl(
+        null == field0
+            ? _value.field0
+            : field0 // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
   }
 }
 
@@ -505,9 +510,12 @@ class _$BridgeError_MessageSendFailedImpl
   @override
   @pragma('vm:prefer-inline')
   _$$BridgeError_MessageSendFailedImplCopyWith<
-          _$BridgeError_MessageSendFailedImpl>
-      get copyWith => __$$BridgeError_MessageSendFailedImplCopyWithImpl<
-          _$BridgeError_MessageSendFailedImpl>(this, _$identity);
+    _$BridgeError_MessageSendFailedImpl
+  >
+  get copyWith =>
+      __$$BridgeError_MessageSendFailedImplCopyWithImpl<
+        _$BridgeError_MessageSendFailedImpl
+      >(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -547,11 +555,11 @@ class _$BridgeError_MessageSendFailedImpl
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeError_RegistrationFailed value)
-        registrationFailed,
+    registrationFailed,
     required TResult Function(BridgeError_InitializationFailed value)
-        initializationFailed,
+    initializationFailed,
     required TResult Function(BridgeError_MessageSendFailed value)
-        messageSendFailed,
+    messageSendFailed,
   }) {
     return messageSendFailed(this);
   }
@@ -561,7 +569,7 @@ class _$BridgeError_MessageSendFailedImpl
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult? Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult? Function(BridgeError_MessageSendFailed value)? messageSendFailed,
   }) {
     return messageSendFailed?.call(this);
@@ -572,7 +580,7 @@ class _$BridgeError_MessageSendFailedImpl
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeError_RegistrationFailed value)? registrationFailed,
     TResult Function(BridgeError_InitializationFailed value)?
-        initializationFailed,
+    initializationFailed,
     TResult Function(BridgeError_MessageSendFailed value)? messageSendFailed,
     required TResult orElse(),
   }) {
@@ -596,6 +604,7 @@ abstract class BridgeError_MessageSendFailed extends BridgeError {
   @override
   @JsonKey(includeFromJson: false, includeToJson: false)
   _$$BridgeError_MessageSendFailedImplCopyWith<
-          _$BridgeError_MessageSendFailedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+    _$BridgeError_MessageSendFailedImpl
+  >
+  get copyWith => throw _privateConstructorUsedError;
 }

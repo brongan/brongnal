@@ -36,7 +36,8 @@ class ComposeMessage extends StatelessWidget {
                 controller: usernameInput,
                 decoration: InputDecoration(
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20)),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   hintText: "Find by username",
                 ),
                 textInputAction: TextInputAction.send,

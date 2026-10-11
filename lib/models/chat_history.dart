@@ -24,13 +24,16 @@ NotificationDetails toNotification(MessageModel model) {
   const String groupChannelName = 'Chats';
   const String groupChannelDescription = 'Messages.';
   const AndroidNotificationDetails androidNotificationDetails =
-      AndroidNotificationDetails(groupChannelId, groupChannelName,
-          channelDescription: groupChannelDescription,
-          importance: Importance.max,
-          priority: Priority.high,
-          groupKey: groupKey,
-          ticker: 'Chats',
-          setAsGroupSummary: false);
+      AndroidNotificationDetails(
+        groupChannelId,
+        groupChannelName,
+        channelDescription: groupChannelDescription,
+        importance: Importance.max,
+        priority: Priority.high,
+        groupKey: groupKey,
+        ticker: 'Chats',
+        setAsGroupSummary: false,
+      );
   return NotificationDetails(android: androidNotificationDetails);
 }
 
@@ -61,11 +64,14 @@ class ChatHistory extends ChangeNotifier {
     }
 
     // 2. Subscribe to new messages
-    core.subscribeMessages().listen((message) {
-      add(message);
-    }, onError: (e) {
-      debugPrint("subscribeMessages stream error: $e");
-    });
+    core.subscribeMessages().listen(
+      (message) {
+        add(message);
+      },
+      onError: (e) {
+        debugPrint("subscribeMessages stream error: $e");
+      },
+    );
   }
 
   UnmodifiableMapView<String, List<MessageModel>> get items =>
@@ -81,8 +87,9 @@ class ChatHistory extends ChangeNotifier {
   void add(MessageModel message) async {
     _addLocal(message);
 
-    final recvTime =
-        DateTime.fromMillisecondsSinceEpoch(1000 * message.dbRecvTime.toInt());
+    final recvTime = DateTime.fromMillisecondsSinceEpoch(
+      1000 * message.dbRecvTime.toInt(),
+    );
 
     if (message.receiver == username &&
         recvTime.isAfter(DateTime.now().subtract(const Duration(seconds: 1)))) {

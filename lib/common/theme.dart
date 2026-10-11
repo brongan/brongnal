@@ -29,15 +29,16 @@ ThemeData bronganlDarkTheme = ThemeData(
   dialogTheme: DialogThemeData(backgroundColor: backgroundColor),
   drawerTheme: const DrawerThemeData(backgroundColor: backgroundColor),
   appBarTheme: const AppBarTheme(
-      backgroundColor: backgroundColor,
-      iconTheme: IconThemeData(color: textColor, size: appbarIconThemeSize),
-      toolbarHeight: 66,
-      titleTextStyle: TextStyle(
-        color: Color.fromRGBO(255, 255, 255, .95),
-        fontFamily: 'Roboto',
-        fontSize: 24,
-        fontWeight: FontWeight.w300,
-      )),
+    backgroundColor: backgroundColor,
+    iconTheme: IconThemeData(color: textColor, size: appbarIconThemeSize),
+    toolbarHeight: 66,
+    titleTextStyle: TextStyle(
+      color: Color.fromRGBO(255, 255, 255, .95),
+      fontFamily: 'Roboto',
+      fontSize: 24,
+      fontWeight: FontWeight.w300,
+    ),
+  ),
   bottomNavigationBarTheme: const BottomNavigationBarThemeData(
     backgroundColor: backgroundColor,
     selectedLabelStyle: conversationNameStyle,

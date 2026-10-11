@@ -25,8 +25,13 @@ int id = 0;
 
 Future<void> _onMessageReceived(MessageModel message) async {
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
-  await plugin.show(id++, message.sender, message.text, toNotification(message),
-      payload: message.sender);
+  await plugin.show(
+    id++,
+    message.sender,
+    message.text,
+    toNotification(message),
+    payload: message.sender,
+  );
 }
 
 Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
@@ -45,19 +50,28 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
   await core.startHub(
     databaseDirectory: databaseDirectory.path,
     username: username,
-    backendAddress: const String.fromEnvironment('BACKEND_ADDR',
-        defaultValue: 'https://signal.brongan.com:443'),
+    backendAddress: const String.fromEnvironment(
+      'BACKEND_ADDR',
+      defaultValue: 'https://signal.brongan.com:443',
+    ),
   );
 
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
 
-  core.subscribeMessages().listen((message) async {
-    await plugin.show(
-        id++, message.sender, message.text, toNotification(message),
-        payload: message.sender);
-  }, onError: (e) {
-    debugPrint("subscribeMessages stream error: $e");
-  });
+  core.subscribeMessages().listen(
+    (message) async {
+      await plugin.show(
+        id++,
+        message.sender,
+        message.text,
+        toNotification(message),
+        payload: message.sender,
+      );
+    },
+    onError: (e) {
+      debugPrint("subscribeMessages stream error: $e");
+    },
+  );
 }
 
 @pragma('vm:entry-point')
@@ -72,7 +86,8 @@ void _firebaseMessagingForegroundHandler(RemoteMessage message) {
 }
 
 void onDidReceiveNotificationResponse(
-    NotificationResponse notificationResponse) async {
+  NotificationResponse notificationResponse,
+) async {
   debugPrint("onDidReceiveNotificationResponse: ${notificationResponse.id}");
   final String? payload = notificationResponse.payload;
   if (notificationResponse.payload != null) {
@@ -92,17 +107,21 @@ Future<FlutterLocalNotificationsPlugin> createLocalNotifications() async {
       LinuxInitializationSettings(defaultActionName: 'Open notification');
   final WindowsInitializationSettings initializationSettingsWindows =
       WindowsInitializationSettings(
-          appName: 'Flutter Local Notifications Example',
-          appUserModelId: 'com.brongan.Brongnal',
-          guid: '10759e20-4f29-4646-97cb-15acfd7fc208');
+        appName: 'Flutter Local Notifications Example',
+        appUserModelId: 'com.brongan.Brongnal',
+        guid: '10759e20-4f29-4646-97cb-15acfd7fc208',
+      );
   final InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-      macOS: initializationSettingsDarwin,
-      linux: initializationSettingsLinux,
-      windows: initializationSettingsWindows);
-  await flutterLocalNotificationsPlugin.initialize(initializationSettings,
-      onDidReceiveNotificationResponse: onDidReceiveNotificationResponse);
+    android: initializationSettingsAndroid,
+    iOS: initializationSettingsDarwin,
+    macOS: initializationSettingsDarwin,
+    linux: initializationSettingsLinux,
+    windows: initializationSettingsWindows,
+  );
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveNotificationResponse: onDidReceiveNotificationResponse,
+  );
   return flutterLocalNotificationsPlugin;
 }
 
@@ -160,8 +179,9 @@ Future<void> runBrongnalApp({
   await initializeRustLib();
 
   // Determine database directory
-  final String dbPath =
-      await AppConfig.getDatabaseDirectory(override: dbDirOverride);
+  final String dbPath = await AppConfig.getDatabaseDirectory(
+    override: dbDirOverride,
+  );
 
   final core = const RustBrongnalCore();
   if (savedUsername != null) {
@@ -180,11 +200,13 @@ Future<void> runBrongnalApp({
     }
   }
 
-  runApp(BrongnalApp(
-    username: savedUsername,
-    core: core,
-    onMessageReceived: onMessageReceived ?? _onMessageReceived,
-  ));
+  runApp(
+    BrongnalApp(
+      username: savedUsername,
+      core: core,
+      onMessageReceived: onMessageReceived ?? _onMessageReceived,
+    ),
+  );
 }
 
 void setupWindow() {
@@ -239,22 +261,22 @@ class _BrongnalAppState extends State<BrongnalApp> {
     final Widget child;
     if (username == null) {
       child = Register(
-          core: widget.core,
-          onRegister: (newUsername) {
-            setState(() {
-              username = newUsername;
-            });
+        core: widget.core,
+        onRegister: (newUsername) {
+          setState(() {
+            username = newUsername;
           });
+        },
+      );
     } else {
       child = ChangeNotifierProvider(
         create: (context) => ChatHistory(
-            username: username!,
-            onMessageReceived: widget.onMessageReceived,
-            core: widget.core),
+          username: username!,
+          onMessageReceived: widget.onMessageReceived,
+          core: widget.core,
+        ),
         child: Navigator(
-          pages: [
-            MaterialPage(child: Home(username: username!)),
-          ],
+          pages: [MaterialPage(child: Home(username: username!))],
           onDidRemovePage: (object) {},
         ),
       );
