@@ -1,8 +1,11 @@
-//! Uploads a signed app bundle to the closed testing (alpha) track. Play
-//! requires production access for production releases.
+//! Signs an app bundle with the YubiKey upload key and uploads it to closed
+//! testing (alpha). Play requires production access for production releases.
 //!
 //! Uses the caller’s `gcloud auth application-default login` credentials to
 //! act as the play-publisher service account, so no key file is needed.
+
+mod agent;
+mod jar;
 
 use google_androidpublisher3::api::{Track, TrackRelease};
 use google_androidpublisher3::hyper_rustls::HttpsConnectorBuilder;
@@ -16,6 +19,8 @@ use google_androidpublisher3::AndroidPublisher;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use x509_cert::der::DecodePem;
+use x509_cert::Certificate;
 
 const PACKAGE: &str = "com.brongan.brongnal_app";
 const SERVICE_ACCOUNT: &str = "play-publisher@brongnal.iam.gserviceaccount.com";
@@ -30,7 +35,23 @@ enum PublishError {
         #[source]
         source: std::io::Error,
     },
-    #[error("no user config directory found, so gcloud credentials are unavailable")]
+    #[error("could not read {path} (run `ykman piv certificates export 9c {path}`): {source}")]
+    ReadCertificate {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("could not parse {path}: {source}")]
+    Certificate {
+        path: PathBuf,
+        #[source]
+        source: x509_cert::der::Error,
+    },
+    #[error(transparent)]
+    Jar(#[from] jar::JarError),
+    #[error(transparent)]
+    Sign(#[from] agent::SignError),
+    #[error("no user config directory found, so credentials are unavailable")]
     NoConfigDir,
     #[error("could not read {path} (run `gcloud auth application-default login`): {source}")]
     ReadCredentials {
@@ -75,6 +96,7 @@ async fn publish() -> Result<(), PublishError> {
     let bundle = tokio::fs::read(&path)
         .await
         .map_err(|source| PublishError::ReadBundle { path, source })?;
+    let bundle = sign(&bundle).await?;
 
     let play = publisher().await?;
     let edits = play.edits();
@@ -107,6 +129,22 @@ async fn publish() -> Result<(), PublishError> {
         .map_err(|e| PublishError::CommitEdit(e.into()))?;
     println!("published {version_code} to {TRACK}");
     Ok(())
+}
+
+async fn sign(bundle: &[u8]) -> Result<Vec<u8>, PublishError> {
+    let path = dirs::config_dir()
+        .ok_or(PublishError::NoConfigDir)?
+        .join("play-publish/upload-certificate.pem");
+    let pem = match tokio::fs::read(&path).await {
+        Ok(pem) => pem,
+        Err(source) => return Err(PublishError::ReadCertificate { path, source }),
+    };
+    let certificate =
+        Certificate::from_pem(&pem).map_err(|source| PublishError::Certificate { path, source })?;
+    let files = jar::signature_files(bundle)?;
+    let signature = agent::sign(&certificate, files.sf.clone()).await?;
+    let block = jar::signature_block(certificate, &signature)?;
+    Ok(jar::signed_bundle(bundle, &files, &block)?)
 }
 
 async fn publisher(

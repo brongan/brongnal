@@ -52,8 +52,8 @@ android {
         versionName flutterVersionName
     }
 
-    // Release bundles are built unsigned and signed afterward with the upload
-    // key on the YubiKey (see `just release`).
+    // Release bundles are built unsigned. `just publish` signs them with the
+    // YubiKey upload key.
 }
 
 flutter {

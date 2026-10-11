@@ -432,7 +432,6 @@
               flutterDevelopment
               frbCodegen
               pkgs.jdk17
-              pkgs.yubico-piv-tool
               rustup
             ];
           shellHook = ''
