@@ -410,13 +410,17 @@
               nativeDevelopmentTools
               ++ [
                 flutterDevelopment
+                pkgs.cage
                 rustup
               ]
             ) ''
               cargo test --workspace --verbose
               # Desktop Dart FFI dlopen's libhub.so from cargo's target dir.
-              LD_LIBRARY_PATH="$PWD/target/debug" \
-                flutter test -d linux integration_test/app_test.dart
+              # cage runs the app on a headless Wayland output.
+              env -u DISPLAY GDK_BACKEND=wayland \
+                WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
+                LD_LIBRARY_PATH="$PWD/target/debug" \
+                cage -- flutter test -d linux integration_test/app_test.dart
             '';
         };
 
