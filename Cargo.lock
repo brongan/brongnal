@@ -1253,8 +1253,7 @@ checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 [[package]]
 name = "google-androidpublisher3"
 version = "7.0.0+20251216"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab32111bbac32c3193a1164c800b4f8b2ef31e5db73004ed01d410cb260d54c8"
+source = "git+https://github.com/brongan/google-apis-rs?rev=ac1d2a8c870e9cf45e0ff0681ec7985ab0eb5540#ac1d2a8c870e9cf45e0ff0681ec7985ab0eb5540"
 dependencies = [
  "chrono",
  "google-apis-common",
@@ -1273,10 +1272,9 @@ dependencies = [
 [[package]]
 name = "google-apis-common"
 version = "8.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "020dd415ee200770d835d01674084400a4d11e6c108ae941f660e8264f49d4ca"
+source = "git+https://github.com/brongan/google-apis-rs?rev=ac1d2a8c870e9cf45e0ff0681ec7985ab0eb5540#ac1d2a8c870e9cf45e0ff0681ec7985ab0eb5540"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "http",
  "http-body-util",

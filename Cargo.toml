@@ -1,3 +1,6 @@
 [workspace]
 members = ["./native/*"]
 resolver = "2"
+
+[patch.crates-io]
+google-androidpublisher3 = { git = "https://github.com/brongan/google-apis-rs", rev = "ac1d2a8c870e9cf45e0ff0681ec7985ab0eb5540" }
