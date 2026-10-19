@@ -4,10 +4,11 @@ use pkcs1::der::Decode;
 use ssh_agent_lib::agent::Session;
 use ssh_agent_lib::client::Client;
 use ssh_agent_lib::error::AgentError;
-use ssh_agent_lib::proto::{PublicCredential, SignRequest, RSA_SHA2_256};
+use ssh_agent_lib::proto::{ProtoError, PublicCredential, SignRequest, RSA_SHA2_256};
 use ssh_agent_lib::ssh_key::public::{KeyData, RsaPublicKey};
 use ssh_agent_lib::ssh_key::{Algorithm, HashAlg, Mpint};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::UnixStream;
 use tracing::info;
 use x509_cert::Certificate;
@@ -32,8 +33,12 @@ pub enum SignError {
     Identities(#[source] AgentError),
     #[error("the agent does not have the upload key (is the daemon running with --sign-slot?)")]
     MissingKey,
-    #[error("the agent refused to sign: {0}")]
+    #[error("could not get a signature from the agent: {0}")]
     Sign(#[source] AgentError),
+    #[error(
+        "the YubiKey daemon refused to sign; see journalctl --user -t age-plugin-yubikey-daemon --since @{0}"
+    )]
+    Refused(u64),
     #[error("the agent returned a {0} signature instead of rsa-sha2-256")]
     WrongAlgorithm(Algorithm),
 }
@@ -60,6 +65,10 @@ pub async fn sign(certificate: &Certificate, data: Vec<u8>) -> Result<Vec<u8>, S
         .map(|identity| identity.credential)
         .find(|credential| matches!(credential, PublicCredential::Key(k) if *k == key))
         .ok_or(SignError::MissingKey)?;
+    let start = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
     let signature = agent
         .sign(SignRequest {
             credential,
@@ -67,7 +76,10 @@ pub async fn sign(certificate: &Certificate, data: Vec<u8>) -> Result<Vec<u8>, S
             flags: RSA_SHA2_256,
         })
         .await
-        .map_err(SignError::Sign)?;
+        .map_err(|error| match error {
+            AgentError::Proto(ProtoError::UnexpectedResponse) => SignError::Refused(start),
+            error => SignError::Sign(error),
+        })?;
     match signature.algorithm() {
         Algorithm::Rsa {
             hash: Some(HashAlg::Sha256),
