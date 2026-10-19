@@ -19,6 +19,8 @@ use google_androidpublisher3::AndroidPublisher;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use tracing::info;
+use tracing_subscriber::EnvFilter;
 use x509_cert::der::DecodePem;
 use x509_cert::Certificate;
 
@@ -79,6 +81,16 @@ enum PublishError {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(tracing::Level::INFO.into())
+                .from_env_lossy(),
+        )
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .without_time()
+        .init();
     match publish().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
@@ -93,6 +105,7 @@ async fn publish() -> Result<(), PublishError> {
         .nth(1)
         .unwrap_or(DEFAULT_BUNDLE.into())
         .into();
+    info!("reading {}", path.display());
     let bundle = tokio::fs::read(&path)
         .await
         .map_err(|source| PublishError::ReadBundle { path, source })?;
@@ -100,6 +113,7 @@ async fn publish() -> Result<(), PublishError> {
 
     let play = publisher().await?;
     let edits = play.edits();
+    info!("opening an edit for {PACKAGE}");
     let (_, edit) = edits
         .insert(Default::default(), PACKAGE)
         .doit()
@@ -107,6 +121,7 @@ async fn publish() -> Result<(), PublishError> {
         .map_err(|e| PublishError::OpenEdit(e.into()))?;
     let edit = edit.id.ok_or(PublishError::MissingEditId)?;
 
+    info!("uploading {} MB", bundle.len() / 1_000_000);
     let (_, uploaded) = edits
         .bundles_upload(PACKAGE, &edit)
         .upload_resumable(Cursor::new(bundle), mime::APPLICATION_OCTET_STREAM)
@@ -115,19 +130,21 @@ async fn publish() -> Result<(), PublishError> {
     let version_code = uploaded
         .version_code
         .ok_or(PublishError::MissingVersionCode)?;
-    println!("uploaded versionCode {version_code}");
 
+    info!("assigning versionCode {version_code} to {TRACK}");
     edits
         .tracks_update(release(version_code.into()), PACKAGE, &edit, TRACK)
         .doit()
         .await
         .map_err(|e| PublishError::AssignTrack(e.into()))?;
+    info!("committing the edit");
     edits
         .commit(PACKAGE, &edit)
         .doit()
         .await
         .map_err(|e| PublishError::CommitEdit(e.into()))?;
-    println!("published {version_code} to {TRACK}");
+    info!("published {version_code} to {TRACK}");
+    println!("{version_code}");
     Ok(())
 }
 

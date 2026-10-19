@@ -9,6 +9,7 @@ use ssh_agent_lib::ssh_key::public::{KeyData, RsaPublicKey};
 use ssh_agent_lib::ssh_key::{Algorithm, HashAlg, Mpint};
 use std::path::PathBuf;
 use tokio::net::UnixStream;
+use tracing::info;
 use x509_cert::Certificate;
 
 const SOCKET: &str = "com.brongan.age-plugin-yubikey-daemon/signing.sock";
@@ -44,6 +45,7 @@ pub async fn sign(certificate: &Certificate, data: Vec<u8>) -> Result<Vec<u8>, S
     let path = dirs::runtime_dir()
         .ok_or(SignError::NoRuntimeDir)?
         .join(SOCKET);
+    info!("requesting a signature from {}", path.display());
     let stream = UnixStream::connect(&path)
         .await
         .map_err(|source| SignError::Connect { path, source })?;

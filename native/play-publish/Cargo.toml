@@ -15,5 +15,7 @@ sha2 = "0.11.0"
 ssh-agent-lib = "0.6.0"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "fs", "net"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 x509-cert = { version = "0.2.5", features = ["pem"] }
 zip = { version = "9.0.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
