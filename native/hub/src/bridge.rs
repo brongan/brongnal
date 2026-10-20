@@ -61,7 +61,6 @@ pub fn init_app() {
 pub async fn start_hub(
     database_directory: String,
     username: Option<String>,
-    fcm_token: Option<String>,
     backend_address: Option<String>,
 ) -> Result<(), BridgeError> {
     let addr = backend_address.unwrap_or_else(|| "https://signal.brongan.com:443".to_string());
@@ -82,17 +81,26 @@ pub async fn start_hub(
             .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
 
         let mut state_user = STATE.user.lock().await;
-        *state_user = Some(user.clone());
-
-        tokio::spawn(async move {
-            let mut user = user;
-            if let Err(e) = user.register(fcm_token).await {
-                error!("Background user registration failed: {}", e);
-            }
-        });
+        *state_user = Some(user);
     }
 
     Ok(())
+}
+
+pub async fn register_device(fcm_token: Option<String>) -> Result<(), BridgeError> {
+    let mut user = {
+        let state_user = STATE.user.lock().await;
+        state_user
+            .as_ref()
+            .ok_or(BridgeError::InitializationFailed(
+                "User not initialized".to_string(),
+            ))?
+            .clone()
+    };
+
+    user.register(fcm_token)
+        .await
+        .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))
 }
 
 pub async fn register_user(

@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1713439080;
+  int get rustContentHash => -321161131;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,6 +81,8 @@ abstract class RustLibApi extends BaseApi {
   Future<List<MessageModel>> crateBridgeGetAllMessages();
 
   Future<void> crateBridgeInitApp();
+
+  Future<void> crateBridgeRegisterDevice({String? fcmToken});
 
   Future<void> crateBridgeRegisterUser({
     required String username,
@@ -97,7 +99,6 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateBridgeStartHub({
     required String databaseDirectory,
     String? username,
-    String? fcmToken,
     String? backendAddress,
   });
 
@@ -169,6 +170,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<void> crateBridgeRegisterDevice({String? fcmToken}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(fcmToken, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateBridgeRegisterDeviceConstMeta,
+        argValues: [fcmToken],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateBridgeRegisterDeviceConstMeta =>
+      const TaskConstMeta(debugName: "register_device", argNames: ["fcmToken"]);
+
+  @override
   Future<void> crateBridgeRegisterUser({
     required String username,
     String? fcmToken,
@@ -186,7 +215,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -220,7 +249,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -244,7 +273,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<void> crateBridgeStartHub({
     required String databaseDirectory,
     String? username,
-    String? fcmToken,
     String? backendAddress,
   }) {
     return handler.executeNormal(
@@ -253,12 +281,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(databaseDirectory, serializer);
           sse_encode_opt_String(username, serializer);
-          sse_encode_opt_String(fcmToken, serializer);
           sse_encode_opt_String(backendAddress, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 6,
             port: port_,
           );
         },
@@ -267,7 +294,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_bridge_error,
         ),
         constMeta: kCrateBridgeStartHubConstMeta,
-        argValues: [databaseDirectory, username, fcmToken, backendAddress],
+        argValues: [databaseDirectory, username, backendAddress],
         apiImpl: this,
       ),
     );
@@ -275,7 +302,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateBridgeStartHubConstMeta => const TaskConstMeta(
     debugName: "start_hub",
-    argNames: ["databaseDirectory", "username", "fcmToken", "backendAddress"],
+    argNames: ["databaseDirectory", "username", "backendAddress"],
   );
 
   @override
@@ -288,7 +315,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -318,7 +345,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 7,
+              funcId: 8,
               port: port_,
             );
           },

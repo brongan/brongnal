@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1713439080;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -321161131;
 
 // Section: executor
 
@@ -112,6 +112,42 @@ fn wire__crate__bridge__init_app_impl(
                     })?;
                     std::result::Result::Ok(output_ok)
                 })())
+            }
+        },
+    )
+}
+fn wire__crate__bridge__register_device_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "register_device",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_fcm_token = <Option<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::bridge::BridgeError>(
+                    (move || async move {
+                        let output_ok = crate::bridge::register_device(api_fcm_token).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
@@ -223,7 +259,6 @@ fn wire__crate__bridge__start_hub_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_database_directory = <String>::sse_decode(&mut deserializer);
             let api_username = <Option<String>>::sse_decode(&mut deserializer);
-            let api_fcm_token = <Option<String>>::sse_decode(&mut deserializer);
             let api_backend_address = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
@@ -232,7 +267,6 @@ fn wire__crate__bridge__start_hub_impl(
                         let output_ok = crate::bridge::start_hub(
                             api_database_directory,
                             api_username,
-                            api_fcm_token,
                             api_backend_address,
                         )
                         .await?;
@@ -502,11 +536,12 @@ fn pde_ffi_dispatcher_primary_impl(
     match func_id {
         1 => wire__crate__bridge__get_all_messages_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__bridge__init_app_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__bridge__register_user_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__bridge__send_message_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__bridge__start_hub_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__bridge__start_mock_server_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__bridge__subscribe_messages_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__bridge__register_device_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__bridge__register_user_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__bridge__send_message_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__bridge__start_hub_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__bridge__start_mock_server_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__bridge__subscribe_messages_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

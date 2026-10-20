@@ -55,6 +55,9 @@ Future<void> _firebaseMessagingHandler(RemoteMessage remoteMessage) async {
       defaultValue: 'https://signal.brongan.com:443',
     ),
   );
+  core.registerDevice().catchError((e) {
+    debugPrint("Background user registration failed: $e");
+  });
 
   FlutterLocalNotificationsPlugin plugin = await createLocalNotifications();
 
@@ -190,11 +193,13 @@ Future<void> runBrongnalApp({
       await core.startHub(
         databaseDirectory: dbPath,
         username: savedUsername,
-        fcmToken: fcmToken,
         backendAddress: AppConfig.defaultBackendAddr,
       );
       watch.stop();
       debugPrint("Rust Hub initialized in ${watch.elapsedMilliseconds} ms");
+      core.registerDevice(fcmToken: fcmToken).catchError((e) {
+        debugPrint("Background user registration failed: $e");
+      });
     } catch (e) {
       debugPrint("Failed to start hub: $e");
     }

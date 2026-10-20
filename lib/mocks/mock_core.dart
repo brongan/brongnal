@@ -16,12 +16,14 @@ class MockCore implements BrongnalCore {
   Future<void> startHub({
     required String databaseDirectory,
     String? username,
-    String? fcmToken,
     String? backendAddress,
   }) async {
     isHubStarted = true;
     registeredUser = username;
   }
+
+  @override
+  Future<void> registerDevice({String? fcmToken}) async {}
 
   @override
   Future<void> registerUser({

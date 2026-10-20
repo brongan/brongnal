@@ -14,14 +14,15 @@ part 'bridge.freezed.dart';
 Future<void> startHub({
   required String databaseDirectory,
   String? username,
-  String? fcmToken,
   String? backendAddress,
 }) => RustLib.instance.api.crateBridgeStartHub(
   databaseDirectory: databaseDirectory,
   username: username,
-  fcmToken: fcmToken,
   backendAddress: backendAddress,
 );
+
+Future<void> registerDevice({String? fcmToken}) =>
+    RustLib.instance.api.crateBridgeRegisterDevice(fcmToken: fcmToken);
 
 Future<void> registerUser({
   required String username,

@@ -5,9 +5,10 @@ abstract class BrongnalCore {
   Future<void> startHub({
     required String databaseDirectory,
     String? username,
-    String? fcmToken,
     String? backendAddress,
   });
+
+  Future<void> registerDevice({String? fcmToken});
 
   Future<void> registerUser({
     required String username,
@@ -33,15 +34,18 @@ class RustBrongnalCore implements BrongnalCore {
   Future<void> startHub({
     required String databaseDirectory,
     String? username,
-    String? fcmToken,
     String? backendAddress,
   }) {
     return bridge.startHub(
       databaseDirectory: databaseDirectory,
       username: username,
-      fcmToken: fcmToken,
       backendAddress: backendAddress,
     );
+  }
+
+  @override
+  Future<void> registerDevice({String? fcmToken}) {
+    return bridge.registerDevice(fcmToken: fcmToken);
   }
 
   @override
