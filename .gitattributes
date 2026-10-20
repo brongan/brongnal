@@ -1,0 +1,4 @@
+lib/src/rust/bridge.dart linguist-generated
+lib/src/rust/bridge.freezed.dart linguist-generated
+lib/src/rust/frb_generated*.dart linguist-generated
+native/hub/src/frb_generated.rs linguist-generated
