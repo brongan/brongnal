@@ -1,17 +1,32 @@
+import 'dart:io' show Platform;
+
 import 'package:brongnal_app/src/rust/bridge.dart';
 import 'package:flutter/material.dart';
+
+/// Tells the user how to clear Brongnal's local data on this platform.
+String resetInstructions(String databaseDirectory) {
+  if (Platform.isAndroid) {
+    return 'To reset Brongnal, clear its storage in Android Settings.';
+  }
+  if (Platform.isIOS) {
+    return 'To reset Brongnal, delete the app and install it again.';
+  }
+  return 'To reset Brongnal, delete the folder $databaseDirectory.';
+}
 
 class StartupError extends StatelessWidget {
   const StartupError({
     super.key,
     required this.error,
     required this.username,
+    required this.resetInstructions,
     required this.retrying,
     required this.onRetry,
     required this.onRegisterAgain,
   });
   final Object error;
   final String username;
+  final String resetInstructions;
   final bool retrying;
   final VoidCallback onRetry;
   final VoidCallback onRegisterAgain;
@@ -35,7 +50,12 @@ class StartupError extends StatelessWidget {
         'Register again',
         onRegisterAgain,
       ),
-      _ => ("Can't open your local data.", null, null),
+      _ => (
+        "Can't open your local data. $resetInstructions This deletes "
+            'your messages and your identity key.',
+        null,
+        null,
+      ),
     };
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -46,7 +66,7 @@ class StartupError extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.all(20.0),
-                child: Text(
+                child: SelectableText(
                   message,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineSmall,

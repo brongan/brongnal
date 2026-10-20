@@ -27,6 +27,7 @@ Future<void> pumpApp(
       username: 'alice',
       core: core ?? MockCore(registeredUser: 'alice'),
       onMessageReceived: (_) async {},
+      resetInstructions: 'Delete /data/brongnal.',
       // The real startHub crosses FFI, so it never completes synchronously.
       startHub: () => Future.delayed(const Duration(milliseconds: 1), () {
         if (errors.isNotEmpty) throw errors.removeAt(0);
@@ -79,7 +80,7 @@ void main() {
 
   testWidgets('local data failure shows no action', (tester) async {
     await pumpApp(tester, [const BridgeError.initializationFailed('locked')]);
-    expect(find.text("Can't open your local data."), findsOneWidget);
+    expect(find.textContaining('Delete /data/brongnal.'), findsOneWidget);
     expect(find.byType(ElevatedButton), findsNothing);
   });
 
@@ -87,7 +88,7 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester, [], core: FailingHistoryCore());
-    expect(find.text("Can't open your local data."), findsOneWidget);
+    expect(find.textContaining('Delete /data/brongnal.'), findsOneWidget);
     expect(find.byType(Home), findsNothing);
   });
 }

@@ -195,6 +195,7 @@ Future<void> runBrongnalApp({
       username: savedUsername,
       core: core,
       onMessageReceived: onMessageReceived ?? _onMessageReceived,
+      resetInstructions: resetInstructions(dbPath),
       startHub: () async {
         await core.startHub(
           databaseDirectory: dbPath,
@@ -223,11 +224,13 @@ class BrongnalApp extends StatefulWidget {
     required this.username,
     required this.core,
     required this.onMessageReceived,
+    required this.resetInstructions,
     required this.startHub,
   });
   final String? username;
   final BrongnalCore core;
   final Future<void> Function(MessageModel) onMessageReceived;
+  final String resetInstructions;
   final Future<void> Function() startHub;
 
   @override
@@ -281,6 +284,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
         errorBuilder: (context, error, retrying, retry) => StartupError(
           error: error,
           username: username!,
+          resetInstructions: widget.resetInstructions,
           retrying: retrying,
           onRetry: retry,
           onRegisterAgain: () async {
