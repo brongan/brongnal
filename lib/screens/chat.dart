@@ -114,12 +114,19 @@ class _SendMessageWidgetState extends State<SendMessageWidget> {
               ),
               textInputAction: TextInputAction.send,
               onSubmitted: (value) async {
-                if (messageInput.text.isNotEmpty) {
-                  final text = messageInput.text;
-                  messageInput.clear();
+                final text = messageInput.text;
+                if (text.isEmpty) return;
+                try {
                   await widget.conversationModel.sendMessage(widget.peer, text);
-                  myFocusNode.requestFocus();
+                  if (messageInput.text == text) messageInput.clear();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Send failed: $e')));
+                  }
                 }
+                myFocusNode.requestFocus();
               },
             ),
           ),
