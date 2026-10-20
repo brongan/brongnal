@@ -395,6 +395,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return BridgeError_InitializationFailed(dco_decode_String(raw[1]));
       case 2:
         return BridgeError_MessageSendFailed(dco_decode_String(raw[1]));
+      case 3:
+        return BridgeError_ServerUnreachable();
+      case 4:
+        return BridgeError_ServerError();
+      case 5:
+        return BridgeError_RegistrationRejected();
       default:
         throw Exception("unreachable");
     }
@@ -506,6 +512,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 2:
         var var_field0 = sse_decode_String(deserializer);
         return BridgeError_MessageSendFailed(var_field0);
+      case 3:
+        return BridgeError_ServerUnreachable();
+      case 4:
+        return BridgeError_ServerError();
+      case 5:
+        return BridgeError_RegistrationRejected();
       default:
         throw UnimplementedError('');
     }
@@ -647,6 +659,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case BridgeError_MessageSendFailed(field0: final field0):
         sse_encode_i_32(2, serializer);
         sse_encode_String(field0, serializer);
+      case BridgeError_ServerUnreachable():
+        sse_encode_i_32(3, serializer);
+      case BridgeError_ServerError():
+        sse_encode_i_32(4, serializer);
+      case BridgeError_RegistrationRejected():
+        sse_encode_i_32(5, serializer);
     }
   }
 

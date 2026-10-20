@@ -8,6 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'bridge.freezed.dart';
 
+// These functions are ignored because they are not marked as `pub`: `init_failed`, `registration_error`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `HubState`, `STATE`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `initialize`
 
@@ -63,6 +64,10 @@ sealed class BridgeError with _$BridgeError implements FrbException {
       BridgeError_InitializationFailed;
   const factory BridgeError.messageSendFailed(String field0) =
       BridgeError_MessageSendFailed;
+  const factory BridgeError.serverUnreachable() = BridgeError_ServerUnreachable;
+  const factory BridgeError.serverError() = BridgeError_ServerError;
+  const factory BridgeError.registrationRejected() =
+      BridgeError_RegistrationRejected;
 }
 
 class MessageModel {

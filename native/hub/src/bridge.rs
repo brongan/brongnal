@@ -1,10 +1,11 @@
 pub use client::client::{MessageModel, MessageState};
-use client::{User, X3DHClient};
+use client::{ClientError, User, X3DHClient};
 use flutter_rust_bridge::frb;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tokio_rusqlite::Connection;
 use tokio_stream::StreamExt;
+use tonic::Code;
 use tracing::error;
 
 use crate::frb_generated::StreamSink;
@@ -30,6 +31,26 @@ pub enum BridgeError {
     RegistrationFailed(String),
     InitializationFailed(String),
     MessageSendFailed(String),
+    ServerUnreachable,
+    ServerError,
+    RegistrationRejected,
+}
+
+fn init_failed(e: impl std::fmt::Display) -> BridgeError {
+    error!("Hub initialization failed: {e}");
+    BridgeError::InitializationFailed(e.to_string())
+}
+
+fn registration_error(e: ClientError) -> BridgeError {
+    error!("Registration failed: {e}");
+    match e {
+        ClientError::Grpc(status) => match status.code() {
+            Code::Unavailable | Code::DeadlineExceeded => BridgeError::ServerUnreachable,
+            Code::AlreadyExists | Code::InvalidArgument => BridgeError::RegistrationRejected,
+            _ => BridgeError::ServerError,
+        },
+        e => BridgeError::InitializationFailed(e.to_string()),
+    }
 }
 
 #[frb(ignore)]
@@ -66,19 +87,12 @@ pub async fn start_hub(
     let addr = backend_address.unwrap_or_else(|| "https://signal.brongan.com:443".to_string());
     let db_path = PathBuf::from(database_directory).join("keys.sqlite");
 
-    let connection = Connection::open(db_path)
-        .await
-        .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
+    let connection = Connection::open(db_path).await.map_err(init_failed)?;
 
-    let client = Arc::new(
-        X3DHClient::new(connection)
-            .await
-            .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?,
-    );
+    let client = Arc::new(X3DHClient::new(connection).await.map_err(init_failed)?);
 
     if let Some(uname) = username {
-        let user = User::new(addr, client, uname)
-            .map_err(|e| BridgeError::InitializationFailed(e.to_string()))?;
+        let user = User::new(addr, client, uname).map_err(init_failed)?;
 
         let mut state_user = STATE.user.lock().await;
         *state_user = Some(user);
@@ -98,9 +112,7 @@ pub async fn register_device(fcm_token: Option<String>) -> Result<(), BridgeErro
             .clone()
     };
 
-    user.register(fcm_token)
-        .await
-        .map_err(|e| BridgeError::RegistrationFailed(e.to_string()))
+    user.register(fcm_token).await.map_err(registration_error)
 }
 
 pub async fn register_user(

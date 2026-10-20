@@ -411,6 +411,15 @@ impl SseDecode for crate::bridge::BridgeError {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 return crate::bridge::BridgeError::MessageSendFailed(var_field0);
             }
+            3 => {
+                return crate::bridge::BridgeError::ServerUnreachable;
+            }
+            4 => {
+                return crate::bridge::BridgeError::ServerError;
+            }
+            5 => {
+                return crate::bridge::BridgeError::RegistrationRejected;
+            }
             _ => {
                 unimplemented!("");
             }
@@ -573,6 +582,9 @@ impl flutter_rust_bridge::IntoDart for crate::bridge::BridgeError {
             crate::bridge::BridgeError::MessageSendFailed(field0) => {
                 [2.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
+            crate::bridge::BridgeError::ServerUnreachable => [3.into_dart()].into_dart(),
+            crate::bridge::BridgeError::ServerError => [4.into_dart()].into_dart(),
+            crate::bridge::BridgeError::RegistrationRejected => [5.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -671,6 +683,15 @@ impl SseEncode for crate::bridge::BridgeError {
             crate::bridge::BridgeError::MessageSendFailed(field0) => {
                 <i32>::sse_encode(2, serializer);
                 <String>::sse_encode(field0, serializer);
+            }
+            crate::bridge::BridgeError::ServerUnreachable => {
+                <i32>::sse_encode(3, serializer);
+            }
+            crate::bridge::BridgeError::ServerError => {
+                <i32>::sse_encode(4, serializer);
+            }
+            crate::bridge::BridgeError::RegistrationRejected => {
+                <i32>::sse_encode(5, serializer);
             }
             _ => {
                 unimplemented!("");

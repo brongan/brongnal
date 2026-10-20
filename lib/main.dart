@@ -7,6 +7,7 @@ import 'package:brongnal_app/common/config.dart';
 import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
+import 'package:brongnal_app/screens/startup_error.dart';
 import 'package:brongnal_app/common/core.dart';
 import 'package:brongnal_app/src/rust/bridge.dart' show MessageModel;
 import 'package:brongnal_app/src/rust/initialize.dart';
@@ -187,29 +188,20 @@ Future<void> runBrongnalApp({
   );
 
   final core = const RustBrongnalCore();
-  if (savedUsername != null) {
-    try {
-      final watch = Stopwatch()..start();
-      await core.startHub(
-        databaseDirectory: dbPath,
-        username: savedUsername,
-        backendAddress: AppConfig.defaultBackendAddr,
-      );
-      watch.stop();
-      debugPrint("Rust Hub initialized in ${watch.elapsedMilliseconds} ms");
-      core.registerDevice(fcmToken: fcmToken).catchError((e) {
-        debugPrint("Background user registration failed: $e");
-      });
-    } catch (e) {
-      debugPrint("Failed to start hub: $e");
-    }
-  }
 
   runApp(
     BrongnalApp(
       username: savedUsername,
       core: core,
       onMessageReceived: onMessageReceived ?? _onMessageReceived,
+      startHub: () async {
+        await core.startHub(
+          databaseDirectory: dbPath,
+          username: savedUsername,
+          backendAddress: AppConfig.defaultBackendAddr,
+        );
+        await core.registerDevice(fcmToken: fcmToken);
+      },
     ),
   );
 }
@@ -230,10 +222,12 @@ class BrongnalApp extends StatefulWidget {
     required this.username,
     required this.core,
     required this.onMessageReceived,
+    required this.startHub,
   });
   final String? username;
   final BrongnalCore core;
   final Future<void> Function(MessageModel) onMessageReceived;
+  final Future<void> Function() startHub;
 
   @override
   State<BrongnalApp> createState() => _BrongnalAppState();
@@ -242,12 +236,14 @@ class BrongnalApp extends StatefulWidget {
 class _BrongnalAppState extends State<BrongnalApp> {
   _BrongnalAppState();
   String? username;
+  Future<void> _startup = Future.value();
   late final AppLifecycleListener _listener;
 
   @override
   void initState() {
     super.initState();
     username = widget.username;
+    if (username != null) _startup = widget.startHub();
     _listener = AppLifecycleListener(
       onExitRequested: () async {
         return AppExitResponse.exit;
@@ -274,16 +270,42 @@ class _BrongnalAppState extends State<BrongnalApp> {
         },
       );
     } else {
-      child = ChangeNotifierProvider(
-        create: (context) => ChatHistory(
-          username: username!,
-          onMessageReceived: widget.onMessageReceived,
-          core: widget.core,
-        ),
-        child: Navigator(
-          pages: [MaterialPage(child: Home(username: username!))],
-          onDidRemovePage: (object) {},
-        ),
+      child = FutureBuilder(
+        future: _startup,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return StartupError(
+              error: snapshot.error!,
+              username: username!,
+              retrying: snapshot.connectionState == ConnectionState.waiting,
+              onRetry: () => setState(() {
+                _startup = widget.startHub();
+              }),
+              onRegisterAgain: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove("username");
+                setState(() {
+                  username = null;
+                  _startup = Future.value();
+                });
+              },
+            );
+          }
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return ChangeNotifierProvider(
+            create: (context) => ChatHistory(
+              username: username!,
+              onMessageReceived: widget.onMessageReceived,
+              core: widget.core,
+            ),
+            child: Navigator(
+              pages: [MaterialPage(child: Home(username: username!))],
+              onDidRemovePage: (object) {},
+            ),
+          );
+        },
       );
     }
 
