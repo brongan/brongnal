@@ -28,6 +28,7 @@ void main() {
           username: 'alice',
           onMessageReceived: (_) async {},
           core: core,
+          history: const [],
         ),
         child: MaterialApp(
           darkTheme: bronganlDarkTheme,

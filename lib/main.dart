@@ -236,19 +236,24 @@ class BrongnalApp extends StatefulWidget {
 class _BrongnalAppState extends State<BrongnalApp> {
   _BrongnalAppState();
   String? username;
-  Future<void> _startup = Future.value();
+  late Future<List<MessageModel>> _startup;
   late final AppLifecycleListener _listener;
 
   @override
   void initState() {
     super.initState();
     username = widget.username;
-    if (username != null) _startup = widget.startHub();
+    if (username != null) _startup = _start();
     _listener = AppLifecycleListener(
       onExitRequested: () async {
         return AppExitResponse.exit;
       },
     );
+  }
+
+  Future<List<MessageModel>> _start() async {
+    await widget.startHub();
+    return widget.core.getAllMessages();
   }
 
   @override
@@ -266,6 +271,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
         onRegister: (newUsername) {
           setState(() {
             username = newUsername;
+            _startup = widget.core.getAllMessages();
           });
         },
       );
@@ -279,15 +285,12 @@ class _BrongnalAppState extends State<BrongnalApp> {
               username: username!,
               retrying: snapshot.connectionState == ConnectionState.waiting,
               onRetry: () => setState(() {
-                _startup = widget.startHub();
+                _startup = _start();
               }),
               onRegisterAgain: () async {
                 final prefs = await SharedPreferences.getInstance();
                 await prefs.remove("username");
-                setState(() {
-                  username = null;
-                  _startup = Future.value();
-                });
+                setState(() => username = null);
               },
             );
           }
@@ -299,6 +302,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
               username: username!,
               onMessageReceived: widget.onMessageReceived,
               core: widget.core,
+              history: snapshot.data!,
             ),
             child: Navigator(
               pages: [MaterialPage(child: Home(username: username!))],

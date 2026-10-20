@@ -47,23 +47,11 @@ class ChatHistory extends ChangeNotifier {
     required this.username,
     required this.onMessageReceived,
     required this.core,
+    required List<MessageModel> history,
   }) {
-    _init();
-  }
-
-  Future<void> _init() async {
-    // 1. Load history
-    try {
-      final history = await core.getAllMessages();
-      for (final msg in history) {
-        _addLocal(msg, notify: false);
-      }
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Failed to load message history: $e");
+    for (final msg in history) {
+      _addLocal(msg, notify: false);
     }
-
-    // 2. Subscribe to new messages
     core.subscribeMessages().listen(
       (message) {
         add(message);

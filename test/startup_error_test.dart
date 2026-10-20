@@ -7,12 +7,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<void> pumpApp(WidgetTester tester, List<BridgeError> errors) async {
+class FailingHistoryCore extends MockCore {
+  FailingHistoryCore() : super(registeredUser: 'alice');
+
+  @override
+  Future<List<MessageModel>> getAllMessages() async {
+    throw const BridgeError.initializationFailed('corrupt database');
+  }
+}
+
+Future<void> pumpApp(
+  WidgetTester tester,
+  List<BridgeError> errors, {
+  MockCore? core,
+}) async {
   SharedPreferences.setMockInitialValues({'username': 'alice'});
   await tester.pumpWidget(
     BrongnalApp(
       username: 'alice',
-      core: MockCore(registeredUser: 'alice'),
+      core: core ?? MockCore(registeredUser: 'alice'),
       onMessageReceived: (_) async {},
       // The real startHub crosses FFI, so it never completes synchronously.
       startHub: () => Future.delayed(const Duration(milliseconds: 1), () {
@@ -68,5 +81,13 @@ void main() {
     await pumpApp(tester, [const BridgeError.initializationFailed('locked')]);
     expect(find.text("Can't open your local data."), findsOneWidget);
     expect(find.byType(ElevatedButton), findsNothing);
+  });
+
+  testWidgets('history load failure shows the local data error', (
+    tester,
+  ) async {
+    await pumpApp(tester, [], core: FailingHistoryCore());
+    expect(find.text("Can't open your local data."), findsOneWidget);
+    expect(find.byType(Home), findsNothing);
   });
 }
