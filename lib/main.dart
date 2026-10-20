@@ -8,6 +8,7 @@ import 'package:brongnal_app/models/chat_history.dart';
 import 'package:brongnal_app/screens/home.dart';
 import 'package:brongnal_app/screens/register.dart';
 import 'package:brongnal_app/screens/startup_error.dart';
+import 'package:brongnal_app/screens/startup_gate.dart';
 import 'package:brongnal_app/common/core.dart';
 import 'package:brongnal_app/src/rust/bridge.dart' show MessageModel;
 import 'package:brongnal_app/src/rust/initialize.dart';
@@ -236,14 +237,13 @@ class BrongnalApp extends StatefulWidget {
 class _BrongnalAppState extends State<BrongnalApp> {
   _BrongnalAppState();
   String? username;
-  late Future<List<MessageModel>> _startup;
+  late Future<List<MessageModel>> Function() _start = _startHubAndLoad;
   late final AppLifecycleListener _listener;
 
   @override
   void initState() {
     super.initState();
     username = widget.username;
-    if (username != null) _startup = _start();
     _listener = AppLifecycleListener(
       onExitRequested: () async {
         return AppExitResponse.exit;
@@ -251,7 +251,7 @@ class _BrongnalAppState extends State<BrongnalApp> {
     );
   }
 
-  Future<List<MessageModel>> _start() async {
+  Future<List<MessageModel>> _startHubAndLoad() async {
     await widget.startHub();
     return widget.core.getAllMessages();
   }
@@ -271,45 +271,36 @@ class _BrongnalAppState extends State<BrongnalApp> {
         onRegister: (newUsername) {
           setState(() {
             username = newUsername;
-            _startup = widget.core.getAllMessages();
+            _start = widget.core.getAllMessages;
           });
         },
       );
     } else {
-      child = FutureBuilder(
-        future: _startup,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return StartupError(
-              error: snapshot.error!,
-              username: username!,
-              retrying: snapshot.connectionState == ConnectionState.waiting,
-              onRetry: () => setState(() {
-                _startup = _start();
-              }),
-              onRegisterAgain: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove("username");
-                setState(() => username = null);
-              },
-            );
-          }
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return ChangeNotifierProvider(
-            create: (context) => ChatHistory(
-              username: username!,
-              onMessageReceived: widget.onMessageReceived,
-              core: widget.core,
-              history: snapshot.data!,
-            ),
-            child: Navigator(
-              pages: [MaterialPage(child: Home(username: username!))],
-              onDidRemovePage: (object) {},
-            ),
-          );
-        },
+      child = StartupGate<List<MessageModel>>(
+        start: _start,
+        errorBuilder: (context, error, retrying, retry) => StartupError(
+          error: error,
+          username: username!,
+          retrying: retrying,
+          onRetry: retry,
+          onRegisterAgain: () async {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove("username");
+            setState(() => username = null);
+          },
+        ),
+        builder: (context, history) => ChangeNotifierProvider(
+          create: (context) => ChatHistory(
+            username: username!,
+            onMessageReceived: widget.onMessageReceived,
+            core: widget.core,
+            history: history,
+          ),
+          child: Navigator(
+            pages: [MaterialPage(child: Home(username: username!))],
+            onDidRemovePage: (object) {},
+          ),
+        ),
       );
     }
 
